@@ -23,7 +23,7 @@ export interface MesubInternal {
     completeSignIn(session: MesubSession): void;
     // Rejects every pending login() with MesubSignInCancelledError.
     cancelSignIn(): void;
-    // Replaces the session without touching a sign-in in progress (restore, refresh).
+    // Replaces and persists the session, without touching a sign-in in progress.
     setSession(session: MesubSession | null): void;
 }
 

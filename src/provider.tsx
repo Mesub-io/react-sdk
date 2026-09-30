@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createApiClient, type FetchLike } from './api';
+import { SessionKeeper } from './keeper';
 import { MesubContext, MesubInternalContext, type MesubInternal, type MesubState } from './context';
 import { MesubSignInCancelledError } from './errors';
 import { SignInModal } from './sign-in-modal';
@@ -24,7 +25,7 @@ function isSignedIn(session: MesubSession | null): session is MesubSession {
     return session !== null && session.accessToken !== null && session.user.walletAddress !== null;
 }
 
-/** Holds the session in memory, exposes it through `useMesub()`, and renders the sign-in. */
+/** Keeps the session alive, exposes it through `useMesub()`, and renders the sign-in. */
 export function MesubProvider({ publishableKey, apiUrl, fetch, children }: MesubProviderProps) {
     const api = useMemo(
         () => createApiClient({ publishableKey, apiUrl, fetch }),
@@ -34,20 +35,31 @@ export function MesubProvider({ publishableKey, apiUrl, fetch, children }: Mesub
     const [session, setSessionState] = useState<MesubSession | null>(null);
     const [signingIn, setSigningIn] = useState(false);
     const [ready, setReady] = useState(false);
-    // Callbacks read these, so two calls in one tick see each other.
-    const sessionRef = useRef<MesubSession | null>(null);
     const pendingRef = useRef<PendingSignIn | null>(null);
+    // Holds the session outside React, so two calls in one tick see each other.
+    const keeper = useMemo(
+        () => new SessionKeeper(api, publishableKey, setSessionState),
+        [api, publishableKey],
+    );
 
-    // Nothing to restore yet: #4 makes this wait for the stored session.
-    useEffect(() => setReady(true), []);
+    // Ready once the stored session, if any, is restored or refused.
+    useEffect(() => {
+        let live = true;
+        const stop = keeper.start();
+        setSessionState(keeper.session);
+        void keeper.restore().finally(() => {
+            if (live) setReady(true);
+        });
+        return () => {
+            live = false;
+            stop();
+        };
+    }, [keeper]);
 
-    const setSession = useCallback((next: MesubSession | null) => {
-        sessionRef.current = next;
-        setSessionState(next);
-    }, []);
+    const setSession = useCallback((next: MesubSession | null) => keeper.set(next), [keeper]);
 
     const login = useCallback((): Promise<MesubUser> => {
-        const current = sessionRef.current;
+        const current = keeper.session;
         if (isSignedIn(current)) return Promise.resolve(current.user);
         if (pendingRef.current) return pendingRef.current.promise;
 
@@ -60,7 +72,7 @@ export function MesubProvider({ publishableKey, apiUrl, fetch, children }: Mesub
         pendingRef.current = { promise, resolve, reject };
         setSigningIn(true);
         return promise;
-    }, []);
+    }, [keeper]);
 
     const completeSignIn = useCallback(
         (next: MesubSession) => {
@@ -81,15 +93,9 @@ export function MesubProvider({ publishableKey, apiUrl, fetch, children }: Mesub
         setSigningIn(false);
     }, []);
 
-    const logout = useCallback(async () => {
-        const current = sessionRef.current;
-        setSession(null);
-        if (!current) return;
-        // Signed out locally whatever the API says: the token just expires.
-        await api.logout(current.refreshToken).catch(() => undefined);
-    }, [api, setSession]);
+    const logout = useCallback(() => keeper.logout(), [keeper]);
 
-    const getAccessToken = useCallback(async () => sessionRef.current?.accessToken ?? null, []);
+    const getAccessToken = useCallback(() => keeper.getAccessToken(), [keeper]);
 
     const state = useMemo<MesubState>(
         () => ({

@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 
 import { MesubProvider, useMesub } from '@mesub/react';
 
+import './style.css';
+
 const publishableKey = import.meta.env['VITE_MESUB_PUBLISHABLE_KEY'] ?? '';
 const apiUrl = import.meta.env['VITE_MESUB_API_URL'] ?? 'http://localhost:3333';
 
@@ -23,36 +25,75 @@ function Session() {
         }
     }
 
+    const state = !ready ? 'wait' : user ? 'on' : 'off';
+
     return (
         <main>
-            <h1>@mesub/react playground</h1>
-            <p>
-                API <code>{apiUrl}</code>, key <code>{publishableKey || 'missing'}</code>
-            </p>
-            <h2>Session</h2>
-            <dl>
-                <dt>ready</dt>
-                <dd>{String(ready)}</dd>
-                <dt>user</dt>
-                <dd>{user ? user.email : 'signed out'}</dd>
-                <dt>wallet</dt>
-                <dd>{wallet ?? 'none'}</dd>
-            </dl>
-            <button type="button" onClick={() => run(login)}>
-                login()
-            </button>{' '}
-            <button type="button" onClick={() => run(logout)}>
-                logout()
-            </button>{' '}
-            <button type="button" onClick={() => run(async () => setToken(await getAccessToken()))}>
-                getAccessToken()
-            </button>
-            {error && <p role="alert">{error}</p>}
+            <header>
+                <h1>@mesub/react playground</h1>
+                <p>
+                    <code>{apiUrl}</code> · <code>{publishableKey.slice(0, 12)}…</code>
+                </p>
+            </header>
+
+            <section className="card">
+                <h2>Session</h2>
+                <dl className="rows">
+                    <dt>state</dt>
+                    <dd>
+                        <span className={`pill ${state}`}>
+                            {!ready ? 'loading' : user ? 'signed in' : 'signed out'}
+                        </span>
+                    </dd>
+                    <dt>email</dt>
+                    <dd>{user?.email ?? '-'}</dd>
+                    <dt>wallet</dt>
+                    <dd>
+                        <code>{wallet ?? '-'}</code>
+                    </dd>
+                </dl>
+            </section>
+
+            <section className="card">
+                <h2>Actions</h2>
+                <div className="actions">
+                    <button
+                        type="button"
+                        className="primary"
+                        onClick={() => run(login)}
+                        disabled={!ready || Boolean(user)}
+                    >
+                        Sign in
+                    </button>
+                    <button type="button" onClick={() => run(logout)} disabled={!user}>
+                        Sign out
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => run(async () => setToken(await getAccessToken()))}
+                    >
+                        Get access token
+                    </button>
+                </div>
+                <p className="hint" style={{ marginTop: 12 }}>
+                    The code is mailed to Mailpit:{' '}
+                    <a href="http://localhost:8025" target="_blank" rel="noreferrer">
+                        localhost:8025
+                    </a>
+                </p>
+            </section>
+
+            {error && (
+                <p className="alert" role="alert">
+                    {error}
+                </p>
+            )}
+
             {token !== null && (
-                <>
+                <section className="card">
                     <h2>Access token</h2>
-                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{token}</pre>
-                </>
+                    <pre>{token || 'null'}</pre>
+                </section>
             )}
         </main>
     );

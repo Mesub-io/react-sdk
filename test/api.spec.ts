@@ -1,4 +1,4 @@
-import { createApiClient } from '../src/api';
+import { createApiClient, REQUEST_TIMEOUT_MS } from '../src/api';
 import { MesubClientError } from '../src/errors';
 import { json, mockFetch, user } from './helpers';
 
@@ -176,5 +176,145 @@ describe('API errors', () => {
         expect(error.name).toBe('MesubClientError');
         expect(error.status).toBeNull();
         expect(error.cause).toBeInstanceOf(TypeError);
+    });
+});
+
+describe('timeouts', () => {
+    const MESSAGE = 'Mesub did not answer within 15 seconds';
+
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    function client(response: (init: RequestInit) => Promise<Response>) {
+        const fetch = vi.fn((_input: string, init: RequestInit) => response(init));
+        const api = createApiClient({ publishableKey: 'PUB_1', fetch });
+        const signal = () => fetch.mock.calls[0]![1].signal!;
+        return { api, fetch, signal };
+    }
+
+    /** Settles `promise` into a result, so a rejection is never unhandled. */
+    function outcome<T>(promise: Promise<T>) {
+        const result: { value?: T; error?: MesubClientError; done: boolean } = { done: false };
+        void promise.then(
+            (value) => Object.assign(result, { value, done: true }),
+            (error: MesubClientError) => Object.assign(result, { error, done: true }),
+        );
+        return result;
+    }
+
+    const never = () => new Promise<never>(() => undefined);
+
+    it('is 15 seconds', () => {
+        expect(REQUEST_TIMEOUT_MS).toBe(15_000);
+    });
+
+    it('rejects a request that never answers after 15 seconds, with status null', async () => {
+        const { api, signal } = client(never);
+        const result = outcome(api.sendCode('ada@example.com'));
+
+        await vi.advanceTimersByTimeAsync(14_999);
+        expect(result.done).toBe(false);
+        expect(signal().aborted).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(result.error).toBeInstanceOf(MesubClientError);
+        expect(result.error!.status).toBeNull();
+        expect(result.error!.message).toBe(MESSAGE);
+        expect(result.error!.cause).toBeInstanceOf(DOMException);
+        expect((result.error!.cause as DOMException).name).toBe('TimeoutError');
+        expect(signal().aborted).toBe(true);
+        expect(signal().reason).toBe(result.error!.cause);
+    });
+
+    it('times out, not "Could not reach", when fetch rejects on the abort', async () => {
+        const { api } = client(
+            (init) =>
+                new Promise((_, reject) => {
+                    init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
+                }),
+        );
+        const result = outcome(api.sendCode('ada@example.com'));
+
+        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+        expect(result.error!.message).toBe(MESSAGE);
+        expect(result.error!.status).toBeNull();
+    });
+
+    it('succeeds when the answer comes at 14.9 seconds', async () => {
+        const { api, signal } = client(
+            () =>
+                new Promise((resolve) =>
+                    setTimeout(() => resolve(json(201, { message: 'm' })), 14_900),
+                ),
+        );
+        const result = outcome(api.walletChallenge('st_1', 'Wa11et'));
+
+        await vi.advanceTimersByTimeAsync(14_900);
+        expect(result.value).toEqual({ message: 'm' });
+
+        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+        expect(signal().aborted).toBe(false);
+    });
+
+    it.each([
+        ['a success', () => json(201, { message: 'm' })],
+        ['a 204', () => json(204)],
+        ['an HTTP error', () => json(409, { message: 'Conflict' })],
+    ])('clears its timer after %s, leaving no late abort', async (_, response) => {
+        const { api, signal } = client(() => Promise.resolve(response()));
+        const result = outcome(api.walletChallenge('st_1', 'Wa11et'));
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(result.done).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+
+        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+        expect(signal().aborted).toBe(false);
+        expect(result.error?.message ?? null).not.toBe(MESSAGE);
+    });
+
+    it('clears its timer after a network failure', async () => {
+        const { api } = client(() => Promise.reject(new TypeError('Failed to fetch')));
+        const result = outcome(api.sendCode('ada@example.com'));
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(result.error!.message).toBe('Could not reach the Mesub API');
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([
+        ['a success', true, 201],
+        ['an error', false, 500],
+    ])('times out a body that never ends, on %s', async (_, ok, status) => {
+        const hung = { ok, status, json: never } as unknown as Response;
+        const { api } = client(() => Promise.resolve(hung));
+        const result = outcome(api.walletChallenge('st_1', 'Wa11et'));
+
+        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1);
+        expect(result.done).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(result.error!.message).toBe(MESSAGE);
+        expect(result.error!.status).toBeNull();
+    });
+
+    it('times each request on its own', async () => {
+        let calls = 0;
+        const { api } = client(() => (calls++ === 0 ? never() : Promise.resolve(json(204))));
+        const first = outcome(api.sendCode('ada@example.com'));
+
+        await vi.advanceTimersByTimeAsync(10_000);
+        const second = outcome(api.sendCode('ada@example.com'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(second.done).toBe(true);
+        expect(second.error).toBeUndefined();
+
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(first.error!.message).toBe(MESSAGE);
     });
 });

@@ -23,6 +23,11 @@ describe('package.json', () => {
         expect(pkg.peerDependencies).toMatchObject({ react: '>=18', 'react-dom': '>=18' });
     });
 
+    // Browser code the merchant never installs: the modal's wallet stack.
+    it('depends on the Wallet Standard and @solana/kit', () => {
+        expect(Object.keys(pkg.dependencies)).toEqual(['@solana/kit', '@wallet-standard/react']);
+    });
+
     it('ships the build and nothing else', () => {
         expect(pkg.files).toEqual(['dist']);
     });

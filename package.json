@@ -53,6 +53,10 @@
     "prepare": "husky",
     "prepublishOnly": "pnpm build && pnpm check:exports"
   },
+  "dependencies": {
+    "@solana/kit": "^8.4.0",
+    "@wallet-standard/react": "^1.0.3"
+  },
   "peerDependencies": {
     "react": ">=18",
     "react-dom": ">=18"

@@ -44,14 +44,38 @@ function Account() {
 }
 ```
 
-- `login()` resolves with the user once they are signed in with a wallet, and
-  rejects with `MesubSignInCancelledError` if they close the sign-in. The
-  sign-in modal it opens comes with
-  [#3](https://github.com/Mesub-io/react-sdk/issues/3).
+- `login()` opens the sign-in modal, resolves with the user once they are
+  signed in with a wallet, and rejects with `MesubSignInCancelledError` if they
+  close it.
 - `getAccessToken()` is what to send to your server, which checks it with
   `@mesub/node`.
 - A failed API call throws `MesubClientError`, with the HTTP `status` (null
   when the network failed).
+
+## Sign-in
+
+The provider renders the modal itself while a `login()` waits: there is no
+component to place. One Mesub account per person, email first, then the
+wallet:
+
+1. The email: Mesub mails a 6-digit code.
+2. The code. A returning subscriber, whose account already has a wallet, is
+   signed in here and signs nothing.
+3. The wallet: the modal lists the installed wallets that can sign a message on
+   Solana ([Wallet Standard](https://github.com/wallet-standard/wallet-standard),
+   so Phantom, Solflare and the others), connects the one picked and asks it to
+   sign a message. It costs nothing and moves nothing.
+
+Each step shows the API's own error (wrong or expired code, origin not allowed,
+a wallet already on another account) or the wallet's refusal, and can go back.
+Close or Escape cancels. Nothing Solana to install on the merchant's side.
+
+The modal is plain HTML in a `<dialog>`, with no CSS and no class names. Its
+parts carry `data-mesub-*` attributes to style it by: `data-mesub-dialog` (with
+`data-mesub-step` set to `email`, `code` or `wallet`), `data-mesub-form`,
+`data-mesub-input`, `data-mesub-submit`, `data-mesub-resend`, `data-mesub-back`,
+`data-mesub-close`, `data-mesub-wallets`, `data-mesub-wallet` (the wallet's
+name), `data-mesub-no-wallet`, `data-mesub-error` and `data-mesub-notice`.
 
 The session lives in memory for now: a reload signs the user out until
 [#4](https://github.com/Mesub-io/react-sdk/issues/4).

@@ -175,6 +175,33 @@ button:disabled {
     font-size: 13px;
 }
 
+.field {
+    display: grid;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.field input {
+    font: inherit;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.actions:has(.field) {
+    align-items: end;
+}
+
+[data-mesub-error] {
+    display: block;
+    width: 100%;
+    color: var(--error);
+    font-size: 13px;
+}
+
 /* Readable defaults for the unstyled widget, here only, so it can be tried. */
 [data-mesub-modal],
 dialog {

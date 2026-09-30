@@ -101,6 +101,58 @@ as long as the token lives, and rewritten on each refresh. That is what
 `@mesub/node` reads on page loads and server rendering. `logout()` clears the
 storage and the cookie, then ends the session on the API.
 
+## Subscribe
+
+```tsx
+import { SubscribeButton } from '@mesub/react';
+
+<SubscribeButton plan="pro" onSubscribed={(subscription) => unlock(subscription)}>
+    Subscribe to Pro
+</SubscribeButton>;
+```
+
+`plan` is the plan's slug, as set in the dashboard. On click it signs the
+subscriber in first if needed (the modal above), then reserves the
+subscription, has the wallet sign and send one transaction for all of it (the
+subscription and the first period's payment), and confirms it with the API.
+`onSubscribed` fires once it is confirmed.
+
+- The wallet that signs is the one the session proved. A wallet on another
+  account is refused with a message saying which to switch to.
+- It needs a wallet with `solana:signAndSendTransaction`: the wallet sends the
+  transaction itself, so there is no RPC to configure.
+- `chain` names the network the wallet sends on: `solana:mainnet` by default,
+  `solana:devnet` against a devnet API.
+- Closing the sign-in puts it back to idle. Any other failure (unknown plan, a
+  plan that is full, already subscribed, a wallet too empty for one period, a
+  refused signature, a transaction that did not land) shows the API's or the
+  wallet's message, and a click tries again.
+
+Like the modal it is unstyled: a `<button>` with `data-mesub-subscribe` and
+`data-mesub-state` (`idle`, `signing`, `confirming`, `subscribed` or `error`),
+followed in the error state by a `<span role="alert" data-mesub-error>`.
+`children` is the idle label, and every other button prop (`className`, `id`,
+`onClick`, a `ref`) goes to the button. An `onClick` that calls
+`preventDefault()` stops the flow.
+
+For a button of your own, `useSubscribe` runs the same flow:
+
+```tsx
+import { useSubscribe } from '@mesub/react';
+
+function Buy() {
+    const { state, error, subscribe } = useSubscribe('pro', { chain: 'solana:mainnet' });
+    return (
+        <button disabled={state === 'signing' || state === 'confirming'} onClick={subscribe}>
+            {state === 'subscribed' ? 'Thanks!' : (error ?? 'Buy')}
+        </button>
+    );
+}
+```
+
+`subscribe()` resolves with the subscription, or null when it did not go
+through.
+
 ## Development
 
 ```sh

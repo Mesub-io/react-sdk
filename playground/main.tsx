@@ -1,12 +1,14 @@
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { MesubProvider, useMesub } from '@mesub/react';
+import { MesubProvider, SubscribeButton, useMesub, type MesubSubscription } from '@mesub/react';
 
 import './style.css';
 
 const publishableKey = import.meta.env['VITE_MESUB_PUBLISHABLE_KEY'] ?? '';
 const apiUrl = import.meta.env['VITE_MESUB_API_URL'] ?? 'http://localhost:3333';
+// The local back runs on devnet.
+const chain = (import.meta.env['VITE_MESUB_CHAIN'] ?? 'solana:devnet') as `solana:${string}`;
 
 /** Everything `useMesub()` answers, and a button per action. Plain on purpose. */
 function Session() {
@@ -83,6 +85,8 @@ function Session() {
                 </p>
             </section>
 
+            <Subscribe />
+
             {error && (
                 <p className="alert" role="alert">
                     {error}
@@ -96,6 +100,36 @@ function Session() {
                 </section>
             )}
         </main>
+    );
+}
+
+/** A plan slug and the button, with what it settled on. */
+function Subscribe() {
+    const [plan, setPlan] = useState('contract');
+    const [subscribed, setSubscribed] = useState<MesubSubscription | null>(null);
+
+    return (
+        <section className="card">
+            <h2>Subscribe</h2>
+            <div className="actions">
+                <label className="field">
+                    plan slug
+                    <input value={plan} onChange={(event) => setPlan(event.target.value.trim())} />
+                </label>
+                {/* Keyed on the slug: another plan starts from idle. */}
+                <SubscribeButton
+                    key={plan}
+                    plan={plan}
+                    chain={chain}
+                    className="primary"
+                    onSubscribed={setSubscribed}
+                />
+            </div>
+            <p className="hint" style={{ marginTop: 12 }}>
+                Sends on <code>{chain}</code>. Signs in first when signed out.
+            </p>
+            {subscribed && <pre>{JSON.stringify(subscribed, null, 2)}</pre>}
+        </section>
     );
 }
 

@@ -192,7 +192,7 @@ describe('subscribing', () => {
         expect(fake.signAndSendTransaction).toHaveBeenCalledOnce();
         const input = fake.signAndSendTransaction.mock.calls[0]![0]!;
         expect(input.account.address).toBe(user.walletAddress);
-        expect(input.chain).toBe('solana:mainnet');
+        expect(input.chain).toBe('solana:devnet');
         expect(Array.from(input.transaction)).toEqual(Array.from(TX_BYTES));
 
         const [confirm] = calls(fetch, '/subscriptions/sub_1/confirm');
@@ -218,12 +218,12 @@ describe('subscribing', () => {
 
     it('sends on the chain it is given', async () => {
         const fake = registerWallet({ name: 'Phantom', connected: true });
-        await setup({ props: { chain: 'solana:devnet' } });
+        await setup({ props: { chain: 'solana:mainnet' } });
 
         click();
         await waitFor(() => expect(stateOf()).toBe('subscribed'));
 
-        expect(fake.signAndSendTransaction.mock.calls[0]![0]!.chain).toBe('solana:devnet');
+        expect(fake.signAndSendTransaction.mock.calls[0]![0]!.chain).toBe('solana:mainnet');
     });
 
     it('signs in first when signed out, then carries on', async () => {

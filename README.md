@@ -122,8 +122,8 @@ subscription and the first period's payment), and confirms it with the API.
   account is refused with a message saying which to switch to.
 - It needs a wallet with `solana:signAndSendTransaction`: the wallet sends the
   transaction itself, so there is no RPC to configure.
-- `chain` names the network the wallet sends on: `solana:mainnet` by default,
-  `solana:devnet` against a devnet API.
+- `chain` names the network the wallet sends on: `solana:devnet` by default
+  while Mesub runs on devnet, `solana:mainnet` once it runs there.
 - Closing the sign-in puts it back to idle. Any other failure (unknown plan, a
   plan that is full, already subscribed, a wallet too empty for one period, a
   refused signature, a transaction that did not land) shows the API's or the
@@ -142,7 +142,7 @@ For a button of your own, `useSubscribe` runs the same flow:
 import { useSubscribe } from '@mesub/react';
 
 function Buy() {
-    const { state, error, subscribe } = useSubscribe('pro', { chain: 'solana:mainnet' });
+    const { state, error, subscribe } = useSubscribe('pro', { chain: 'solana:devnet' });
     return (
         <button disabled={state === 'signing' || state === 'confirming'} onClick={subscribe}>
             {state === 'subscribed' ? 'Thanks!' : (error ?? 'Buy')}

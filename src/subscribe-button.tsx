@@ -16,7 +16,7 @@ import type { MesubSubscription } from './subscribe-api';
 export type SubscribeState = 'idle' | 'signing' | 'confirming' | 'subscribed' | 'error';
 
 export interface UseSubscribeOptions {
-    // The network the wallet sends on. Defaults to solana:mainnet.
+    // The network the wallet sends on. Defaults to solana:devnet while Mesub runs there.
     chain?: SolanaChain | undefined;
     onSubscribed?: ((subscription: MesubSubscription) => void) | undefined;
 }
@@ -91,7 +91,7 @@ export function useSubscribe(plan: string, options: UseSubscribeOptions = {}): U
             const reserved = await api.subscriptions.reserve(token, plan);
             const { transaction } = await api.subscriptions.transaction(token, reserved.id);
             const signer = await findSigner(latest.current.wallets, address);
-            const chain = latest.current.options.chain ?? 'solana:mainnet';
+            const chain = latest.current.options.chain ?? 'solana:devnet';
             const signature = await signAndSend(signer, chain, transaction);
 
             if (!alive.current) return null;

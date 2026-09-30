@@ -33,9 +33,12 @@ const unregisters: (() => void)[] = [];
 
 export function registerWallet(options: FakeWalletOptions = {}) {
     const chains = options.chains ?? ['solana:mainnet', 'solana:devnet'];
-    const names = ['standard:connect', 'standard:disconnect', 'solana:signMessage'].filter(
-        (name) => !options.without?.includes(name),
-    );
+    const names = [
+        'standard:connect',
+        'standard:disconnect',
+        'solana:signMessage',
+        'solana:signAndSendTransaction',
+    ].filter((name) => !options.without?.includes(name));
     const account: FakeAccount = {
         address: options.address ?? 'Wa11et1111111111111111111111111111111111111',
         publicKey: new Uint8Array(32),
@@ -63,10 +66,21 @@ export function registerWallet(options: FakeWalletOptions = {}) {
         inputs.map((input) => ({ signedMessage: input.message, signature })),
     );
 
+    const signAndSendTransaction = vi.fn(
+        async (
+            ...inputs: { account: FakeAccount; chain: string; transaction: Uint8Array }[]
+        ): Promise<{ signature: Uint8Array }[]> => inputs.map(() => ({ signature })),
+    );
+
     const all: Record<string, object> = {
         'standard:connect': { version: '1.0.0', connect },
         'standard:disconnect': { version: '1.0.0', disconnect },
         'solana:signMessage': { version: '1.0.0', signMessage },
+        'solana:signAndSendTransaction': {
+            version: '1.0.0',
+            supportedTransactionVersions: ['legacy', 0],
+            signAndSendTransaction,
+        },
     };
     for (const name of names) wallet.features[name] = all[name]!;
 
@@ -83,7 +97,7 @@ export function registerWallet(options: FakeWalletOptions = {}) {
         window.removeEventListener('wallet-standard:app-ready', onAppReady);
         unregister?.();
     });
-    return { wallet, account, signature, connect, disconnect, signMessage };
+    return { wallet, account, signature, connect, disconnect, signMessage, signAndSendTransaction };
 }
 
 /** Removes every wallet registered by the test. */

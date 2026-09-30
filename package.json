@@ -51,7 +51,8 @@
     "test:watch": "vitest",
     "check:exports": "node scripts/check-exports.mjs",
     "prepare": "husky",
-    "prepublishOnly": "pnpm build && pnpm check:exports"
+    "prepublishOnly": "pnpm build && pnpm check:exports",
+    "playground": "vite --config playground/vite.config.ts"
   },
   "peerDependencies": {
     "react": ">=18",
@@ -63,6 +64,7 @@
     "@types/node": "^24.19.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "happy-dom": "^20.14.5",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
@@ -72,6 +74,7 @@
     "react-dom": "^19.3.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
+    "vite": "^7.3.6",
     "vitest": "^4.1.11"
   },
   "lint-staged": {

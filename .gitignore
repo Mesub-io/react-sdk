@@ -5,3 +5,6 @@ coverage
 .DS_Store
 # iCloud's numbered copies of files in ~/Documents.
 * [0-9].*
+
+# The playground reads its key from here.
+playground/.env.local

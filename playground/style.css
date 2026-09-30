@@ -1,0 +1,216 @@
+/* The playground's own look, never shipped: the package stays unstyled. */
+:root {
+    --bg: #f6f6f4;
+    --card: #ffffff;
+    --text: #1d1d1b;
+    --muted: #6b6b66;
+    --line: #e4e4df;
+    --accent: #e8683f;
+    --accent-text: #ffffff;
+    --ok: #2f8f5b;
+    --warn: #b7791f;
+    --error: #c2412d;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+    color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #141413;
+        --card: #1e1e1c;
+        --text: #ededea;
+        --muted: #9a9a94;
+        --line: #33332f;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font:
+        15px/1.5 system-ui,
+        -apple-system,
+        'Segoe UI',
+        sans-serif;
+    display: grid;
+    place-items: start center;
+    padding: 48px 16px;
+}
+
+main {
+    width: 100%;
+    max-width: 560px;
+    display: grid;
+    gap: 16px;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 20px;
+}
+
+header p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.card h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.rows {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px 12px;
+    margin: 0;
+}
+
+.rows dt {
+    color: var(--muted);
+}
+
+.rows dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+code,
+pre {
+    font-family: var(--mono);
+    font-size: 12px;
+}
+
+pre {
+    margin: 0;
+    padding: 12px;
+    background: var(--bg);
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 180px;
+    overflow: auto;
+}
+
+.pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid currentColor;
+}
+
+.pill.on {
+    color: var(--ok);
+}
+
+.pill.off {
+    color: var(--muted);
+}
+
+.pill.wait {
+    color: var(--warn);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+button {
+    font: inherit;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+}
+
+button:hover {
+    border-color: var(--muted);
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.alert {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--error);
+    color: var(--error);
+    font-size: 13px;
+}
+
+.hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+/* Readable defaults for the unstyled widget, here only, so it can be tried. */
+[data-mesub-modal],
+dialog {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    background: var(--card);
+    color: var(--text);
+    max-width: 380px;
+    width: calc(100% - 32px);
+}
+
+dialog::backdrop {
+    background: rgb(0 0 0 / 0.4);
+}
+
+[data-mesub-modal] input,
+dialog input {
+    font: inherit;
+    width: 100%;
+    padding: 8px 10px;
+    margin: 6px 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+}
+
+[data-mesub-modal] ul,
+dialog ul {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+}
+
+a {
+    color: var(--accent);
+}

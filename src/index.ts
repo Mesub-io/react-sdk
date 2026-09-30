@@ -1,5 +1,8 @@
 /**
  * `@mesub/react`: `MesubProvider`, `useMesub`, the sign-in modal and the
- * Subscribe button. Filled in by #2 to #5.
+ * Subscribe button. The modal and the button come with #3 and #5.
  */
-export {};
+export { MesubProvider, type MesubProviderProps } from './provider';
+export { useMesub, type MesubState } from './context';
+export { MesubClientError, MesubSignInCancelledError } from './errors';
+export type { MesubUser } from './types';

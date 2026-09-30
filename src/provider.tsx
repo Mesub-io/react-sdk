@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createApiClient, type FetchLike } from './api';
 import { MesubContext, MesubInternalContext, type MesubInternal, type MesubState } from './context';
 import { MesubSignInCancelledError } from './errors';
+import { SignInModal } from './sign-in-modal';
 import type { MesubSession, MesubUser } from './types';
 
 export interface MesubProviderProps {
@@ -23,7 +24,7 @@ function isSignedIn(session: MesubSession | null): session is MesubSession {
     return session !== null && session.accessToken !== null && session.user.walletAddress !== null;
 }
 
-/** Holds the session in memory and exposes it through `useMesub()`. */
+/** Holds the session in memory, exposes it through `useMesub()`, and renders the sign-in. */
 export function MesubProvider({ publishableKey, apiUrl, fetch, children }: MesubProviderProps) {
     const api = useMemo(
         () => createApiClient({ publishableKey, apiUrl, fetch }),
@@ -109,7 +110,11 @@ export function MesubProvider({ publishableKey, apiUrl, fetch, children }: Mesub
 
     return (
         <MesubInternalContext.Provider value={internal}>
-            <MesubContext.Provider value={state}>{children}</MesubContext.Provider>
+            <MesubContext.Provider value={state}>
+                {children}
+                {/* Opens on login(): nothing for the merchant to place. */}
+                <SignInModal />
+            </MesubContext.Provider>
         </MesubInternalContext.Provider>
     );
 }

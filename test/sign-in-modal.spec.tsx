@@ -211,6 +211,27 @@ describe('the email step', () => {
         expect(step()).toBe('email');
     });
 
+    it('says so when Mesub does not answer within 15 seconds, and a retry goes through', async () => {
+        let hang = true;
+        setup({ '/code': () => (hang ? new Promise<never>(() => undefined) : json(204)) });
+
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            type('Email', 'ada@example.com');
+            click('Send the code');
+            await act(() => vi.advanceTimersByTimeAsync(15_000));
+            expect(error()).toBe('Mesub did not answer within 15 seconds');
+            expect(step()).toBe('email');
+        } finally {
+            vi.useRealTimers();
+        }
+
+        hang = false;
+        click('Send the code');
+        await waitFor(() => expect(step()).toBe('code'));
+        expect(error()).toBeNull();
+    });
+
     it('clears the error once a retry succeeds', async () => {
         let first = true;
         setup({
@@ -548,6 +569,22 @@ describe('the wallet step', () => {
         click('Phantom');
 
         await waitFor(() => expect(error()).toBe('Could not reach the Mesub API'));
+    });
+
+    it('says so when Mesub does not answer within 15 seconds during the proof', async () => {
+        registerWallet({ name: 'Phantom' });
+        setup({ ...newcomerRoutes, '/wallet': () => new Promise<never>(() => undefined) });
+        await toWallet();
+
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            click('Phantom');
+            await act(() => vi.advanceTimersByTimeAsync(15_000));
+            expect(error()).toBe('Mesub did not answer within 15 seconds');
+            expect(step()).toBe('wallet');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('goes back to the email step, the code being spent', async () => {

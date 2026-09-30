@@ -3,6 +3,8 @@ import { createSubscriptionsApi, type SubscriptionsApi } from './subscribe-api';
 import type { ClientSession, WalletProof } from './types';
 
 export const DEFAULT_API_URL = 'https://api.mesub.io';
+// Every call gives up after this, so a hung request never holds the refresh lock.
+export const REQUEST_TIMEOUT_MS = 15_000;
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -57,23 +59,55 @@ function createPost(options: ApiClientOptions, prefix: string): Post {
         };
         if (bearer) headers.Authorization = `Bearer ${bearer}`;
 
-        let response: Response;
-        try {
-            response = await doFetch(`${base}${path}`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(body),
-                // The API never sets cookies on these routes.
-                credentials: 'omit',
-            });
-        } catch (error) {
-            throw new MesubClientError('Could not reach the Mesub API', null, { cause: error });
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // Raced too, since a custom fetch may ignore the signal.
+        const deadline = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+                const abort = new DOMException(TIMEOUT_MESSAGE, 'TimeoutError');
+                reject(timedOut(abort));
+                controller.abort(abort);
+            }, REQUEST_TIMEOUT_MS);
+        });
+
+        async function send(): Promise<T> {
+            let response: Response;
+            try {
+                response = await doFetch(`${base}${path}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(body),
+                    // The API never sets cookies on these routes.
+                    credentials: 'omit',
+                    signal: controller.signal,
+                });
+            } catch (error) {
+                if (controller.signal.aborted) throw timedOut(controller.signal.reason);
+                throw new MesubClientError('Could not reach the Mesub API', null, {
+                    cause: error,
+                });
+            }
+
+            if (!response.ok) {
+                throw new MesubClientError(await errorMessage(response), response.status);
+            }
+            if (response.status === 204) return undefined as T;
+            return (await response.json()) as T;
         }
 
-        if (!response.ok) throw new MesubClientError(await errorMessage(response), response.status);
-        if (response.status === 204) return undefined as T;
-        return (await response.json()) as T;
+        try {
+            // The body is read inside the race: a hung body times out too.
+            return await Promise.race([send(), deadline]);
+        } finally {
+            clearTimeout(timer);
+        }
     };
+}
+
+const TIMEOUT_MESSAGE = `Mesub did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds`;
+
+function timedOut(cause: unknown): MesubClientError {
+    return new MesubClientError(TIMEOUT_MESSAGE, null, { cause });
 }
 
 // NestJS errors: `{ message: string | string[], error, statusCode }`.

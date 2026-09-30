@@ -414,6 +414,38 @@ describe('errors', () => {
 
         expect(alert()).toBe('Could not reach the Mesub API');
     });
+
+    it('says so when Mesub does not answer within 15 seconds, and a retry goes through', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        let hang = true;
+        const { fetch, onSubscribed } = await setup({
+            overrides: {
+                '/subscriptions': () =>
+                    hang ? new Promise<never>(() => undefined) : json(201, pending),
+            },
+        });
+
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            click();
+            await act(() => vi.advanceTimersByTimeAsync(0));
+            expect(stateOf()).toBe('signing');
+
+            await act(() => vi.advanceTimersByTimeAsync(15_000));
+            expect(stateOf()).toBe('error');
+            expect(alert()).toBe('Mesub did not answer within 15 seconds');
+            expect(button()).toHaveProperty('disabled', false);
+        } finally {
+            vi.useRealTimers();
+        }
+
+        hang = false;
+        click();
+        await waitFor(() => expect(stateOf()).toBe('subscribed'));
+        expect(alert()).toBeNull();
+        expect(calls(fetch, '/subscriptions')).toHaveLength(2);
+        expect(onSubscribed).toHaveBeenCalledOnce();
+    });
 });
 
 describe('useSubscribe', () => {

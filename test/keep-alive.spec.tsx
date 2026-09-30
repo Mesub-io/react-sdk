@@ -693,3 +693,97 @@ describe('several tabs', () => {
         expect(server.state.replays).toBe(0);
     });
 });
+
+describe('a refresh that hangs', () => {
+    it('restores later: the token stays, signed out, ready after 15 seconds', async () => {
+        const server = authServer();
+        const stored = seed(server);
+        // Never released: the API took the request and never answered.
+        server.state.hold = deferred().promise;
+        const tab = mount(server);
+        await settle();
+
+        await advance(14_999);
+        expect(tab.result.current.state.ready).toBe(false);
+
+        await advance(1);
+        expect(tab.result.current.state.ready).toBe(true);
+        expect(tab.result.current.state.user).toBeNull();
+        expect(localStorage.getItem(KEY)).toBe(stored);
+
+        server.state.hold = null;
+        act(() => {
+            window.dispatchEvent(new Event('online'));
+        });
+        await settle();
+        expect(tab.result.current.state.user).toEqual(user);
+        expect(server.state.refreshed).toEqual([stored, stored]);
+        expect(server.state.replays).toBe(0);
+    });
+
+    it('keeps the session, then the retry 30 seconds later goes through', async () => {
+        const server = authServer();
+        const tab = mount(server);
+        await settle();
+        signIn(tab, server);
+        server.state.hold = deferred().promise;
+
+        await advance(HOUR - 60_000 + 15_000);
+        expect(server.state.refreshed).toEqual(['rt_1']);
+        expect(tab.result.current.state.user).toEqual(user);
+        expect(localStorage.getItem(KEY)).toBe('rt_1');
+        expect(readCookie()).not.toBeNull();
+
+        server.state.hold = null;
+        await advance(30_000);
+        expect(server.state.refreshed).toEqual(['rt_1', 'rt_1']);
+        expect(localStorage.getItem(KEY)).toBe('rt_2');
+        expect(tab.result.current.state.user).toEqual(user);
+    });
+
+    it('lets getAccessToken reject with the timeout once the token expired', async () => {
+        const server = authServer();
+        const tab = mount(server);
+        await settle();
+        signIn(tab, server);
+        vi.setSystemTime(Date.now() + HOUR);
+        server.state.hold = deferred().promise;
+
+        let failure: unknown;
+        const pending = tab.result.current.state.getAccessToken().catch((error: unknown) => {
+            failure = error;
+        });
+        await advance(15_000);
+        await act(() => pending);
+
+        expect(failure).toBeInstanceOf(MesubClientError);
+        expect((failure as MesubClientError).status).toBeNull();
+        expect((failure as MesubClientError).message).toBe(
+            'Mesub did not answer within 15 seconds',
+        );
+        expect(localStorage.getItem(KEY)).toBe('rt_1');
+    });
+
+    it('with Web Locks, releases the lock so another tab can refresh', async () => {
+        const request = installLocks();
+        const server = authServer();
+        const stored = seed(server);
+        server.state.hold = deferred().promise;
+        const a = mount(server);
+        await settle();
+        // Only a's refresh reached the API: it holds the lock, b waits for it.
+        server.state.hold = null;
+        const b = mount(server);
+        await settle();
+        expect(server.state.refreshed).toEqual([stored]);
+        expect(request).toHaveBeenCalledTimes(2);
+
+        await advance(15_000);
+
+        expect(server.state.refreshed).toEqual([stored, stored]);
+        expect(b.result.current.state.user).toEqual(user);
+        expect(localStorage.getItem(KEY)).toBe('rt_2');
+        expect(a.result.current.state.ready).toBe(true);
+        expect(server.state.replays).toBe(0);
+    });
+});

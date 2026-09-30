@@ -26,7 +26,7 @@ export interface WalletProof {
     accessToken: string;
 }
 
-/** What the provider keeps in memory. */
+/** What the provider holds. Only the refresh token is stored. */
 export interface MesubSession {
     user: MesubUser;
     refreshToken: string;

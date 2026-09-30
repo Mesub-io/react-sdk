@@ -11,10 +11,6 @@ interface ConnectFeature {
     connect(): Promise<{ accounts: readonly WalletAccount[] }>;
 }
 
-interface DisconnectFeature {
-    disconnect(): Promise<void>;
-}
-
 interface SignMessageFeature {
     signMessage(
         ...inputs: { account: WalletAccount; message: Uint8Array }[]
@@ -34,12 +30,9 @@ export function canSignIn(wallet: UiWallet): boolean {
 
 /** Asks the wallet for its Solana account. Null when it shares none. */
 export async function connectAccount(wallet: UiWallet): Promise<WalletAccount | null> {
-    // An already authorised wallet hands back the account it was authorised
-    // with, not the one selected now: forgetting it first shares the active one.
-    if (wallet.accounts.length > 0 && wallet.features.includes('standard:disconnect')) {
-        const feature = getWalletFeature(wallet, 'standard:disconnect') as DisconnectFeature;
-        await feature.disconnect().catch(() => undefined);
-    }
+    // Never `standard:disconnect` first: on a dApp it would also sign the
+    // subscriber out of the merchant's own wallet connection, which shares
+    // this origin. An authorised wallet hands back its authorised account.
     // Called as methods: a wallet may rely on `this`.
     const feature = getWalletFeature(wallet, 'standard:connect') as ConnectFeature;
     const { accounts } = await feature.connect();

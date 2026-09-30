@@ -450,7 +450,9 @@ describe('the wallet step', () => {
         await expect(login).resolves.toEqual(user);
     });
 
-    it('forgets an earlier authorisation before connecting', async () => {
+    // On a dApp the merchant may already be connected to this wallet on the
+    // same origin: disconnecting would sign the subscriber out of it too.
+    it('never disconnects a wallet the site already had', async () => {
         const fake = registerWallet({ name: 'Phantom', connected: true });
         const { login } = setup();
         await toWallet();
@@ -458,10 +460,8 @@ describe('the wallet step', () => {
         click('Phantom');
         await login;
 
-        expect(fake.disconnect).toHaveBeenCalledOnce();
-        expect(fake.disconnect.mock.invocationCallOrder[0]!).toBeLessThan(
-            fake.connect.mock.invocationCallOrder[0]!,
-        );
+        expect(fake.disconnect).not.toHaveBeenCalled();
+        expect(fake.connect).toHaveBeenCalledOnce();
     });
 
     it('shows a refused signature and signs on a retry', async () => {

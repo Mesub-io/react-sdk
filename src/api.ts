@@ -1,4 +1,5 @@
 import { MesubClientError } from './errors';
+import { createSubscriptionsApi, type SubscriptionsApi } from './subscribe-api';
 import type { ClientSession, WalletProof } from './types';
 
 export const DEFAULT_API_URL = 'https://api.mesub.io';
@@ -22,14 +23,34 @@ export interface MesubApi {
     ): Promise<WalletProof>;
     refresh(refreshToken: string): Promise<ClientSession>;
     logout(refreshToken: string): Promise<void>;
+    // The Subscribe button's routes, under /v1/client/subscriptions.
+    subscriptions: SubscriptionsApi;
 }
 
+/** A POST under `prefix`, JSON in and out, with the key and an optional bearer. */
+export type Post = <T>(path: string, body: unknown, bearer?: string) => Promise<T>;
+
 export function createApiClient(options: ApiClientOptions): MesubApi {
-    const base = `${(options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, '')}/v1/client/auth`;
+    const post = createPost(options, '/v1/client/auth');
+
+    return {
+        sendCode: (email) => post('/code', { email }),
+        createSession: (email, code) => post('/session', { email, code }),
+        walletChallenge: (sessionToken, address) =>
+            post('/wallet/challenge', { address }, sessionToken),
+        proveWallet: (sessionToken, proof) => post('/wallet', proof, sessionToken),
+        refresh: (refreshToken) => post('/refresh', { refreshToken }),
+        logout: (refreshToken) => post('/logout', { refreshToken }),
+        subscriptions: createSubscriptionsApi(createPost(options, '/v1/client/subscriptions')),
+    };
+}
+
+function createPost(options: ApiClientOptions, prefix: string): Post {
+    const base = `${(options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, '')}${prefix}`;
     // Read at call time, so a fetch stubbed after the client is built is still used.
     const doFetch: FetchLike = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
 
-    async function post<T>(path: string, body: unknown, bearer?: string): Promise<T> {
+    return async function post<T>(path: string, body: unknown, bearer?: string): Promise<T> {
         const headers: Record<string, string> = {
             'X-Mesub-Key': options.publishableKey,
             'Content-Type': 'application/json',
@@ -52,16 +73,6 @@ export function createApiClient(options: ApiClientOptions): MesubApi {
         if (!response.ok) throw new MesubClientError(await errorMessage(response), response.status);
         if (response.status === 204) return undefined as T;
         return (await response.json()) as T;
-    }
-
-    return {
-        sendCode: (email) => post('/code', { email }),
-        createSession: (email, code) => post('/session', { email, code }),
-        walletChallenge: (sessionToken, address) =>
-            post('/wallet/challenge', { address }, sessionToken),
-        proveWallet: (sessionToken, proof) => post('/wallet', proof, sessionToken),
-        refresh: (refreshToken) => post('/refresh', { refreshToken }),
-        logout: (refreshToken) => post('/logout', { refreshToken }),
     };
 }
 

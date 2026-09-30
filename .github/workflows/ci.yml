@@ -28,3 +28,18 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm check:exports
+
+  # The peer range is react >=18: the quality job runs 19, this one runs 18.
+  react-18:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm add -D react@18.3 react-dom@18.3 @types/react@18 @types/react-dom@18
+      - run: pnpm test
+      - run: pnpm typecheck

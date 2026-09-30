@@ -77,8 +77,29 @@ parts carry `data-mesub-*` attributes to style it by: `data-mesub-dialog` (with
 `data-mesub-close`, `data-mesub-wallets`, `data-mesub-wallet` (the wallet's
 name), `data-mesub-no-wallet`, `data-mesub-error` and `data-mesub-notice`.
 
-The session lives in memory for now: a reload signs the user out until
-[#4](https://github.com/Mesub-io/react-sdk/issues/4).
+## Session
+
+The session survives reloads. The refresh token is kept in the site's
+`localStorage`, under `mesub:session:<publishableKey>`, and nothing else is: on
+load the provider trades it for a fresh session, and `ready` stays false until
+that answers. A refused token (spent, expired, revoked) is cleared and the user
+is signed out; an unreachable API keeps it, signed out, and tries again when
+the browser is back online.
+
+The access token lasts an hour. The provider refreshes it a minute before it
+expires, and `getAccessToken()` refreshes first when it is expired or about to
+be, one refresh for every concurrent caller. Each refresh rotates the refresh
+token, and presenting a spent one ends every session of the account, so the
+tabs of a site take turns: a refresh always spends the token `localStorage`
+holds at that moment, under a [Web Lock](https://developer.mozilla.org/docs/Web/API/Web_Locks_API)
+shared by the tabs, and a tab picks up the token another one rotated through
+the `storage` event. Signing in or out in one tab does the same in the others.
+
+The access token is also written to a `mesub-token` cookie on the site's own
+domain (`Path=/`, `SameSite=Lax`, `Secure` except on `http://localhost`), for
+as long as the token lives, and rewritten on each refresh. That is what
+`@mesub/node` reads on page loads and server rendering. `logout()` clears the
+storage and the cookie, then ends the session on the API.
 
 ## Subscribe
 

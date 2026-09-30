@@ -1,0 +1,30 @@
+name: CI
+
+# Push only: every branch a pull request is opened from is pushed first.
+on:
+  push:
+    branches: ['**']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # No pnpm version here: the action reads packageManager in package.json,
+      # and refuses to run when both name one. pnpm 11 needs Node 22.13+.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm check:exports

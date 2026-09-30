@@ -51,6 +51,7 @@ function Account() {
   `@mesub/node`.
 - A failed API call throws `MesubClientError`, with the HTTP `status` (null
   when the network failed).
+- API calls time out after 15 seconds, with a `MesubClientError` whose `status` is null.
 
 ## Sign-in
 

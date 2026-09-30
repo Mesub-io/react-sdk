@@ -16,6 +16,46 @@ access token this package holds and answers whether the subscriber has access.
 React 18 or 19. Works with Next.js's App Router: the build starts with
 `'use client'`.
 
+## Usage
+
+Wrap the app once, with the project's publishable key:
+
+```tsx
+import { MesubProvider } from '@mesub/react';
+
+export function App({ children }) {
+    return <MesubProvider publishableKey="PUB_...">{children}</MesubProvider>;
+}
+```
+
+`apiUrl` points it at another API (defaults to `https://api.mesub.io`).
+
+Then read the session anywhere below it:
+
+```tsx
+import { useMesub } from '@mesub/react';
+
+function Account() {
+    const { ready, user, wallet, login, logout, getAccessToken } = useMesub();
+
+    if (!ready) return null;
+    if (!user) return <button onClick={() => login()}>Sign in</button>;
+    return <button onClick={() => logout()}>Sign out {wallet}</button>;
+}
+```
+
+- `login()` resolves with the user once they are signed in with a wallet, and
+  rejects with `MesubSignInCancelledError` if they close the sign-in. The
+  sign-in modal it opens comes with
+  [#3](https://github.com/Mesub-io/react-sdk/issues/3).
+- `getAccessToken()` is what to send to your server, which checks it with
+  `@mesub/node`.
+- A failed API call throws `MesubClientError`, with the HTTP `status` (null
+  when the network failed).
+
+The session lives in memory for now: a reload signs the user out until
+[#4](https://github.com/Mesub-io/react-sdk/issues/4).
+
 ## Development
 
 ```sh

@@ -10,8 +10,9 @@ import {
 } from 'react';
 import { useMesub, useMesubInternal } from './context';
 import { MesubClientError, MesubSignInCancelledError } from './errors';
-import { findSigner, signAndSend, WalletError, type SolanaChain } from './send-transaction';
+import { WalletError, type SolanaChain } from './send-transaction';
 import type { MesubSubscription } from './subscribe-api';
+import { NotSettledError, subscribeOnce } from './subscribe-flow';
 
 export type SubscribeState = 'idle' | 'signing' | 'confirming' | 'subscribed' | 'error';
 
@@ -32,7 +33,13 @@ export interface UseSubscribeResult {
 }
 
 function messageOf(error: unknown): string {
-    if (error instanceof MesubClientError || error instanceof WalletError) return error.message;
+    if (
+        error instanceof MesubClientError ||
+        error instanceof WalletError ||
+        error instanceof NotSettledError
+    ) {
+        return error.message;
+    }
     return 'Something went wrong. Try again.';
 }
 
@@ -88,25 +95,23 @@ export function useSubscribe(plan: string, options: UseSubscribeOptions = {}): U
                 return null;
             }
 
-            const reserved = await api.subscriptions.reserve(token, plan);
-            const { transaction } = await api.subscriptions.transaction(token, reserved.id);
-            const signer = await findSigner(latest.current.wallets, address);
-            const chain = latest.current.options.chain ?? 'solana:devnet';
-            const signature = await signAndSend(signer, chain, transaction);
-
-            if (!alive.current) return null;
-            setState('confirming');
-            const confirmed = await api.subscriptions.confirm(token, reserved.id, signature);
-            if (confirmed.reason) {
-                fail(confirmed.reason);
-                return null;
-            }
+            const { subscription: confirmed } = await subscribeOnce({
+                api,
+                accessToken: token,
+                plan,
+                wallets: latest.current.wallets,
+                address,
+                chain: latest.current.options.chain ?? 'solana:devnet',
+                onSent: () => {
+                    if (alive.current) setState('confirming');
+                },
+            });
             if (alive.current) {
-                setSubscription(confirmed.subscription);
+                setSubscription(confirmed);
                 setState('subscribed');
             }
-            latest.current.options.onSubscribed?.(confirmed.subscription);
-            return confirmed.subscription;
+            latest.current.options.onSubscribed?.(confirmed);
+            return confirmed;
         } catch (failure) {
             fail(messageOf(failure));
             return null;

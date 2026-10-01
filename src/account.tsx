@@ -57,9 +57,10 @@ export function Account({
     const held = current?.plans ?? [];
     const icon = installedWith(installed, address)?.icon;
 
-    function load() {
+    // After a refused switch, the refusal stays up while the list is read again.
+    function load(clear = true) {
         setLoading(true);
-        setError('');
+        if (clear) setError('');
         loadWallets()
             .catch((failure: unknown) => setError(messageOf(failure)))
             .finally(() => setLoading(false));
@@ -93,7 +94,7 @@ export function Account({
         } catch (failure) {
             setError(messageOf(failure));
             // Not one of the account's wallets any more: show the list as it is.
-            if (failure instanceof MesubClientError && failure.status === 404) load();
+            if (failure instanceof MesubClientError && failure.status === 404) load(false);
         } finally {
             setBusy(null);
         }

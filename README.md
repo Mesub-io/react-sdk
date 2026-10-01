@@ -112,29 +112,45 @@ import { SubscribeButton } from '@mesub/react';
 </SubscribeButton>;
 ```
 
-`plan` is the plan's slug, as set in the dashboard. On click it signs the
-subscriber in first if needed (the modal above), then reserves the
-subscription, has the wallet sign and send one transaction for all of it (the
-subscription and the first period's payment), and confirms it with the API.
-`onSubscribed` fires once it is confirmed.
+`plan` is the plan's slug, as set in the dashboard. On click it opens the
+Mesub checkout, one dialog from the click to the receipt:
+
+1. **Sign-in**, when nobody is signed in: the steps of the modal above, in the
+   same window.
+2. **Review**: the merchant, the plan, the price and its cadence, what is due
+   today, the next charge, the paying wallet and the cancel terms, read from
+   `GET /v1/client/plans/:slug`. Nothing is signed until "Subscribe and pay".
+   A plan that takes no new subscribers says so, and its button is disabled.
+3. **Approve**: the wallet signs and sends one transaction for all of it (the
+   subscription and the first period's payment).
+4. **Confirming**, then **Subscribed**: the next charge and the transaction on
+   Solana Explorer. `onSubscribed` fires once it is confirmed.
 
 - The wallet that signs is the one the session proved. A wallet on another
   account is refused with a message saying which to switch to.
 - It needs a wallet with `solana:signAndSendTransaction`: the wallet sends the
   transaction itself, so there is no RPC to configure.
 - `chain` names the network the wallet sends on: `solana:devnet` by default
-  while Mesub runs on devnet, `solana:mainnet` once it runs there.
-- Closing the sign-in puts it back to idle. Any other failure (unknown plan, a
-  plan that is full, already subscribed, a wallet too empty for one period, a
-  refused signature, a transaction that did not land) shows the API's or the
-  wallet's message, and a click tries again.
+  while Mesub runs on devnet, `solana:mainnet` once it runs there. Off mainnet
+  the review marks a test network.
+- An error stays on its step and says whether money moved: a refusal before
+  the wallet sent ends on "Nothing was charged.", a transaction that may have
+  landed says to wait for it.
+- `checkout={false}` skips the dialog: the click signs at once (signing in
+  first through the modal above) and the button alone shows the progress.
 
-Like the modal it is unstyled: a `<button>` with `data-mesub-subscribe` and
-`data-mesub-state` (`idle`, `signing`, `confirming`, `subscribed` or `error`),
-followed in the error state by a `<span role="alert" data-mesub-error>`.
-`children` is the idle label, and every other button prop (`className`, `id`,
-`onClick`, a `ref`) goes to the button. An `onClick` that calls
-`preventDefault()` stops the flow.
+The checkout is unstyled like the modal: `data-mesub-step` is also `review`,
+`approve`, `confirming` or `subscribed`, with `data-mesub-merchant`,
+`data-mesub-price`, `data-mesub-summary` and its `data-mesub-row` rows,
+`data-mesub-terms`, `data-mesub-network`, `data-mesub-warning`,
+`data-mesub-explorer`, `data-mesub-cancel` and `data-mesub-done`.
+
+The button is a `<button>` with `data-mesub-subscribe` and `data-mesub-state`
+(`idle`, `signing`, `confirming`, `subscribed` or `error`), following the
+checkout. With `checkout={false}` it is followed in the error state by a
+`<span role="alert" data-mesub-error>`. `children` is the idle label, and every
+other button prop (`className`, `id`, `onClick`, a `ref`) goes to the button.
+An `onClick` that calls `preventDefault()` stops the flow.
 
 For a button of your own, `useSubscribe` runs the same flow:
 

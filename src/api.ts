@@ -1,4 +1,5 @@
 import { MesubClientError } from './errors';
+import { createPlansApi, type PlansApi } from './plan-api';
 import { createSubscriptionsApi, type SubscriptionsApi } from './subscribe-api';
 import type { ClientSession, WalletProof } from './types';
 
@@ -27,10 +28,15 @@ export interface MesubApi {
     logout(refreshToken: string): Promise<void>;
     // The Subscribe button's routes, under /v1/client/subscriptions.
     subscriptions: SubscriptionsApi;
+    // The checkout's summary, under /v1/client/plans.
+    plans: PlansApi;
 }
 
 /** A POST under `prefix`, JSON in and out, with the key and an optional bearer. */
 export type Post = <T>(path: string, body: unknown, bearer?: string) => Promise<T>;
+
+/** A GET under `prefix`, with the key. */
+export type Get = <T>(path: string) => Promise<T>;
 
 export function createApiClient(options: ApiClientOptions): MesubApi {
     const post = createPost(options, '/v1/client/auth');
@@ -44,19 +50,34 @@ export function createApiClient(options: ApiClientOptions): MesubApi {
         refresh: (refreshToken) => post('/refresh', { refreshToken }),
         logout: (refreshToken) => post('/logout', { refreshToken }),
         subscriptions: createSubscriptionsApi(createPost(options, '/v1/client/subscriptions')),
+        plans: createPlansApi(createGet(options, '/v1/client/plans')),
     };
 }
 
+function createGet(options: ApiClientOptions, prefix: string): Get {
+    const request = createRequest(options, prefix);
+    return (path) => request('GET', path, undefined);
+}
+
 function createPost(options: ApiClientOptions, prefix: string): Post {
+    const request = createRequest(options, prefix);
+    return (path, body, bearer) => request('POST', path, body, bearer);
+}
+
+function createRequest(options: ApiClientOptions, prefix: string) {
     const base = `${(options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, '')}${prefix}`;
     // Read at call time, so a fetch stubbed after the client is built is still used.
     const doFetch: FetchLike = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
 
-    return async function post<T>(path: string, body: unknown, bearer?: string): Promise<T> {
-        const headers: Record<string, string> = {
-            'X-Mesub-Key': options.publishableKey,
-            'Content-Type': 'application/json',
-        };
+    return async function request<T>(
+        method: 'GET' | 'POST',
+        path: string,
+        body: unknown,
+        bearer?: string,
+    ): Promise<T> {
+        const headers: Record<string, string> = { 'X-Mesub-Key': options.publishableKey };
+        // A GET carries no body, and a Content-Type would cost it a preflight for nothing.
+        if (method === 'POST') headers['Content-Type'] = 'application/json';
         if (bearer) headers.Authorization = `Bearer ${bearer}`;
 
         const controller = new AbortController();
@@ -74,9 +95,9 @@ function createPost(options: ApiClientOptions, prefix: string): Post {
             let response: Response;
             try {
                 response = await doFetch(`${base}${path}`, {
-                    method: 'POST',
+                    method,
                     headers,
-                    body: JSON.stringify(body),
+                    ...(method === 'POST' && { body: JSON.stringify(body) }),
                     // The API never sets cookies on these routes.
                     credentials: 'omit',
                     signal: controller.signal,

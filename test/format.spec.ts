@@ -1,0 +1,44 @@
+import { cadence, explorerUrl, formatAmount, shortAddress } from '../src/format';
+
+describe('formatAmount', () => {
+    it.each([
+        ['2000000', 6, '2'],
+        ['2500000', 6, '2.5'],
+        ['1', 6, '0.000001'],
+        ['0', 6, '0'],
+        ['18446744073709551615', 6, '18446744073709.551615'],
+        ['42', 0, '42'],
+    ])('%s at %i decimals is %s', (amount, decimals, expected) => {
+        expect(formatAmount(amount, decimals)).toBe(expected);
+    });
+});
+
+describe('cadence', () => {
+    it.each([
+        [24, 'every day'],
+        [168, 'every week'],
+        [720, 'every month'],
+        [8760, 'every year'],
+        [72, 'every 3 days'],
+        [1, 'every hour'],
+        [6, 'every 6 hours'],
+    ])('%i hours is %s', (hours, expected) => {
+        expect(cadence(hours)).toBe(expected);
+    });
+});
+
+describe('explorerUrl', () => {
+    it('names the cluster off mainnet', () => {
+        expect(explorerUrl('sig', 'solana:devnet')).toBe(
+            'https://explorer.solana.com/tx/sig?cluster=devnet',
+        );
+    });
+
+    it('names none on mainnet', () => {
+        expect(explorerUrl('sig', 'solana:mainnet')).toBe('https://explorer.solana.com/tx/sig');
+    });
+});
+
+it('shortens an address to its ends', () => {
+    expect(shortAddress('Ffy3EvkCabcdefgbEz')).toBe('Ffy3…gbEz');
+});

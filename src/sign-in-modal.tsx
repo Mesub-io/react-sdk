@@ -1,8 +1,16 @@
 import { useWallets, type UiWallet } from '@wallet-standard/react';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import {
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type FormEvent,
+    type ReactNode,
+} from 'react';
 import { useMesubInternal } from './context';
 import { MesubClientError } from './errors';
-import type { WalletProof } from './types';
+import type { MesubSession, WalletProof } from './types';
 import { canSignIn, connectAccount, signText } from './wallet';
 
 type Step =
@@ -23,18 +31,35 @@ export function SignInModal() {
 }
 
 function SignIn() {
-    const { api, completeSignIn, cancelSignIn } = useMesubInternal();
-    const dialog = useRef<HTMLDialogElement>(null);
+    const { completeSignIn, cancelSignIn } = useMesubInternal();
     const titleId = useId();
-    // Closed mid-request: a late answer must not sign anyone in.
-    const alive = useRef(true);
+    const [step, setStep] = useState<SignInStepName>('email');
 
-    const [step, setStep] = useState<Step>({ name: 'email' });
-    const [email, setEmail] = useState('');
-    const [code, setCode] = useState('');
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState('');
-    const [notice, setNotice] = useState('');
+    return (
+        <MesubDialog step={step} titleId={titleId} onClose={cancelSignIn}>
+            <SignInSteps titleId={titleId} onStep={setStep} onSignedIn={completeSignIn} />
+        </MesubDialog>
+    );
+}
+
+export type SignInStepName = Step['name'];
+
+/**
+ * The native dialog every Mesub window is: opened modal on mount, Escape and
+ * Close both call `onClose`, and each new step takes the focus.
+ */
+export function MesubDialog({
+    step,
+    titleId,
+    onClose,
+    children,
+}: {
+    step: string;
+    titleId: string;
+    onClose(): void;
+    children: ReactNode;
+}) {
+    const dialog = useRef<HTMLDialogElement>(null);
 
     // Layout effect: runs before the focus effect below, so showModal() does
     // not take the focus back from the first field.
@@ -44,21 +69,73 @@ function SignIn() {
             if (typeof node.showModal === 'function') node.showModal();
             else node.setAttribute('open', '');
         }
+    }, []);
+
+    // The first field of each step, or its first wallet: the Close button is last.
+    useEffect(() => {
+        dialog.current?.querySelector<HTMLElement>('input, button:not(:disabled)')?.focus();
+    }, [step]);
+
+    return (
+        <dialog
+            ref={dialog}
+            aria-labelledby={titleId}
+            aria-modal="true"
+            data-mesub-dialog=""
+            data-mesub-step={step}
+            onCancel={(event) => {
+                // Escape: the owner unmounts the dialog, not the browser.
+                event.preventDefault();
+                onClose();
+            }}
+            onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    onClose();
+                }
+            }}
+        >
+            {children}
+            <button type="button" onClick={onClose} data-mesub-close="">
+                Close
+            </button>
+        </dialog>
+    );
+}
+
+/** Email, code, wallet: the sign-in, inside whichever dialog hosts it. */
+export function SignInSteps({
+    titleId,
+    onStep,
+    onSignedIn,
+}: {
+    titleId: string;
+    onStep(step: SignInStepName): void;
+    // A session with a proved wallet and an access token.
+    onSignedIn(session: MesubSession): void;
+}) {
+    const { api } = useMesubInternal();
+    // Closed mid-request: a late answer must not sign anyone in.
+    const alive = useRef(true);
+    useEffect(() => {
         alive.current = true;
         return () => {
             alive.current = false;
         };
     }, []);
 
-    // The first field of each step, or its first wallet: the Close button is last.
-    useEffect(() => {
-        dialog.current?.querySelector<HTMLElement>('input, button')?.focus();
-    }, [step.name]);
+    const [step, setStep] = useState<Step>({ name: 'email' });
+    const [email, setEmail] = useState('');
+    const [code, setCode] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
 
     function go(next: Step) {
         setError('');
         setNotice('');
         setStep(next);
+        onStep(next.name);
     }
 
     // Runs one request with the busy flag and the step's error.
@@ -100,7 +177,7 @@ function SignIn() {
             const { user, refreshToken, accessToken } = session;
             // A returning subscriber: the wallet is already proved.
             if (accessToken && user.walletAddress) {
-                completeSignIn({ user, refreshToken, accessToken });
+                onSignedIn({ user, refreshToken, accessToken });
                 return;
             }
             go({ name: 'wallet', sessionToken: session.sessionToken, refreshToken });
@@ -108,24 +185,7 @@ function SignIn() {
     }
 
     return (
-        <dialog
-            ref={dialog}
-            aria-labelledby={titleId}
-            aria-modal="true"
-            data-mesub-dialog=""
-            data-mesub-step={step.name}
-            onCancel={(event) => {
-                // Escape: the provider unmounts the dialog, not the browser.
-                event.preventDefault();
-                cancelSignIn();
-            }}
-            onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                    event.preventDefault();
-                    cancelSignIn();
-                }
-            }}
-        >
+        <>
             {step.name === 'email' ? (
                 <form onSubmit={sendCode} data-mesub-form="email">
                     <h2 id={titleId}>Sign in</h2>
@@ -195,7 +255,7 @@ function SignIn() {
                     }}
                     onSigned={(proof) => {
                         if (!alive.current) return;
-                        completeSignIn({
+                        onSignedIn({
                             user: proof.user,
                             refreshToken: step.refreshToken,
                             accessToken: proof.accessToken,
@@ -208,11 +268,7 @@ function SignIn() {
                     }}
                 />
             ) : null}
-
-            <button type="button" onClick={cancelSignIn} data-mesub-close="">
-                Close
-            </button>
-        </dialog>
+        </>
     );
 }
 

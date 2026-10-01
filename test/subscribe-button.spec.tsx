@@ -104,10 +104,9 @@ async function completeModal() {
     fireEvent.change(within(dialog).getByLabelText('Email'), {
         target: { value: 'ada@example.com' },
     });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Send the code' }));
-    const code = await within(dialog).findByLabelText('Code');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send me a code' }));
+    const code = await within(dialog).findByLabelText('6-digit code');
     fireEvent.change(code, { target: { value: '123456' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 }
 
@@ -206,6 +205,27 @@ describe('subscribing', () => {
         expect(alert()).toBeNull();
     });
 
+    it('follows a subscription with its next charge and receipt', async () => {
+        const fake = registerWallet({ name: 'Phantom', connected: true });
+        await setup({
+            overrides: {
+                '/subscriptions/sub_1/confirm': () =>
+                    json(201, { subscription: { ...active, dueAt: '2026-10-04T12:00:00.000Z' } }),
+            },
+        });
+
+        click();
+        await waitFor(() => expect(stateOf()).toBe('subscribed'));
+
+        const receipt = document.querySelector('[data-mesub-receipt]')!;
+        expect(receipt.textContent).toMatch(/^Next charge .+ · Receipt$/);
+        const signature = getBase58Decoder().decode(fake.signature);
+        expect(receipt.querySelector('a')!.getAttribute('href')).toBe(
+            `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
+        );
+        expect(receipt.querySelector('a')!.getAttribute('target')).toBe('_blank');
+    });
+
     it('never disconnects the wallet', async () => {
         const fake = registerWallet({ name: 'Phantom', connected: true });
         await setup();
@@ -266,7 +286,9 @@ describe('subscribing', () => {
         await waitFor(() => expect(fake.signAndSendTransaction).toHaveBeenCalled());
         expect(stateOf()).toBe('signing');
         expect(button().textContent).toBe('Approve in your wallet');
-        expect(button()).toHaveProperty('disabled', true);
+        // aria-disabled, not disabled: the keyboard focus stays on the button.
+        expect(button()).toHaveProperty('disabled', false);
+        expect(button().getAttribute('aria-disabled')).toBe('true');
         expect(button().getAttribute('aria-busy')).toBe('true');
 
         await act(async () => sent.resolve([{ signature: fake.signature }]));

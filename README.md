@@ -30,6 +30,21 @@ export function App({ children }) {
 
 `apiUrl` points it at another API (defaults to `https://api.mesub.io`).
 
+Import the stylesheet once, anywhere in the app:
+
+```tsx
+import '@mesub/react/styles.css';
+```
+
+It styles the widget only, through its `data-mesub-*` attributes, and reads
+your `--mesub-*` custom properties without ever setting them: set
+`--mesub-accent`, `--mesub-bg`, `--mesub-text`, `--mesub-font` or
+`--mesub-radius` on `:root` to brand it. Dark mode is `data-mesub-theme="dark"`
+on the widget or an ancestor, `"auto"` follows the system, and
+`<MesubProvider theme="dark">` sets it on the widget for you. Under 480px the
+modal is a bottom sheet. Leave the stylesheet out to style the attributes
+yourself.
+
 Then read the session anywhere below it:
 
 ```tsx
@@ -60,23 +75,24 @@ component to place. One Mesub account per person, email first, then the
 wallet:
 
 1. The email: Mesub mails a 6-digit code.
-2. The code. A returning subscriber, whose account already has a wallet, is
-   signed in here and signs nothing.
+2. The code: six slots, sent on the sixth digit. A new code can be asked for
+   after 30 seconds. A returning subscriber, whose account already has a
+   wallet, is signed in here, sees "Signed in" for a moment, and signs nothing.
 3. The wallet: the modal lists the installed wallets that can sign a message on
    Solana ([Wallet Standard](https://github.com/wallet-standard/wallet-standard),
-   so Phantom, Solflare and the others), connects the one picked and asks it to
-   sign a message. It costs nothing and moves nothing.
+   so Phantom, Solflare and the others), marks the one used last on this
+   device, connects the one picked and asks it to sign a message. It costs
+   nothing and moves nothing. With no wallet installed, it links to Phantom and
+   Solflare.
 
 Each step shows the API's own error (wrong or expired code, origin not allowed,
-a wallet already on another account) or the wallet's refusal, and can go back.
-Close or Escape cancels. Nothing Solana to install on the merchant's side.
+a wallet already on another account) or the wallet's refusal. Close or Escape
+cancels. Nothing Solana to install on the merchant's side.
 
-The modal is plain HTML in a `<dialog>`, with no CSS and no class names. Its
-parts carry `data-mesub-*` attributes to style it by: `data-mesub-dialog` (with
-`data-mesub-step` set to `email`, `code` or `wallet`), `data-mesub-form`,
-`data-mesub-input`, `data-mesub-submit`, `data-mesub-resend`, `data-mesub-back`,
-`data-mesub-close`, `data-mesub-wallets`, `data-mesub-wallet` (the wallet's
-name), `data-mesub-no-wallet`, `data-mesub-error` and `data-mesub-notice`.
+The modal is a native `<dialog>` with no class names: every part carries a
+`data-mesub-*` attribute, and `data-mesub-step` on the dialog says where it is
+(`email`, `code`, `wallet` or `done`). The DOM follows the v5 design handoff
+exactly, which `test/markup.spec.tsx` checks against `test/fixtures/v5`.
 
 ## Session
 
@@ -139,16 +155,18 @@ Mesub checkout, one dialog from the click to the receipt:
 - `checkout={false}` skips the dialog: the click signs at once (signing in
   first through the modal above) and the button alone shows the progress.
 
-The checkout is unstyled like the modal: `data-mesub-step` is also `review`,
-`approve`, `confirming` or `subscribed`, with `data-mesub-merchant`,
-`data-mesub-price`, `data-mesub-summary` and its `data-mesub-row` rows,
-`data-mesub-terms`, `data-mesub-network`, `data-mesub-warning`,
-`data-mesub-explorer`, `data-mesub-cancel` and `data-mesub-done`.
+In the checkout, `data-mesub-step` is also `review`, `approve`, `confirming` or
+`subscribed`. Every error says whether money moved (`data-mesub-funds`, `safe`
+or `pending`). A confirmation that is slow to come asks Mesub again for the same
+transaction ("Check again"), and never pays twice. "See details on Mesub" opens
+`https://mesub.io/subscriptions` in a new tab.
 
 The button is a `<button>` with `data-mesub-subscribe` and `data-mesub-state`
 (`idle`, `signing`, `confirming`, `subscribed` or `error`), following the
-checkout. With `checkout={false}` it is followed in the error state by a
-`<span role="alert" data-mesub-error>`. `children` is the idle label, and every
+checkout. While busy it is `aria-disabled` rather than disabled, so the
+keyboard focus stays on it. Once subscribed it is followed by
+`<span data-mesub-receipt>` (the next charge and the receipt), and with
+`checkout={false}` by `<span role="alert" data-mesub-error>` in the error state. `children` is the idle label, and every
 other button prop (`className`, `id`, `onClick`, a `ref`) goes to the button.
 An `onClick` that calls `preventDefault()` stops the flow.
 

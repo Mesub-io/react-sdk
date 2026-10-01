@@ -13,7 +13,6 @@ import { registerWallet, unregisterWallets } from './wallets';
 
 const API = 'http://api.test/v1/client';
 const TX_BASE64 = btoa(String.fromCharCode(1, 2, 3));
-const NOW = new Date('2026-10-01T12:00:00.000Z');
 
 const plan: MesubPlan = {
     slug: 'pro',
@@ -115,9 +114,10 @@ async function signInSteps(dialog: HTMLElement) {
     fireEvent.change(within(dialog).getByLabelText('Email'), {
         target: { value: 'ada@example.com' },
     });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Send the code' }));
-    fireEvent.change(await within(dialog).findByLabelText('Code'), { target: { value: '123456' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send me a code' }));
+    fireEvent.change(await within(dialog).findByLabelText('6-digit code'), {
+        target: { value: '123456' },
+    });
 }
 
 const subscribeButton = () =>
@@ -142,15 +142,25 @@ function deferred<T>() {
     return { promise, resolve };
 }
 
-beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(NOW);
-});
+afterEach(() => unregisterWallets());
 
-afterEach(() => {
-    vi.useRealTimers();
-    unregisterWallets();
-});
+const heading = () => within(dialog()).getByRole('heading').textContent;
+const alertText = () => within(dialog()).queryByRole('alert')?.textContent ?? null;
+const funds = () =>
+    dialog().querySelector('[data-mesub-funds]')?.getAttribute('data-mesub-funds') ?? null;
+const hero = () =>
+    dialog().querySelector('[data-mesub-hero]')?.getAttribute('data-mesub-hero') ?? null;
+const rows = () =>
+    Array.from(dialog().querySelectorAll('[data-mesub-row]')).map((row) => [
+        row.querySelector('dt')!.textContent,
+        row.querySelector('dd')!.textContent,
+    ]);
+const date = (iso: string) =>
+    new Date(iso).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    });
 
 describe('the review', () => {
     it('opens on click and signs nothing yet', async () => {
@@ -176,42 +186,53 @@ describe('the review', () => {
         expect(init.headers).toEqual({ 'X-Mesub-Key': 'PUB_1' });
     });
 
-    it('shows the merchant, the price, the cadence and what happens next', async () => {
+    it('shows the merchant, the plan and its price, terms folded away', async () => {
         registerWallet({ name: 'Phantom', connected: true });
         await setup();
 
         await openReview();
 
-        const view = within(dialog());
-        expect(view.getByRole('heading').textContent).toBe('Pro');
-        expect(dialog().querySelector('[data-mesub-merchant]')!.textContent).toBe('Fraise');
-        expect(dialog().querySelector('[data-mesub-merchant] img')!.getAttribute('src')).toBe(
+        const merchant = dialog().querySelector('[data-mesub-merchant]')!;
+        expect(merchant.querySelector('strong')!.textContent).toBe('Fraise');
+        expect(merchant.querySelector('img')!.getAttribute('src')).toBe(
             'https://cdn.test/fraise.png',
         );
-        expect(dialog().querySelector('[data-mesub-price]')!.textContent).toBe(
-            '2 USDC every 3 days',
-        );
-        const row = (name: string) =>
-            dialog().querySelector(`[data-mesub-row="${name}"] dd`)!.textContent;
-        expect(row('due')).toBe('2 USDC');
-        expect(row('next')).toBe(
-            new Date('2026-10-04T12:00:00.000Z').toLocaleDateString(undefined, {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-            }),
-        );
-        expect(row('wallet')).toBe('Wa11…1111');
-        expect(view.getByText(/Cancel anytime/)).toBeTruthy();
-        expect(view.getByRole('button', { name: 'Subscribe and pay 2 USDC' })).toBeTruthy();
+        expect(heading()).toBe('Pro');
+        const price = dialog().querySelector('[data-mesub-price]')!;
+        expect(price.querySelector('strong')!.textContent).toBe('2 USDC');
+        expect(price.querySelector('span')!.textContent).toBe('every 3 days');
+        const terms = dialog().querySelector('details[data-mesub-terms]')!;
+        expect(terms.hasAttribute('open')).toBe(false);
+        expect(terms.querySelector('summary')!.textContent).toBe('Payment details and terms');
+        expect(rows()).toEqual([
+            ['Due today', '2 USDC'],
+            ['Next charge', date(new Date(Date.now() + 72 * 3_600_000).toISOString())],
+            ['Pays from', 'Wa11…1111'],
+            ['Network fee', '≈ 0.002 SOL'],
+        ]);
+        expect(
+            within(dialog()).getByRole('button', { name: 'Subscribe and pay 2 USDC' }),
+        ).toBeTruthy();
+        expect(within(dialog()).getByRole('button', { name: 'Cancel' })).toBeTruthy();
     });
 
-    it('marks the test network on devnet, and not on mainnet', async () => {
+    it('focuses the primary button', async () => {
         registerWallet({ name: 'Phantom', connected: true });
         await setup();
         await openReview();
 
-        expect(dialog().querySelector('[data-mesub-network="devnet"]')).not.toBeNull();
+        expect(document.activeElement).toBe(
+            within(dialog()).getByRole('button', { name: /Subscribe and pay/ }),
+        );
+    });
+
+    it('marks the test network on devnet', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await setup();
+        await openReview();
+
+        const badge = dialog().querySelector('[data-mesub-merchant] [data-mesub-network="devnet"]');
+        expect(badge!.textContent).toBe('Test network');
     });
 
     it('does not mark mainnet as a test network', async () => {
@@ -234,20 +255,21 @@ describe('the review', () => {
         ).toBeTruthy();
     });
 
-    it('refuses to start a plan that takes no new subscribers', async () => {
+    it('shows a plan that takes no new subscribers as closed', async () => {
         registerWallet({ name: 'Phantom', connected: true });
         await setup({
             overrides: { 'GET /plans/pro': () => json(200, { ...plan, available: false }) },
         });
-        await openReview();
 
-        expect(within(dialog()).getByRole('alert').textContent).toBe(
-            'This plan is not taking new subscribers right now.',
-        );
-        expect(within(dialog()).getByRole('button', { name: /Subscribe and pay/ })).toHaveProperty(
-            'disabled',
-            true,
-        );
+        fireEvent.click(subscribeButton());
+        await waitFor(() => expect(heading()).toBe('Plan closed'));
+
+        expect(step()).toBe('review');
+        expect(hero()).toBe('error');
+        expect(alertText()).toBe('This plan is not taking new subscribers right now.');
+        expect(funds()).toBe('safe');
+        fireEvent.click(dialog().querySelector<HTMLElement>('[data-mesub-done]')!);
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
     it('says so when the plan cannot be read', async () => {
@@ -258,9 +280,28 @@ describe('the review', () => {
 
         fireEvent.click(subscribeButton());
 
-        expect(
-            (await within(await screen.findByRole('dialog')).findByRole('alert')).textContent,
-        ).toBe('No plan under slug pro');
+        await waitFor(() => expect(alertText()).toBe('No plan under slug pro'));
+        expect(heading()).toBe('Plan not found');
+    });
+
+    it('offers a retry when Mesub did not answer for the plan', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        let first = true;
+        await setup({
+            overrides: {
+                'GET /plans/pro': () => {
+                    if (!first) return json(200, plan);
+                    first = false;
+                    throw new TypeError('Failed to fetch');
+                },
+            },
+        });
+
+        fireEvent.click(subscribeButton());
+        await waitFor(() => expect(heading()).toBe('Mesub did not answer'));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Try again' }));
+
+        await waitFor(() => expect(heading()).toBe('Pro'));
     });
 
     it('closes on Cancel, leaving the button idle', async () => {
@@ -286,13 +327,15 @@ describe('the review', () => {
 });
 
 describe('signed out', () => {
-    it('signs in inside the same window, then shows the review', async () => {
+    it('signs in inside the same window, for the merchant, then shows the review', async () => {
         registerWallet({ name: 'Phantom', connected: true });
         const { fetch } = await setup({ signedIn: false });
 
         fireEvent.click(subscribeButton());
         const window = await screen.findByRole('dialog');
         expect(window.getAttribute('data-mesub-step')).toBe('email');
+        await waitFor(() => expect(heading()).toBe('Sign in to subscribe'));
+        expect(window.querySelector('[data-mesub-merchant] strong')!.textContent).toBe('Fraise');
 
         await signInSteps(window);
 
@@ -318,21 +361,35 @@ describe('paying', () => {
         pay();
         await waitFor(() => expect(fake.signAndSendTransaction).toHaveBeenCalled());
         expect(step()).toBe('approve');
-        expect(within(dialog()).getByRole('heading').textContent).toBe('Approve in Phantom');
+        expect(heading()).toBe('Approve in Phantom');
+        expect(hero()).toBe('wait');
+        expect(
+            within(dialog()).getByText('One transaction: 2 USDC now, then 2 USDC every 3 days.'),
+        ).toBeTruthy();
         expect(subscribeButton().getAttribute('data-mesub-state')).toBe('signing');
 
         await act(async () => sent.resolve([{ signature: fake.signature }]));
         await waitFor(() => expect(step()).toBe('confirming'));
+        expect(heading()).toBe('Confirming on Solana');
         const signature = getBase58Decoder().decode(fake.signature);
+        const explorer = `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
         expect(dialog().querySelector('[data-mesub-explorer]')!.getAttribute('href')).toBe(
-            `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
+            explorer,
         );
 
         await act(async () => answer.resolve(json(201, { subscription: active })));
         await waitFor(() => expect(step()).toBe('subscribed'));
-        expect(within(dialog()).getByRole('heading').textContent).toBe('You are subscribed');
-        expect(dialog().querySelector('[data-mesub-row="paid"] dd')!.textContent).toBe('2 USDC');
-        expect(dialog().querySelector('[data-mesub-row="receipt"] a')).not.toBeNull();
+        expect(heading()).toBe('You are subscribed');
+        expect(hero()).toBe('check');
+        expect(within(dialog()).getByText('Pro, 2 USDC every 3 days')).toBeTruthy();
+        expect(rows()).toEqual([
+            ['Paid today', '2 USDC'],
+            ['Next charge', date(active.dueAt!)],
+            ['Receipt', 'View'],
+        ]);
+        expect(
+            dialog().querySelector('[data-mesub-row] a[data-mesub-explorer]')!.getAttribute('href'),
+        ).toBe(explorer);
         expect(onSubscribed).toHaveBeenCalledWith(active);
         expect(calls(fetch, 'POST /subscriptions')).toHaveLength(1);
 
@@ -340,6 +397,24 @@ describe('paying', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(subscribeButton().textContent).toBe('Subscribed');
         expect(subscribeButton()).toHaveProperty('disabled', true);
+        expect(document.querySelector('[data-mesub-receipt] a')!.getAttribute('href')).toBe(
+            explorer,
+        );
+    });
+
+    it('links to the subscriber page on Mesub, in a new tab', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await setup();
+        await openReview();
+
+        pay();
+        await waitFor(() => expect(step()).toBe('subscribed'));
+
+        const manage = dialog().querySelector('a[data-mesub-manage]')!;
+        expect(manage.textContent).toBe('See details on Mesub');
+        expect(manage.getAttribute('href')).toBe('https://mesub.io/subscriptions');
+        expect(manage.getAttribute('target')).toBe('_blank');
+        expect(manage.querySelector('svg')).not.toBeNull();
     });
 
     it('never disconnects the wallet', async () => {
@@ -355,17 +430,21 @@ describe('paying', () => {
 });
 
 describe('errors', () => {
-    it('keeps a wallet refusal on the approve step, says nothing was charged, and retries', async () => {
+    it('says a closed wallet charged nothing, and retries', async () => {
         const fake = registerWallet({ name: 'Phantom', connected: true });
         fake.signAndSendTransaction.mockRejectedValueOnce(new Error('User rejected the request.'));
         const { onSubscribed } = await setup();
         await openReview();
 
         pay();
-        const alert = await within(dialog()).findByRole('alert');
+
+        await waitFor(() => expect(heading()).toBe('Not approved'));
         expect(step()).toBe('approve');
-        expect(alert.textContent).toBe(
-            'Phantom did not send the transaction. It said: User rejected the request. Nothing was charged.',
+        expect(hero()).toBe('error');
+        expect(alertText()).toBe('You closed Phantom before approving.');
+        expect(funds()).toBe('safe');
+        expect(dialog().querySelector('[data-mesub-funds]')!.textContent).toBe(
+            'Nothing was charged.',
         );
 
         fireEvent.click(within(dialog()).getByRole('button', { name: 'Try again' }));
@@ -380,35 +459,14 @@ describe('errors', () => {
         await openReview();
 
         pay();
-        await within(dialog()).findByRole('alert');
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'Back' }));
+        await waitFor(() => expect(heading()).toBe('Not approved'));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Back to review' }));
 
         expect(step()).toBe('review');
-        expect(within(dialog()).queryByRole('alert')).toBeNull();
+        expect(heading()).toBe('Pro');
     });
 
-    it('shows a refusal before any prompt on the review', async () => {
-        const fake = registerWallet({ name: 'Phantom', connected: true });
-        await setup({
-            overrides: {
-                'POST /subscriptions': () =>
-                    json(409, { message: 'You are already subscribed to this plan.' }),
-            },
-        });
-        await openReview();
-
-        pay();
-
-        await waitFor(() =>
-            expect(within(dialog()).getByRole('alert').textContent).toBe(
-                'You are already subscribed to this plan. Nothing was charged.',
-            ),
-        );
-        expect(step()).toBe('review');
-        expect(fake.signAndSendTransaction).not.toHaveBeenCalled();
-    });
-
-    it('refuses a wallet on another account, on the review', async () => {
+    it('names the account to switch to', async () => {
         registerWallet({
             name: 'Phantom',
             address: 'Other11111111111111111111111111111111111111',
@@ -419,15 +477,102 @@ describe('errors', () => {
 
         pay();
 
-        await waitFor(() =>
-            expect(within(dialog()).getByRole('alert').textContent).toMatch(
-                /^Phantom is on Othe…1111, but you signed in with Wa11…1111\..* Nothing was charged\.$/,
-            ),
+        await waitFor(() => expect(heading()).toBe('Wrong account in Phantom'));
+        expect(step()).toBe('approve');
+        expect(alertText()).toBe(
+            'Phantom is on Othe…1111, you signed in with Wa11…1111. Switch account, then try again.',
         );
-        expect(step()).toBe('review');
+        expect(
+            Array.from(dialog().querySelectorAll('[data-mesub-error] code')).map(
+                (c) => c.textContent,
+            ),
+        ).toEqual(['Othe…1111', 'Wa11…1111']);
+        expect(funds()).toBe('safe');
     });
 
-    it('shows the reason when the transaction did not settle, without claiming nothing moved', async () => {
+    it('says the payment did not go through when the wallet holds too little', async () => {
+        const fake = registerWallet({ name: 'Phantom', connected: true });
+        await setup({
+            overrides: {
+                'POST /subscriptions/sub_1/transaction': () =>
+                    json(409, {
+                        message:
+                            'You need 2 USDC to pay the first period, and this wallet holds 0 USDC.',
+                    }),
+            },
+        });
+        await openReview();
+
+        pay();
+
+        await waitFor(() => expect(heading()).toBe('Payment did not go through'));
+        expect(step()).toBe('approve');
+        expect(alertText()).toBe(
+            'You need 2 USDC to pay the first period, and this wallet holds 0 USDC.',
+        );
+        expect(funds()).toBe('safe');
+        expect(fake.signAndSendTransaction).not.toHaveBeenCalled();
+    });
+
+    it('shows Already subscribed with nothing but a Close', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await setup({
+            overrides: {
+                'POST /subscriptions': () =>
+                    json(409, { message: 'You are already subscribed to this plan.' }),
+            },
+        });
+        await openReview();
+
+        pay();
+
+        await waitFor(() => expect(heading()).toBe('Already subscribed'));
+        expect(step()).toBe('review');
+        expect(alertText()).toBe('You are already subscribed to this plan.');
+        expect(funds()).toBeNull();
+        expect(dialog().querySelector('[data-mesub-done]')!.textContent).toBe('Close');
+        expect(dialog().querySelector('[data-mesub-submit]')).toBeNull();
+    });
+
+    it('shows a plan closed since the review', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await setup({
+            overrides: {
+                'POST /subscriptions': () =>
+                    json(409, {
+                        message:
+                            'This plan is not taking new subscribers right now. Its merchant has been told.',
+                    }),
+            },
+        });
+        await openReview();
+
+        pay();
+
+        await waitFor(() => expect(heading()).toBe('Plan closed'));
+        expect(funds()).toBe('safe');
+    });
+
+    it('says Mesub did not answer when it could not be reached before sending', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await setup({
+            overrides: {
+                'POST /subscriptions': () => {
+                    throw new TypeError('Failed to fetch');
+                },
+            },
+        });
+        await openReview();
+
+        pay();
+
+        await waitFor(() => expect(heading()).toBe('Mesub did not answer'));
+        expect(step()).toBe('review');
+        expect(alertText()).toBe('No reply within 15 seconds.');
+        expect(funds()).toBe('safe');
+    });
+
+    it('says nothing went through when the transaction did not settle', async () => {
         registerWallet({ name: 'Phantom', connected: true });
         await setup({
             overrides: {
@@ -442,19 +587,20 @@ describe('errors', () => {
 
         pay();
 
-        await waitFor(() => expect(within(dialog()).queryByRole('alert')).not.toBeNull());
+        await waitFor(() => expect(heading()).toBe('Payment did not go through'));
         expect(step()).toBe('confirming');
-        expect(within(dialog()).getByRole('alert').textContent).toBe(
-            'The transaction expired before it landed.',
-        );
+        expect(alertText()).toBe('The transaction expired before it landed.');
+        expect(funds()).toBe('safe');
     });
 
-    it('tells the subscriber to wait when Mesub cannot be reached after sending', async () => {
-        registerWallet({ name: 'Phantom', connected: true });
-        await setup({
+    it('says the payment may be pending when Mesub cannot be reached after sending, and checks again', async () => {
+        const fake = registerWallet({ name: 'Phantom', connected: true });
+        let reachable = false;
+        const { fetch, onSubscribed } = await setup({
             overrides: {
                 'POST /subscriptions/sub_1/confirm': () => {
-                    throw new TypeError('Failed to fetch');
+                    if (!reachable) throw new TypeError('Failed to fetch');
+                    return json(201, { subscription: active });
                 },
             },
         });
@@ -462,12 +608,30 @@ describe('errors', () => {
 
         pay();
 
-        await waitFor(() =>
-            expect(within(dialog()).getByRole('alert').textContent).toMatch(
-                /^Solana did not confirm in time\./,
-            ),
-        );
+        await waitFor(() => expect(heading()).toBe('Still confirming'));
         expect(step()).toBe('confirming');
+        expect(hero()).toBe('pending');
+        expect(alertText()).toMatch(/^If Phantom shows the transaction as sent, wait a minute/);
+        expect(funds()).toBe('pending');
+        expect(dialog().querySelector('[data-mesub-funds]')!.textContent).toBe(
+            'Payment may be pending.',
+        );
+        expect(dialog().querySelector('[data-mesub-explorer]')).not.toBeNull();
+
+        reachable = true;
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Check again' }));
+
+        await waitFor(() => expect(step()).toBe('subscribed'));
+        // Re-polled, never paid twice.
+        expect(fake.signAndSendTransaction).toHaveBeenCalledOnce();
+        expect(calls(fetch, 'POST /subscriptions')).toHaveLength(1);
+        const signature = getBase58Decoder().decode(fake.signature);
+        expect(
+            calls(fetch, 'POST /subscriptions/sub_1/confirm').map(([, init]) =>
+                JSON.parse(init.body as string),
+            ),
+        ).toEqual([{ signature }, { signature }]);
+        expect(onSubscribed).toHaveBeenCalledOnce();
     });
 });
 

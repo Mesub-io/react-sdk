@@ -7,7 +7,16 @@ export default defineConfig({
     root: fileURLToPath(new URL('.', import.meta.url)),
     plugins: [react()],
     resolve: {
-        alias: { '@mesub/react': fileURLToPath(new URL('../src/index.ts', import.meta.url)) },
+        alias: [
+            {
+                find: /^@mesub\/react$/,
+                replacement: fileURLToPath(new URL('../src/index.ts', import.meta.url)),
+            },
+            {
+                find: '@mesub/react/styles.css',
+                replacement: fileURLToPath(new URL('../styles.css', import.meta.url)),
+            },
+        ],
     },
     server: { port: 5173, strictPort: true },
 });

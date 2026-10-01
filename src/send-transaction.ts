@@ -20,8 +20,21 @@ interface SignAndSendFeature {
 /** A Wallet Standard chain, such as `solana:mainnet` or `solana:devnet`. */
 export type SolanaChain = `solana:${string}`;
 
-/** What the subscriber can fix in their wallet: shown as is. */
-export class WalletError extends Error {}
+export type WalletErrorKind =
+    'none' | 'not-connected' | 'wrong-account' | 'rejected' | 'no-signature';
+
+/** What the subscriber can fix in their wallet: shown as is. `kind` picks the screen. */
+export class WalletError extends Error {
+    constructor(
+        message: string,
+        readonly kind: WalletErrorKind,
+        readonly wallet: string | null = null,
+        // wrong-account: the account the wallet is on, and the one the session proved.
+        readonly accounts: { shared: string; expected: string } | null = null,
+    ) {
+        super(message);
+    }
+}
 
 const isSolana = (chain: string) => chain.startsWith('solana:');
 const short = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)}`;
@@ -51,6 +64,9 @@ async function accountsOf(wallet: UiWallet, silent: boolean): Promise<readonly W
 function mismatch(wallet: UiWallet, shared: WalletAccount, address: string): WalletError {
     return new WalletError(
         `${wallet.name} is on ${short(shared.address)}, but you signed in with ${short(address)}. Switch to that account in ${wallet.name}, then try again.`,
+        'wrong-account',
+        wallet.name,
+        { shared: shared.address, expected: address },
     );
 }
 
@@ -65,7 +81,7 @@ export async function findSigner(wallets: readonly UiWallet[], address: string):
         .filter(canSubscribe)
         .sort((a, b) => Number(shows(b)) - Number(shows(a)));
     if (capable.length === 0) {
-        throw new WalletError('No wallet in this browser can send a Solana transaction.');
+        throw new WalletError('No wallet in this browser can send a Solana transaction.', 'none');
     }
 
     let other: { wallet: UiWallet; account: WalletAccount } | null = null;
@@ -83,7 +99,7 @@ export async function findSigner(wallets: readonly UiWallet[], address: string):
         try {
             accounts = await accountsOf(wallet, false);
         } catch {
-            throw new WalletError(`${wallet.name} did not connect.`);
+            throw new WalletError(`${wallet.name} did not connect.`, 'not-connected', wallet.name);
         }
         const account = accounts.find((entry) => entry.address === address);
         if (account) return { wallet, account };
@@ -93,6 +109,7 @@ export async function findSigner(wallets: readonly UiWallet[], address: string):
     if (other) throw mismatch(other.wallet, other.account, address);
     throw new WalletError(
         `Connect the wallet holding ${short(address)} to this site, then try again.`,
+        'not-connected',
     );
 }
 
@@ -109,8 +126,14 @@ export async function signAndSend(
         [output] = await feature.signAndSendTransaction({ account, chain, transaction: bytes });
     } catch (refusal) {
         const detail = refusal instanceof Error ? refusal.message : String(refusal);
-        throw new WalletError(`${wallet.name} did not send the transaction. It said: ${detail}`);
+        throw new WalletError(
+            `${wallet.name} did not send the transaction. It said: ${detail}`,
+            'rejected',
+            wallet.name,
+        );
     }
-    if (!output) throw new WalletError(`${wallet.name} returned no signature.`);
+    if (!output) {
+        throw new WalletError(`${wallet.name} returned no signature.`, 'no-signature', wallet.name);
+    }
     return getBase58Decoder().decode(output.signature);
 }

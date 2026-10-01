@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createApiClient, type FetchLike } from './api';
 import { SessionKeeper } from './keeper';
-import { MesubContext, MesubInternalContext, type MesubInternal, type MesubState } from './context';
+import {
+    MesubContext,
+    MesubInternalContext,
+    type MesubInternal,
+    type MesubState,
+    type MesubTheme,
+} from './context';
 import { MesubSignInCancelledError } from './errors';
 import { SignInModal } from './sign-in-modal';
 import type { MesubSession, MesubUser } from './types';
@@ -12,6 +18,8 @@ export interface MesubProviderProps {
     apiUrl?: string | undefined;
     // For tests. Defaults to globalThis.fetch.
     fetch?: FetchLike | undefined;
+    // data-mesub-theme on the widget. Leave it out to inherit it from an ancestor.
+    theme?: MesubTheme | undefined;
     children?: ReactNode;
 }
 
@@ -26,7 +34,13 @@ function isSignedIn(session: MesubSession | null): session is MesubSession {
 }
 
 /** Keeps the session alive, exposes it through `useMesub()`, and renders the sign-in. */
-export function MesubProvider({ publishableKey, apiUrl, fetch, children }: MesubProviderProps) {
+export function MesubProvider({
+    publishableKey,
+    apiUrl,
+    fetch,
+    theme,
+    children,
+}: MesubProviderProps) {
     const api = useMemo(
         () => createApiClient({ publishableKey, apiUrl, fetch }),
         [publishableKey, apiUrl, fetch],
@@ -110,8 +124,16 @@ export function MesubProvider({ publishableKey, apiUrl, fetch, children }: Mesub
     );
 
     const internal = useMemo<MesubInternal>(
-        () => ({ api, session, signingIn, completeSignIn, cancelSignIn, setSession }),
-        [api, session, signingIn, completeSignIn, cancelSignIn, setSession],
+        () => ({
+            api,
+            session,
+            signingIn,
+            completeSignIn,
+            cancelSignIn,
+            setSession,
+            theme,
+        }),
+        [api, session, signingIn, completeSignIn, cancelSignIn, setSession, theme],
     );
 
     return (

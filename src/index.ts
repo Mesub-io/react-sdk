@@ -3,7 +3,7 @@
  * Subscribe button.
  */
 export { MesubProvider, type MesubProviderProps } from './provider';
-export { useMesub, type MesubState } from './context';
+export { useMesub, type MesubState, type MesubTheme } from './context';
 export { MesubClientError, MesubSignInCancelledError } from './errors';
 export type { MesubUser } from './types';
 export {

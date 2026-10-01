@@ -2,12 +2,16 @@ import {
     COOKIE_NAME,
     TokenStore,
     expiresAt,
+    hasWallet,
     lockName,
+    sessionWallet,
     storageKey,
     tokenCookie,
+    tokenWallet,
     withLock,
 } from '../src/session';
-import { jwt, readCookie } from './tokens';
+import { session, user } from './helpers';
+import { jwt, readCookie, walletToken } from './tokens';
 
 const NOW = Date.UTC(2026, 8, 30, 10, 0, 0);
 const https = { protocol: 'https:', hostname: 'shop.example' };
@@ -31,6 +35,53 @@ describe('expiresAt', () => {
         ['an exp that is not a number', `h.${Buffer.from('{"exp":"1"}').toString('base64url')}.s`],
     ])('is null for %s', (_, token) => {
         expect(expiresAt(token)).toBeNull();
+    });
+});
+
+describe('tokenWallet', () => {
+    it('reads the wallet claim', () => {
+        expect(tokenWallet(walletToken('W2'))).toBe('W2');
+    });
+
+    it.each([
+        ['null', null],
+        ['not a JWT', 'at_1'],
+        ['no wallet claim', jwt(NOW)],
+        ['a wallet that is not a string', jwt(NOW, 'usr_1', { wallet: 7 })],
+        ['a payload that is not an object', `h.${Buffer.from('"W2"').toString('base64url')}.s`],
+    ])('is null for %s', (_, token) => {
+        expect(tokenWallet(token)).toBeNull();
+    });
+});
+
+describe('hasWallet', () => {
+    const unset = { ...user, walletAddress: null };
+
+    it("is true on a token carrying a wallet, even when the account's own is unset", () => {
+        expect(hasWallet(unset, walletToken('W2'))).toBe(true);
+    });
+
+    it("falls back to the account's wallet on a token without the claim", () => {
+        expect(hasWallet(user, jwt(NOW))).toBe(true);
+        expect(hasWallet(unset, jwt(NOW))).toBe(false);
+    });
+
+    it('is false without an access token', () => {
+        expect(hasWallet(user, null)).toBe(false);
+    });
+});
+
+describe('sessionWallet', () => {
+    it("is the token's wallet, even when the account's own is another", () => {
+        expect(sessionWallet({ ...session, accessToken: walletToken('W2') })).toBe('W2');
+    });
+
+    it("falls back to the account's wallet when the token has none", () => {
+        expect(sessionWallet(session)).toBe(user.walletAddress);
+    });
+
+    it('is null when signed out', () => {
+        expect(sessionWallet(null)).toBeNull();
     });
 });
 

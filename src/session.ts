@@ -1,4 +1,5 @@
 // Browser plumbing for the session: storage, the token cookie, the JWT expiry, the tab lock.
+import type { MesubSession, MesubUser } from './types';
 
 // Refresh this long before the access token expires.
 export const REFRESH_MARGIN_MS = 60_000;
@@ -14,23 +15,39 @@ export function storageKey(publishableKey: string): string {
     return `mesub:session:${publishableKey}`;
 }
 
+// The paying wallet, written on a switch so other tabs pick it up.
+export function walletKey(publishableKey: string): string {
+    return `mesub:wallet:${publishableKey}`;
+}
+
 export function lockName(publishableKey: string): string {
     return `mesub:refresh:${publishableKey}`;
 }
 
-/** The `exp` claim of a JWT, in milliseconds, or null when it cannot be read. */
-export function expiresAt(token: string): number | null {
+function claims(token: string): Record<string, unknown> | null {
     const payload = token.split('.')[1];
     if (!payload) return null;
     try {
         const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-        const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))) as {
-            exp?: unknown;
-        };
-        return typeof claims.exp === 'number' ? claims.exp * 1000 : null;
+        const parsed: unknown = JSON.parse(
+            atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')),
+        );
+        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
     } catch {
         return null;
     }
+}
+
+/** The `exp` claim of a JWT, in milliseconds, or null when it cannot be read. */
+export function expiresAt(token: string): number | null {
+    const exp = claims(token)?.exp;
+    return typeof exp === 'number' ? exp * 1000 : null;
+}
+
+/** The wallet the access token pays from on this project: its `wallet` claim. */
+export function tokenWallet(token: string | null): string | null {
+    const wallet = token ? claims(token)?.wallet : null;
+    return typeof wallet === 'string' ? wallet : null;
 }
 
 /** The `document.cookie` line that writes the access token, or deletes it when null. */
@@ -118,4 +135,15 @@ export function withLock<T>(name: string, task: () => Promise<T>): Promise<T> {
     const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
     if (typeof locks?.request !== 'function') return task();
     return locks.request(name, task);
+}
+
+/** Signed in with a wallet: the token's claim, else the account's own for a token without it. */
+export function hasWallet(user: MesubUser, accessToken: string | null): accessToken is string {
+    return accessToken !== null && (tokenWallet(accessToken) ?? user.walletAddress) !== null;
+}
+
+/** Who pays: the token's wallet, else the account's own (a token without the claim). */
+export function sessionWallet(session: MesubSession | null): string | null {
+    if (!session) return null;
+    return tokenWallet(session.accessToken) ?? session.user.walletAddress;
 }

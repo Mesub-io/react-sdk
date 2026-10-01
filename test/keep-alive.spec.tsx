@@ -3,9 +3,11 @@ import { StrictMode, type ReactNode } from 'react';
 import { MesubClientError, MesubProvider, useMesub } from '../src';
 import { useMesubInternal } from '../src/context';
 import { user } from './helpers';
-import { authServer, installLocks, jwt, readCookie, removeLocks } from './tokens';
+import { authServer, installLocks, jwt, readCookie, removeLocks, walletToken } from './tokens';
 
 const KEY = 'mesub:session:PUB_1';
+const WALLET_KEY = 'mesub:wallet:PUB_1';
+const W2 = 'Ledger22222222222222222222222222222222222222';
 const NOW = Date.UTC(2026, 8, 30, 10, 0, 0);
 const HOUR = 3600_000;
 
@@ -204,6 +206,20 @@ describe('restoring on mount', () => {
         expect(server.fetch).not.toHaveBeenCalled();
         expect(tab.result.current.state.user).toBeNull();
         expect(localStorage.getItem(KEY)).toBe('rt_1');
+    });
+
+    it("signs in on the token's wallet when the account has none of its own", async () => {
+        const server = authServer({ user: { ...user, walletAddress: null } });
+        const issue = server.state.issue.bind(server.state);
+        server.state.issue = () => ({ ...issue(), accessToken: walletToken(W2) });
+        seed(server);
+        const tab = mount(server);
+        await settle();
+
+        expect(tab.result.current.state.user?.walletAddress).toBeNull();
+        expect(tab.result.current.state.wallet).toBe(W2);
+        expect(localStorage.getItem(KEY)).toBe('rt_2');
+        expect(server.state.loggedOut).toEqual([]);
     });
 
     it('stays signed out, and ends the token, when the account has no wallet', async () => {
@@ -691,6 +707,77 @@ describe('several tabs', () => {
 
         expect(b.result.current.state.user).toBeNull();
         expect(server.state.replays).toBe(0);
+    });
+});
+
+describe('a wallet switched in another tab', () => {
+    function switchIn(tab: Tab) {
+        return act(() =>
+            tab.result.current.internal.adoptWallet({ user, accessToken: walletToken(W2) }),
+        );
+    }
+
+    it('makes the other tabs refresh onto it, spending each token once', async () => {
+        installLocks();
+        const server = authServer();
+        seed(server);
+        const a = mount(server);
+        const b = mount(server);
+        await settle();
+        const before = server.state.refreshed.length;
+
+        await switchIn(a);
+        expect(localStorage.getItem(WALLET_KEY)).toBe(W2);
+        // What the API now answers on a refresh: the project's chosen wallet.
+        server.state.user = { ...user, walletAddress: W2 };
+        storageEvent(WALLET_KEY);
+        await settle();
+
+        // a already holds it: only b refreshes. a kept the token b rotated, missed event or not.
+        expect(server.state.refreshed).toHaveLength(before + 1);
+        expect(a.result.current.state.wallet).toBe(W2);
+        expect(b.result.current.state.wallet).toBe(W2);
+        expect(b.result.current.internal.session!.refreshToken).toBe(localStorage.getItem(KEY));
+        expect(server.state.replays).toBe(0);
+    });
+
+    it('does not refresh when this tab already pays from that wallet', async () => {
+        const server = authServer();
+        const tab = mount(server);
+        await settle();
+        signIn(tab, server);
+        await switchIn(tab);
+        const before = server.state.refreshed.length;
+
+        storageEvent(WALLET_KEY);
+        await settle();
+
+        expect(server.state.refreshed).toHaveLength(before);
+    });
+
+    it('does nothing in a signed-out tab', async () => {
+        const server = authServer();
+        const tab = mount(server);
+        await settle();
+        localStorage.setItem(WALLET_KEY, W2);
+
+        storageEvent(WALLET_KEY);
+        await settle();
+
+        expect(server.fetch).not.toHaveBeenCalled();
+        expect(tab.result.current.state.user).toBeNull();
+    });
+
+    it('is forgotten on logout', async () => {
+        const server = authServer();
+        const tab = mount(server);
+        await settle();
+        signIn(tab, server);
+        await switchIn(tab);
+
+        await act(() => tab.result.current.state.logout());
+
+        expect(localStorage.getItem(WALLET_KEY)).toBeNull();
     });
 });
 

@@ -8,9 +8,11 @@ import {
     type MesubState,
     type MesubTheme,
 } from './context';
-import { MesubSignInCancelledError } from './errors';
+import { MesubClientError, MesubSignInCancelledError } from './errors';
+import { hasWallet, sessionWallet } from './session';
 import { SignInModal } from './sign-in-modal';
-import type { MesubSession, MesubUser } from './types';
+import type { MesubSession, MesubUser, WalletProof } from './types';
+import type { MesubWallet } from './wallets-api';
 
 export interface MesubProviderProps {
     publishableKey: string;
@@ -30,7 +32,7 @@ interface PendingSignIn {
 }
 
 function isSignedIn(session: MesubSession | null): session is MesubSession {
-    return session !== null && session.accessToken !== null && session.user.walletAddress !== null;
+    return session !== null && hasWallet(session.user, session.accessToken);
 }
 
 /** Keeps the session alive, exposes it through `useMesub()`, and renders the sign-in. */
@@ -50,6 +52,11 @@ export function MesubProvider({
     const [signingIn, setSigningIn] = useState(false);
     const [ready, setReady] = useState(false);
     const pendingRef = useRef<PendingSignIn | null>(null);
+    // Kept with its account: another sign-in never shows the last one's wallets.
+    const [walletList, setWalletList] = useState<{ userId: string; wallets: MesubWallet[] } | null>(
+        null,
+    );
+    const loadingWallets = useRef<Promise<MesubWallet[]> | null>(null);
     // Holds the session outside React, so two calls in one tick see each other.
     const keeper = useMemo(
         () => new SessionKeeper(api, publishableKey, setSessionState),
@@ -111,16 +118,71 @@ export function MesubProvider({
 
     const getAccessToken = useCallback(() => keeper.getAccessToken(), [keeper]);
 
+    const signedInToken = useCallback(async (): Promise<string> => {
+        const token = await keeper.getAccessToken();
+        if (!token) throw new MesubClientError('You are signed out. Sign in again.', 401);
+        return token;
+    }, [keeper]);
+
+    const loadWallets = useCallback((): Promise<MesubWallet[]> => {
+        loadingWallets.current ??= (async () => {
+            const token = await signedInToken();
+            const userId = keeper.session?.user.id;
+            const wallets = await api.wallets.list(token);
+            if (userId && keeper.session?.user.id === userId) setWalletList({ userId, wallets });
+            return wallets;
+        })().finally(() => {
+            loadingWallets.current = null;
+        });
+        return loadingWallets.current;
+    }, [api, keeper, signedInToken]);
+
+    const selectWallet = useCallback(
+        async (address: string): Promise<void> => {
+            const token = await signedInToken();
+            const proof = await api.wallets.select(token, address);
+            const next = await keeper.switchAccess(proof.user, proof.accessToken);
+            if (!next) return;
+            setWalletList((list) =>
+                list && list.userId === next.user.id
+                    ? {
+                          ...list,
+                          wallets: list.wallets.map((wallet) => ({
+                              ...wallet,
+                              selected: wallet.address === address,
+                          })),
+                      }
+                    : list,
+            );
+        },
+        [api, keeper, signedInToken],
+    );
+
+    const adoptWallet = useCallback(
+        async (proof: WalletProof): Promise<void> => {
+            if (!(await keeper.switchAccess(proof.user, proof.accessToken))) return;
+            // Its label and plans come from the API: list them again, after any older read.
+            const older = loadingWallets.current?.catch(() => undefined);
+            void Promise.resolve(older)
+                .then(() => loadWallets())
+                .catch(() => undefined);
+        },
+        [keeper, loadWallets],
+    );
+
     const state = useMemo<MesubState>(
         () => ({
             ready,
             user: session?.user ?? null,
-            wallet: session?.user.walletAddress ?? null,
+            wallet: sessionWallet(session),
+            wallets: session && walletList?.userId === session.user.id ? walletList.wallets : null,
             login,
             logout,
             getAccessToken,
+            loadWallets,
+            selectWallet,
         }),
-        [ready, session, login, logout, getAccessToken],
+        [ready, session, walletList, login, logout, getAccessToken, loadWallets, selectWallet],
     );
 
     const internal = useMemo<MesubInternal>(
@@ -131,9 +193,10 @@ export function MesubProvider({
             completeSignIn,
             cancelSignIn,
             setSession,
+            adoptWallet,
             theme,
         }),
-        [api, session, signingIn, completeSignIn, cancelSignIn, setSession, theme],
+        [api, session, signingIn, completeSignIn, cancelSignIn, setSession, adoptWallet, theme],
     );
 
     return (

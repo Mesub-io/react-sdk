@@ -1,16 +1,23 @@
 import { createContext, useContext } from 'react';
 import type { MesubApi } from './api';
-import type { MesubSession, MesubUser } from './types';
+import type { MesubSession, MesubUser, WalletProof } from './types';
+import type { MesubWallet } from './wallets-api';
 
 /** What `useMesub()` returns. */
 export interface MesubState {
     // True once the provider knows whether someone is signed in.
     ready: boolean;
     user: MesubUser | null;
+    // The wallet that pays on this site: the access token's.
     wallet: string | null;
+    // The account's proved wallets, null until loadWallets() first answers.
+    wallets: MesubWallet[] | null;
     login(): Promise<MesubUser>;
     logout(): Promise<void>;
     getAccessToken(): Promise<string | null>;
+    loadWallets(): Promise<MesubWallet[]>;
+    // Pays from another of the account's wallets on this site. Signs nothing.
+    selectWallet(address: string): Promise<void>;
 }
 
 /** For the sign-in modal and the session restore: not part of the public API. */
@@ -25,6 +32,8 @@ export interface MesubInternal {
     cancelSignIn(): void;
     // Replaces and persists the session, without touching a sign-in in progress.
     setSession(session: MesubSession | null): void;
+    // A wallet just linked: its access token, then the list again.
+    adoptWallet(proof: WalletProof): Promise<void>;
     // Set on the dialog as data-mesub-theme; undefined leaves it to an ancestor.
     theme: MesubTheme | undefined;
 }

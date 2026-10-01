@@ -5,12 +5,15 @@ import {
     RETRY_MS,
     TokenStore,
     expiresAt,
+    hasWallet,
     lockName,
     storageKey,
+    tokenWallet,
+    walletKey,
     withLock,
     writeTokenCookie,
 } from './session';
-import type { MesubSession } from './types';
+import type { MesubSession, MesubUser } from './types';
 
 const noop = () => undefined;
 
@@ -27,6 +30,7 @@ function isDead(error: unknown): boolean {
 export class SessionKeeper {
     session: MesubSession | null = null;
     private readonly store: TokenStore;
+    private readonly walletStore: TokenStore;
     private readonly lock: string;
     private inflight: Promise<MesubSession | null> | null = null;
     private timer: ReturnType<typeof setTimeout> | undefined;
@@ -42,6 +46,7 @@ export class SessionKeeper {
         private readonly onChange: (session: MesubSession | null) => void,
     ) {
         this.store = new TokenStore(storageKey(publishableKey));
+        this.walletStore = new TokenStore(walletKey(publishableKey));
         this.lock = lockName(publishableKey);
     }
 
@@ -74,6 +79,27 @@ export class SessionKeeper {
     set(session: MesubSession | null): void {
         this.epoch++;
         this.apply(session);
+    }
+
+    /**
+     * Another wallet's access token, on the same refresh token. Not a new
+     * session: a refresh in flight is let through first, never discarded.
+     */
+    async switchAccess(user: MesubUser, accessToken: string): Promise<MesubSession | null> {
+        if (this.inflight) await this.inflight.catch(noop);
+        const current = this.session;
+        if (!current) return null;
+        // Storage is the truth: another tab may have rotated the token, or signed out.
+        const stored = this.store.read();
+        if (stored === null) {
+            this.dropLocally();
+            return null;
+        }
+        this.apply({ user, refreshToken: stored ?? current.refreshToken, accessToken });
+        // The refresh token is unchanged: this is what tells the other tabs.
+        const wallet = tokenWallet(accessToken);
+        if (wallet) this.walletStore.write(wallet);
+        return this.session;
     }
 
     /** One refresh at a time in this tab, and one per token across tabs. */
@@ -109,6 +135,7 @@ export class SessionKeeper {
         this.session = null;
         clearTimeout(this.timer);
         this.store.clear();
+        this.walletStore.clear();
         writeTokenCookie(null);
         this.notify(null);
 
@@ -146,7 +173,7 @@ export class SessionKeeper {
             return null;
         }
 
-        const signedIn = next.accessToken !== null && next.user.walletAddress !== null;
+        const signedIn = hasWallet(next.user, next.accessToken);
         if (epoch !== this.epoch || !signedIn) {
             // Replaced or signed out meanwhile, or no wallet: end what we were handed.
             await this.api.logout(next.refreshToken).catch(noop);
@@ -201,6 +228,15 @@ export class SessionKeeper {
     }
 
     private readonly onStorage = (event: StorageEvent): void => {
+        if (event.key === this.walletStore.key) {
+            // Another tab switched wallet: a refresh returns the project's choice.
+            const wallet = this.walletStore.read();
+            const current = this.session?.accessToken ?? null;
+            if (wallet && this.session && wallet !== tokenWallet(current)) {
+                this.refresh().catch(noop);
+            }
+            return;
+        }
         // A null key is localStorage.clear().
         if (event.key !== null && event.key !== this.store.key) return;
         const stored = this.store.read();

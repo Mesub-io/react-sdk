@@ -9,6 +9,7 @@ import {
 } from '../src';
 import { TIMING } from '../src/timing';
 import { json, user } from './helpers';
+import { walletToken } from './tokens';
 import { registerWallet, unregisterWallets } from './wallets';
 
 const BASE = 'http://api.test/v1/client/auth';
@@ -347,6 +348,29 @@ describe('the code step', () => {
         expect(calls(fetch, '/wallet/challenge')).toHaveLength(0);
         expect(state().user).toEqual(user);
         await expect(state().getAccessToken()).resolves.toBe('at_1');
+    });
+
+    it("signs in a returning account on the token's wallet, its own being unset", async () => {
+        const proved = { ...user, walletAddress: null };
+        const W2 = 'Ledger22222222222222222222222222222222222222';
+        const { fetch, login, state } = setup({
+            '/code': routes.code,
+            '/session': () =>
+                json(201, {
+                    user: proved,
+                    sessionToken: 'st_1',
+                    refreshToken: 'rt_1',
+                    accessToken: walletToken(W2),
+                }),
+        });
+        await toCode();
+
+        type('6-digit code', '123456');
+
+        await expect(login).resolves.toEqual(proved);
+        await waitFor(() => expect(queryDialog()).toBeNull());
+        expect(calls(fetch, '/wallet/challenge')).toHaveLength(0);
+        expect(state().wallet).toBe(W2);
     });
 
     it('lingers on Signed in for the design pause', async () => {

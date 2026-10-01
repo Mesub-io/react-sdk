@@ -17,4 +17,5 @@ export {
 export type { SolanaChain } from './send-transaction';
 export type { MesubSubscription, MesubSubscriptionStatus } from './subscribe-api';
 export type { MesubPlan } from './plan-api';
+export type { MesubWallet } from './wallets-api';
 export type { CheckoutStage } from './checkout';

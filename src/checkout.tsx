@@ -1,5 +1,6 @@
 import { useWallets, type UiWallet } from '@wallet-standard/react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Account } from './account';
 import { MesubMark } from './brand';
 import { useMesub, useMesubInternal } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
@@ -7,9 +8,11 @@ import { MesubClientError } from './errors';
 import { cadence, explorerUrl, formatAmount, formatDate, shortAddress } from './format';
 import type { MesubPlan } from './plan-api';
 import { canSubscribe, WalletError, type SolanaChain } from './send-transaction';
-import { Merchant, useSignIn } from './sign-in';
+import { tokenWallet } from './session';
+import { Merchant, proveOwnership, useSignIn, walletScreen, type WalletView } from './sign-in';
 import type { MesubSubscription } from './subscribe-api';
 import { NotSettledError, subscribeOnce, unreachable } from './subscribe-flow';
+import { canSignIn } from './wallet';
 
 // The subscriber's page on Mesub, whichever site the widget runs on.
 const MANAGE_URL = 'https://mesub.io/subscriptions';
@@ -169,8 +172,8 @@ function likelySigner(wallets: readonly UiWallet[], address: string | null): UiW
  * approve in the wallet, confirm. One dialog from the click to "Done".
  */
 export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: CheckoutProps) {
-    const { user, getAccessToken } = useMesub();
-    const { api, completeSignIn } = useMesubInternal();
+    const { user, wallet: address, getAccessToken } = useMesub();
+    const { api, completeSignIn, adoptWallet } = useMesubInternal();
     const wallets = useWallets();
     const titleId = useId();
 
@@ -181,8 +184,12 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
     const [sent, setSent] = useState<{ signature: string; id: string } | null>(null);
     const [subscription, setSubscription] = useState<MesubSubscription | null>(null);
     const [checking, setChecking] = useState(false);
+    // Connect another wallet, from the review: the sign-in's wallet step.
+    const [connecting, setConnecting] = useState<WalletView | null>(null);
 
     const alive = useRef(true);
+    // Bumped on each wallet picked to link, and on leaving it.
+    const attempt = useRef(0);
     const latest = useRef({ wallets, onStage, onSubscribed });
     latest.current = { wallets, onStage, onSubscribed };
 
@@ -220,7 +227,7 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
         },
     });
 
-    const wallet = signer ?? likelySigner(wallets, user?.walletAddress ?? null);
+    const wallet = signer ?? likelySigner(wallets, address);
     const walletName = wallet?.name ?? 'your wallet';
 
     function succeed(done: MesubSubscription, signature: string) {
@@ -232,9 +239,10 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
     }
 
     async function pay() {
-        const address = user?.walletAddress;
         const token = await getAccessToken();
-        if (!address || !token) {
+        // Read off the token: the wallet may have been switched since this render.
+        const payer = tokenWallet(token) ?? user?.walletAddress;
+        if (!payer || !token) {
             setFailure(null);
             setStage('signin');
             return;
@@ -249,7 +257,7 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
                 accessToken: token,
                 plan,
                 wallets: latest.current.wallets,
-                address,
+                address: payer,
                 chain,
                 onSigner: (found) => alive.current && setSigner(found.wallet),
                 onSent: (sig, id) => {
@@ -299,9 +307,66 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
         setStage('review');
     }
 
+    async function link(picked: UiWallet) {
+        const id = ++attempt.current;
+        // Backed out, or another wallet picked since: this one's answer is dropped.
+        const current = () => alive.current && id === attempt.current;
+        try {
+            const token = await getAccessToken();
+            if (!current()) return;
+            if (!token) {
+                setConnecting(null);
+                setStage('signin');
+                return;
+            }
+            const proof = await proveOwnership(
+                picked,
+                {
+                    challenge: (account) => api.wallets.challenge(token, account),
+                    // Signed after backing out: nothing is linked.
+                    prove: (signed) =>
+                        current()
+                            ? api.wallets.link(token, signed)
+                            : Promise.reject(new Error('left')),
+                },
+                (view) => current() && setConnecting(view),
+            );
+            if (!proof || !current()) return;
+            await adoptWallet(proof);
+            if (!current()) return;
+            // The new wallet pays: the one found for the old one no longer does.
+            setSigner(null);
+            setConnecting(null);
+        } catch (error) {
+            if (!current()) return;
+            const message =
+                error instanceof MesubClientError
+                    ? error.message
+                    : 'Something went wrong. Try again.';
+            setConnecting({ name: 'failed', wallet: picked, message });
+        }
+    }
+
+    // Leaving the wallet being linked: its late answer must not land.
+    function setConnectingView(view: WalletView | null) {
+        if (view === null || view.name === 'list') attempt.current++;
+        setConnecting(view);
+    }
+
     let screen: DialogScreen;
     if (stage === 'signin') {
         screen = signIn;
+    } else if (connecting && stage === 'review') {
+        screen = walletScreen({
+            titleId,
+            view: connecting,
+            wallets: wallets.filter(canSignIn),
+            setView: setConnectingView,
+            pick: (picked) => void link(picked),
+            onBack: () => setConnectingView(null),
+            title: 'Connect another wallet',
+            step: 'review',
+        });
     } else if (loaded.name !== 'loaded') {
         screen = planScreen(loaded, titleId, () => act('reload'), onClose);
     } else {
@@ -312,7 +377,17 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
             titleId,
             wallet,
             walletName,
-            address: user?.walletAddress ?? null,
+            address,
+            account:
+                user && address ? (
+                    <Account
+                        email={user.email}
+                        address={address}
+                        installed={wallets}
+                        onConnect={() => setConnecting({ name: 'list' })}
+                        onSwitched={() => setSigner(null)}
+                    />
+                ) : null,
             signature: sent?.signature ?? null,
             subscription,
             failure,
@@ -417,6 +492,8 @@ function stageScreen(props: {
     wallet: UiWallet | null;
     walletName: string;
     address: string | null;
+    // Signed in as, and the wallet menu: at the top of the review.
+    account: ReactNode;
     signature: string | null;
     subscription: MesubSubscription | null;
     failure: Failure | null;
@@ -508,6 +585,7 @@ function stageScreen(props: {
             view: 'review',
             body: (
                 <>
+                    {props.account}
                     <Merchant merchant={plan.merchant} testNetwork={chain !== 'solana:mainnet'} />
                     <h2 id={titleId}>{plan.name}</h2>
                     <p data-mesub-price="">

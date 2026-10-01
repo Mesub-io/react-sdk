@@ -188,6 +188,50 @@ function Buy() {
 `subscribe()` resolves with the subscription, or null when it did not go
 through.
 
+## Wallets
+
+An account keeps every wallet it proved, and each merchant site remembers
+which one pays there. `wallet` is that one: the access token's, which is also
+the only wallet `@mesub/node` checks access for.
+
+The checkout's review starts with the account: "Signed in as", the paying
+wallet (its icon when it is installed, its label or short address) and
+**Change**. Change lists the account's wallets, the paying one checked, with
+the plans each holds on this site:
+
+- Picking another one switches at once, with no signature: the wallet is
+  already proved. "Pays from" follows.
+- Each wallet keeps its own subscriptions: switching loses nothing, and a
+  plan comes back with the wallet that pays it. Past five wallets, the list
+  scrolls on its own.
+- **Connect another wallet** shows the installed wallets, signs a free message
+  with the one picked, links it to the account and pays from it.
+
+Nothing is ever disconnected from a wallet, and the other wallets stay linked.
+
+```tsx
+const { user, wallets, loadWallets, selectWallet } = useMesub();
+
+useEffect(() => {
+    if (user) loadWallets().catch(() => undefined);
+}, [user, loadWallets]);
+
+wallets?.map((linked) => (
+    <button key={linked.address} onClick={() => selectWallet(linked.address)}>
+        {linked.label ?? linked.address} {linked.plans.join(', ')}
+    </button>
+));
+```
+
+- `wallets` is null until `loadWallets()` first answers: nothing is read before.
+- `selectWallet(address)` gets a new access token for that wallet, and the
+  cookie follows. It rejects with a 404 `MesubClientError` for a wallet the
+  account does not hold.
+
+The row is `[data-mesub-account]` (with `[data-mesub-account-wallet]` and
+`[data-mesub-change]`), the menu `[data-mesub-wallet-menu]`, each wallet a
+`[data-mesub-linked]` button, `aria-current` on the paying one.
+
 ## Development
 
 ```sh

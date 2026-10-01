@@ -3,9 +3,15 @@ import { json, user } from './helpers';
 import type { MesubUser } from '../src/types';
 
 /** An unsigned JWT expiring at `expMs`: the SDK only reads the claim. */
-export function jwt(expMs: number, sub = 'usr_1'): string {
+export function jwt(expMs: number, sub = 'usr_1', claims: Record<string, unknown> = {}): string {
     const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
-    return `${encode({ alg: 'ES256' })}.${encode({ sub, exp: Math.floor(expMs / 1000) })}.sig`;
+    const payload = { sub, exp: Math.floor(expMs / 1000), ...claims };
+    return `${encode({ alg: 'ES256' })}.${encode(payload)}.sig`;
+}
+
+/** An access token carrying `wallet`, far from expiring: the same string on every call. */
+export function walletToken(wallet: string): string {
+    return jwt(Date.UTC(2100, 0, 1), 'usr_1', { wallet });
 }
 
 /** The mesub-token cookie, or null. */

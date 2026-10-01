@@ -122,6 +122,79 @@ describe('createApiClient', () => {
     });
 });
 
+describe('wallets', () => {
+    const proof = { user, accessToken: 'at_2' };
+    const linked = { address: 'W2', label: 'Ledger', selected: false, plans: ['Pro'] };
+
+    it('list GETs /wallets with the key and the access token, and returns the array', async () => {
+        const fetch = mockFetch(() => json(200, { wallets: [linked] }));
+        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).wallets.list(
+            'at_1',
+        );
+
+        expect(result).toEqual([linked]);
+        const [url, init] = fetch.mock.calls[0]!;
+        expect(url).toBe('https://api.mesub.io/v1/client/auth/wallets');
+        expect(init.method).toBe('GET');
+        expect(init.body).toBeUndefined();
+        expect(init.headers).toEqual({ 'X-Mesub-Key': 'PUB_1', Authorization: 'Bearer at_1' });
+    });
+
+    it('select posts the address to /wallet/select with the access token', async () => {
+        const fetch = mockFetch(() => json(201, proof));
+        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).wallets.select(
+            'at_1',
+            'W2',
+        );
+
+        expect(result).toEqual(proof);
+        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallet/select');
+        expect(call(fetch).body).toEqual({ address: 'W2' });
+        expect(call(fetch).headers.Authorization).toBe('Bearer at_1');
+    });
+
+    it('challenge posts the address to /wallets/challenge with the access token', async () => {
+        const fetch = mockFetch(() => json(201, { message: 'Sign this' }));
+        const result = await createApiClient({
+            publishableKey: 'PUB_1',
+            fetch,
+        }).wallets.challenge('at_1', 'W2');
+
+        expect(result).toEqual({ message: 'Sign this' });
+        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallets/challenge');
+        expect(call(fetch).body).toEqual({ address: 'W2' });
+        expect(call(fetch).headers.Authorization).toBe('Bearer at_1');
+    });
+
+    it('link posts the proof to /wallets with the access token', async () => {
+        const fetch = mockFetch(() => json(201, proof));
+        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).wallets.link(
+            'at_1',
+            { address: 'W2', signature: 'sig', label: 'Ledger' },
+        );
+
+        expect(result).toEqual(proof);
+        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallets');
+        expect(call(fetch).body).toEqual({ address: 'W2', signature: 'sig', label: 'Ledger' });
+        expect(call(fetch).headers.Authorization).toBe('Bearer at_1');
+    });
+
+    it.each([
+        ['select', 404, 'That wallet is not linked to your account.'],
+        ['link', 409, 'That wallet is already attached to another account.'],
+    ] as const)('%s throws the API refusal with its status', async (route, status, message) => {
+        const fetch = mockFetch(() => json(status, { message }));
+        const wallets = createApiClient({ publishableKey: 'PUB_1', fetch }).wallets;
+        const attempt =
+            route === 'select'
+                ? wallets.select('at_1', 'W2')
+                : wallets.link('at_1', { address: 'W2', signature: 'sig' });
+
+        await expect(attempt).rejects.toMatchObject({ status, message });
+        await attempt.catch((error: unknown) => expect(error).toBeInstanceOf(MesubClientError));
+    });
+});
+
 describe('API errors', () => {
     async function failure(response: () => Response | Promise<Response>) {
         const fetch = mockFetch(response);

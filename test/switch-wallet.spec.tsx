@@ -190,9 +190,12 @@ describe('the wallet menu', () => {
         expect(bearerOf(fetch, 'GET /auth/wallets')).toBe(`Bearer ${walletToken(W1)}`);
         expect(change().getAttribute('aria-expanded')).toBe('true');
         expect(change().getAttribute('aria-controls')).toBe(menu()!.id);
-        expect(linked().map((item) => item.textContent)).toEqual(['Wa11…1111Pro, Team', 'Ledger']);
+        expect(linked().map((item) => item.textContent)).toEqual([
+            'Wa11…1111· Pro, Team',
+            'Ledger',
+        ]);
         expect(linked().map((item) => item.getAttribute('aria-current'))).toEqual(['true', null]);
-        expect(linked()[0]!.querySelector('small')!.textContent).toBe('Pro, Team');
+        expect(linked()[0]!.querySelector('small')!.textContent).toBe('· Pro, Team');
         expect(linked()[1]!.querySelector('small')).toBeNull();
         expect(
             within(menu() as HTMLElement).getByRole('button', { name: 'Connect another wallet' }),
@@ -241,61 +244,35 @@ describe('the wallet menu', () => {
     });
 });
 
-describe('connecting while the list is unknown', () => {
+describe('connecting another wallet from the menu', () => {
     const connect = () =>
         within(menu() as HTMLElement).getByRole('button', {
             name: 'Connect another wallet',
         }) as HTMLButtonElement;
 
-    it('holds Connect until the list is read, then warns about the plans held', async () => {
+    // Each wallet keeps its own subscriptions: nothing to warn about.
+    it('connects at once, even while the list loads', async () => {
         registerWallet({ name: 'Phantom', connected: true });
-        let answer!: (response: Response) => void;
         await review(holding(['Pro']), {
-            'GET /auth/wallets': () =>
-                new Promise<Response>((resolve) => {
-                    answer = resolve;
-                }),
+            'GET /auth/wallets': () => new Promise<Response>(() => undefined),
         });
 
         fireEvent.click(change());
-        await waitFor(() => expect(answer).toBeDefined());
-        expect(connect().disabled).toBe(true);
         fireEvent.click(connect());
-        expect(dialog().querySelector('[data-mesub-warning]')).toBeNull();
-        expect(
-            within(dialog()).queryByRole('heading', { name: 'Connect another wallet' }),
-        ).toBeNull();
 
-        await act(async () => answer(json(200, { wallets: holding(['Pro']) })));
-        await waitFor(() => expect(connect().disabled).toBe(false));
-        fireEvent.click(connect());
-        expect(dialog().querySelector('[data-mesub-warning]')!.textContent).toBe(
-            'Your Pro subscription will not be recognised on this site with the new wallet.',
-        );
+        await within(dialog()).findByRole('heading', { name: 'Connect another wallet' });
+        expect(dialog().querySelector('[data-mesub-warning]')).toBeNull();
     });
 
-    it('warns in general terms when the list could not be read', async () => {
+    it('connects at once when the list could not be read', async () => {
         registerWallet({ name: 'Phantom', connected: true });
         await review(free, { 'GET /auth/wallets': () => json(503, { message: 'Mesub is down.' }) });
         fireEvent.click(change());
-        await waitFor(() => expect(connect().disabled).toBe(false));
-
-        fireEvent.click(connect());
-
-        expect(dialog().querySelector('[data-mesub-warning]')!.textContent).toBe(
-            'Any subscription this wallet pays for here will not be recognised on this site with the new wallet.',
+        await waitFor(() =>
+            expect(within(menu() as HTMLElement).getByRole('alert').textContent).toBe(
+                'Mesub is down.',
+            ),
         );
-        expect(
-            within(dialog()).queryByRole('heading', { name: 'Connect another wallet' }),
-        ).toBeNull();
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'Switch anyway' }));
-        await within(dialog()).findByRole('heading', { name: 'Connect another wallet' });
-    });
-
-    it('connects at once once the list says no plan is held', async () => {
-        registerWallet({ name: 'Phantom', connected: true });
-        await review();
-        await openMenu();
 
         fireEvent.click(connect());
 
@@ -341,56 +318,17 @@ describe('picking a linked wallet', () => {
         expect(phantom.signAndSendTransaction).not.toHaveBeenCalled();
     });
 
-    it('warns first when the paying wallet holds a plan here', async () => {
+    // The plan stays with the wallet that pays it, and comes back with it.
+    it('switches at once even when the paying wallet holds a plan here', async () => {
         registerWallet({ name: 'Phantom', connected: true });
-        const { fetch, state } = await review(holding(['Pro']));
+        const { fetch, state } = await review(holding(['Pro', 'Team']));
         await openMenu();
 
         fireEvent.click(linkedButton(/Ledger/));
-
-        expect(within(menu() as HTMLElement).getByRole('alert').textContent).toBe(
-            'Your Pro subscription will not be recognised on this site with the new wallet.',
-        );
-        expect(calls(fetch, 'POST /auth/wallet/select')).toHaveLength(0);
-        expect(state().wallet).toBe(W1);
-    });
-
-    it('names every plan held, in the plural', async () => {
-        registerWallet({ name: 'Phantom', connected: true });
-        await review(holding(['Pro', 'Team', 'Max']));
-        await openMenu();
-
-        fireEvent.click(linkedButton(/Ledger/));
-
-        expect(dialog().querySelector('[data-mesub-warning]')!.textContent).toBe(
-            'Your Pro, Team and Max subscriptions will not be recognised on this site with the new wallet.',
-        );
-    });
-
-    it('keeps the wallet when the warning is declined', async () => {
-        registerWallet({ name: 'Phantom', connected: true });
-        const { fetch, state } = await review(holding(['Pro']));
-        await openMenu();
-        fireEvent.click(linkedButton(/Ledger/));
-
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'Keep Wa11…1111' }));
-
-        expect(dialog().querySelector('[data-mesub-warning]')).toBeNull();
-        expect(menu()).not.toBeNull();
-        expect(calls(fetch, 'POST /auth/wallet/select')).toHaveLength(0);
-        expect(state().wallet).toBe(W1);
-    });
-
-    it('switches once the warning is confirmed', async () => {
-        registerWallet({ name: 'Phantom', connected: true });
-        const { fetch, state } = await review(holding(['Pro']));
-        await openMenu();
-        fireEvent.click(linkedButton(/Ledger/));
-
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'Switch anyway' }));
 
         await waitFor(() => expect(state().wallet).toBe(W2));
         expect(calls(fetch, 'POST /auth/wallet/select')).toHaveLength(1);
+        expect(dialog().querySelector('[data-mesub-warning]')).toBeNull();
         expect(menu()).toBeNull();
     });
 
@@ -486,21 +424,15 @@ describe('connecting another wallet', () => {
         for (const fake of [phantom, solflare]) expect(fake.disconnect).not.toHaveBeenCalled();
     });
 
-    it('warns before leaving a wallet that holds a plan here', async () => {
+    it('connects at once even when the paying wallet holds a plan here', async () => {
         registerWallet({ name: 'Phantom', connected: true });
         await review(holding(['Pro']));
         await openMenu();
 
         fireEvent.click(within(dialog()).getByRole('button', { name: 'Connect another wallet' }));
-        expect(dialog().querySelector('[data-mesub-warning]')!.textContent).toBe(
-            'Your Pro subscription will not be recognised on this site with the new wallet.',
-        );
-        expect(
-            within(dialog()).queryByRole('heading', { name: 'Connect another wallet' }),
-        ).toBeNull();
 
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'Switch anyway' }));
         await within(dialog()).findByRole('heading', { name: 'Connect another wallet' });
+        expect(dialog().querySelector('[data-mesub-warning]')).toBeNull();
     });
 
     it('goes back to the review, wallet unchanged, from the list', async () => {

@@ -201,8 +201,9 @@ the plans each holds on this site:
 
 - Picking another one switches at once, with no signature: the wallet is
   already proved. "Pays from" follows.
-- Leaving a wallet that holds plans here warns first: those subscriptions are
-  not recognised on this site with the new wallet.
+- Each wallet keeps its own subscriptions: switching loses nothing, and a
+  plan comes back with the wallet that pays it. Past five wallets, the list
+  scrolls on its own.
 - **Connect another wallet** shows the installed wallets, signs a free message
   with the one picked, links it to the account and pays from it.
 

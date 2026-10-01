@@ -456,8 +456,8 @@
 }
 /* busy: the chevron becomes a spinner */
 [data-mesub-wallet][aria-busy="true"]::after {
-  inline-size: 14px;
-  block-size: 14px;
+  inline-size: 12px;
+  block-size: 12px;
   border: 2px solid var(--_accent);
   border-inline-end-color: transparent;
   border-radius: 50%;
@@ -2332,8 +2332,7 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
  *   + button[data-mesub-change][aria-expanded]. Change opens, right under it,
  *   div[data-mesub-wallet-menu] > ul[data-mesub-linked-wallets] > li > button[data-mesub-linked]
  *   (aria-current on the paying one, aria-busy while it switches; img + span > label + small plans),
- *   then div[data-mesub-leaving] (warning, [data-mesub-confirm], [data-mesub-keep]),
- *   and button[data-mesub-connect].
+ *   then button[data-mesub-connect]. One compact list, not a stack of cards.
  */
 
 [data-mesub-account] {
@@ -2406,14 +2405,20 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
 /* the menu sits close under the row it opened from */
 [data-mesub-wallet-menu] {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   margin-block-start: -10px;
 }
 [data-mesub-linked-wallets] {
   display: grid;
-  gap: 6px;
+  gap: 0;
   margin: 0;
   padding: 0;
+  /* five rows show; more scroll inside the list, never the whole widget */
+  max-block-size: calc(5 * 40px + 6px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius-lg);
   list-style: none;
 }
 [data-mesub-linked-wallets] > li {
@@ -2422,32 +2427,41 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
 [data-mesub-linked] {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   inline-size: 100%;
-  min-block-size: 52px;
+  min-block-size: 40px;
   margin: 0;
-  padding: 8px 14px;
-  border: 1px solid var(--_border);
-  border-radius: var(--_radius-lg);
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 0;
   background: var(--_bg);
   color: var(--_text);
   font: inherit;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: 500;
   text-align: start;
   cursor: pointer;
   transition: border-color var(--_dur) ease-out, background-color var(--_dur) ease-out;
 }
+/* a hairline between rows, inside the one border */
+[data-mesub-linked-wallets] > li + li > [data-mesub-linked] {
+  border-block-start: 1px solid var(--_divider);
+}
 [data-mesub-linked] img {
   flex: none;
-  inline-size: 24px;
-  block-size: 24px;
-  border-radius: 6px;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: 5px;
 }
+/* the name, then its plans on the same line */
 [data-mesub-linked] > span {
-  display: grid;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 [data-mesub-linked] small {
@@ -2457,28 +2471,26 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
   line-height: 16px;
   font-weight: 400;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* trailing radio: a ring, a dot inside on the paying wallet */
 [data-mesub-linked]::after {
   content: "";
   flex: none;
   margin-inline-start: auto;
-  inline-size: 18px;
-  block-size: 18px;
+  inline-size: 14px;
+  block-size: 14px;
   border: 1.5px solid var(--_control-border);
   border-radius: 50%;
 }
 [data-mesub-linked]:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--_accent) 60%, transparent);
+  background: var(--_sunk);
 }
 [data-mesub-linked][aria-current="true"] {
-  border-color: var(--_accent);
   background: var(--_accent-soft);
 }
 [data-mesub-linked][aria-current="true"]::after {
   border-color: var(--_accent);
-  background: radial-gradient(circle, var(--_accent) 0 4px, transparent 4.5px);
+  background: radial-gradient(circle, var(--_accent) 0 3px, transparent 3.5px);
 }
 [data-mesub-linked]:disabled:not([aria-busy="true"]) {
   color: var(--_muted);
@@ -2488,63 +2500,29 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
   cursor: progress;
 }
 [data-mesub-linked][aria-busy="true"]::after {
-  inline-size: 14px;
-  block-size: 14px;
+  inline-size: 12px;
+  block-size: 12px;
   border: 2px solid var(--_accent);
   border-inline-end-color: transparent;
   background: none;
   animation: mesub-spin 800ms linear infinite;
 }
 
-/* leaving a wallet that holds plans here: say so, then confirm */
-[data-mesub-leaving] {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-[data-mesub-leaving] [data-mesub-warning] {
-  grid-column: 1 / -1;
-}
-:is([data-mesub-confirm], [data-mesub-keep]) {
-  min-block-size: 40px;
-  margin: 0;
-  padding: 0 12px;
-  border: 1px solid var(--_border);
-  border-radius: var(--_radius-lg);
-  background: var(--_bg);
-  color: var(--_text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color var(--_dur) ease-out, background-color var(--_dur) ease-out;
-}
-[data-mesub-confirm] {
-  border-color: transparent;
-  background: var(--_warning-soft);
-  color: var(--_warning-text);
-}
-[data-mesub-confirm]:hover {
-  background: color-mix(in srgb, var(--_warning) 18%, var(--_bg));
-}
-[data-mesub-keep]:hover {
-  border-color: var(--_control-border);
-}
-
+/* a quiet text action under the list */
 [data-mesub-connect] {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-block-size: 44px;
+  justify-self: start;
+  gap: 6px;
+  min-block-size: 32px;
   margin: 0;
-  padding: 0 16px;
-  border: 1px dashed var(--_control-border);
-  border-radius: var(--_radius-lg);
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--_radius);
   background: transparent;
-  color: var(--_text);
+  color: var(--_text-soft);
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: border-color var(--_dur) ease-out, color var(--_dur) ease-out;
@@ -2556,7 +2534,6 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
   line-height: 1;
 }
 [data-mesub-connect]:hover:not(:disabled) {
-  border-color: var(--_accent);
   color: var(--_accent-text);
 }
 [data-mesub-connect]:disabled {
@@ -2568,7 +2545,7 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
   [data-mesub-wallet-menu] > * {
     animation: mesub-rise 320ms var(--_ease-enter) both;
   }
-  :is([data-mesub-linked], [data-mesub-change], [data-mesub-confirm], [data-mesub-keep]):active:not(:disabled) {
+  :is([data-mesub-linked], [data-mesub-change]):active:not(:disabled) {
     transform: scale(0.99);
   }
 }
@@ -2647,6 +2624,10 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
   }
   [data-mesub-wallet] {
     min-block-size: 56px;
+  }
+  /* touch targets stay 44px on a phone */
+  :is([data-mesub-linked], [data-mesub-connect]) {
+    min-block-size: 44px;
   }
 }
 

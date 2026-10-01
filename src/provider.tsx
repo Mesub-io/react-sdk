@@ -162,8 +162,10 @@ export function MesubProvider({
         async (proof: WalletProof): Promise<void> => {
             if (!(await keeper.switchAccess(proof.user, proof.accessToken))) return;
             // Its label and plans come from the API: list them again, after any older read.
-            await loadingWallets.current?.catch(() => undefined);
-            await loadWallets().catch(() => undefined);
+            const older = loadingWallets.current?.catch(() => undefined);
+            void Promise.resolve(older)
+                .then(() => loadWallets())
+                .catch(() => undefined);
         },
         [keeper, loadWallets],
     );

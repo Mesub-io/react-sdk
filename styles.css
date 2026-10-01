@@ -359,9 +359,10 @@
   cursor: pointer;
   transition: color var(--_dur) ease-out, background-color var(--_dur) ease-out;
 }
+/* hover tints the cross itself, never a grey square behind it */
 [data-mesub-close]:hover {
-  background: var(--_sunk);
-  color: var(--_text);
+  background: transparent;
+  color: var(--_accent);
 }
 [data-mesub-close]:empty::before,
 [data-mesub-close]:empty::after {
@@ -1491,16 +1492,6 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
 [data-mesub-dialog][data-mesub-step="subscribed"] h2 {
   padding-block-start: 6px;
 }
-/* returning subscriber: a short auto-close line */
-[data-mesub-dialog][data-mesub-step="done"][open]::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  block-size: 3px;
-  background: var(--_success);
-  transform-origin: left;
-  animation: mesub-countdown 1200ms linear;
-}
 
 /* -------------------------------------------- v2 subscribe button */
 
@@ -1554,7 +1545,6 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
 }
 @keyframes mesub-travel { to { inset-inline-start: calc(100% - 8px); } }
 @keyframes mesub-pop { from { transform: rotate(45deg) scale(0.6); opacity: 0; } }
-@keyframes mesub-countdown { to { transform: scaleX(0); } }
 
 
 /* ============================================================ V4 LAYER
@@ -1586,13 +1576,17 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
   text-align: center;
 }
 
-/* one continuous progress line across the whole journey */
+/* one continuous progress line across the whole journey, on the very top edge:
+   the dialog has no top border, so nothing shows above the line */
+[data-mesub-dialog][open] {
+  border-block-start-width: 0;
+}
 [data-mesub-dialog][open]::before {
   display: block;
   content: "";
   position: absolute;
   inset: 0 0 auto;
-  block-size: 3px;
+  block-size: 4px;
   background:
     linear-gradient(var(--_bar, var(--_accent)) 0 0) 0 0 / calc(var(--_progress, 0) * 100%) 100% no-repeat,
     var(--_divider);
@@ -1629,6 +1623,12 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
 [data-mesub-close] {
   inset-block-start: 14px;
   inset-inline-end: 14px;
+}
+/* Out of the grid: placed in it, an absolute child is positioned against the
+   content box, which put the close 28px in from the corner. */
+[data-mesub-dialog][open] > [data-mesub-close] {
+  grid-column: auto;
+  grid-row: auto;
 }
 [data-mesub-dialog] > [data-mesub-back]:empty {
   position: absolute;
@@ -2039,11 +2039,13 @@ p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
   row-gap: 18px;
 }
 [data-mesub-brand] {
+  gap: 8px;
   color: var(--_text-soft);
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 18px;
 }
 [data-mesub-brand] :is(img, svg) {
-  block-size: 11px;
+  block-size: 18px;
   opacity: 0.9;
 }
 [data-mesub-dialog] h2 + p {

@@ -454,6 +454,8 @@ function stageScreen(props: {
         return {
             step: failure.stage,
             view: `${failure.stage}-failed-${failure.title}`,
+            // Back to the review, except while a payment may still land.
+            onBack: failure.funds === 'pending' ? undefined : props.onBack,
             body: (
                 <>
                     <Hero kind={failure.funds === 'pending' ? 'pending' : 'error'} icon={icon} />
@@ -556,6 +558,7 @@ function stageScreen(props: {
         return {
             step: 'approve',
             view: 'approve',
+            onBack: props.onBack,
             body: (
                 <>
                     <Hero kind="wait" icon={wallet?.icon} />
@@ -624,7 +627,7 @@ function stageScreen(props: {
                 </button>
                 <a data-mesub-manage="" href={props.manageUrl} target="_blank" rel="noopener">
                     <MesubMark width={17} height={11} />
-                    See details on Mesub
+                    See details on mesub.io
                 </a>
             </>
         ),

@@ -176,6 +176,11 @@ export function useSignIn({
             wallets,
             setView: (view) => setStep({ ...step, view }),
             pick: (wallet) => void pickWallet(wallet, step),
+            // The code is spent: back to the email, where a new one is sent.
+            toEmail: () => {
+                setCode('');
+                go({ name: 'email' });
+            },
         });
     }
 
@@ -393,12 +398,14 @@ function walletScreen({
     wallets,
     setView,
     pick,
+    toEmail,
 }: {
     titleId: string;
     step: Extract<Step, { name: 'wallet' }>;
     wallets: UiWallet[];
     setView(view: WalletView): void;
     pick(wallet: UiWallet): void;
+    toEmail(): void;
 }): DialogScreen {
     const { view } = step;
     const toList = () => setView({ name: 'list' });
@@ -470,6 +477,7 @@ function walletScreen({
         return {
             step: 'wallet',
             view: 'wallet-none',
+            onBack: toEmail,
             body: (
                 <>
                     <div data-mesub-hero="empty" aria-hidden="true" />
@@ -511,6 +519,7 @@ function walletScreen({
     return {
         step: 'wallet',
         view: 'wallet-list',
+        onBack: toEmail,
         body: (
             <>
                 <h2 id={titleId}>Connect a wallet</h2>

@@ -8,6 +8,7 @@ import {
     type ButtonHTMLAttributes,
     type MouseEvent,
 } from 'react';
+import { Checkout, type CheckoutStage } from './checkout';
 import { useMesub, useMesubInternal } from './context';
 import { MesubClientError, MesubSignInCancelledError } from './errors';
 import { WalletError, type SolanaChain } from './send-transaction';
@@ -127,6 +128,8 @@ export interface SubscribeButtonProps
     extends UseSubscribeOptions, ButtonHTMLAttributes<HTMLButtonElement> {
     // The plan's slug, as set in the dashboard.
     plan: string;
+    // Opens the Mesub checkout (default). False: signs at once, the button alone shows progress.
+    checkout?: boolean | undefined;
 }
 
 const LABELS: Record<Exclude<SubscribeState, 'idle'>, string> = {
@@ -136,40 +139,100 @@ const LABELS: Record<Exclude<SubscribeState, 'idle'>, string> = {
     error: 'Try again',
 };
 
+// The button underneath the checkout follows it, so it reads right once closed.
+const FROM_STAGE: Partial<Record<CheckoutStage, SubscribeState>> = {
+    approve: 'signing',
+    confirming: 'confirming',
+    subscribed: 'subscribed',
+};
+
 /** One signature for the whole subscription. Unstyled: style it by its data-mesub-* attributes. */
 export const SubscribeButton = forwardRef<HTMLButtonElement, SubscribeButtonProps>(
-    function SubscribeButton(
-        { plan, chain, onSubscribed, children, onClick, disabled, type, ...rest },
-        ref,
-    ) {
-        const { state, error, subscribe } = useSubscribe(plan, { chain, onSubscribed });
-        const busy = state === 'signing' || state === 'confirming';
-
-        function click(event: MouseEvent<HTMLButtonElement>) {
-            onClick?.(event);
-            if (!event.defaultPrevented) void subscribe();
-        }
-
-        return (
-            <>
-                <button
-                    {...rest}
-                    ref={ref}
-                    type={type ?? 'button'}
-                    disabled={Boolean(disabled) || busy || state === 'subscribed'}
-                    aria-busy={busy || undefined}
-                    onClick={click}
-                    data-mesub-subscribe=""
-                    data-mesub-state={state}
-                >
-                    {state === 'idle' ? (children ?? 'Subscribe') : LABELS[state]}
-                </button>
-                {error ? (
-                    <span role="alert" data-mesub-error="">
-                        {error}
-                    </span>
-                ) : null}
-            </>
+    function SubscribeButton({ checkout = true, ...props }, ref) {
+        return checkout ? (
+            <CheckoutButton {...props} ref={ref} />
+        ) : (
+            <InlineButton {...props} ref={ref} />
         );
     },
 );
+
+type ButtonProps = Omit<SubscribeButtonProps, 'checkout'>;
+
+const CheckoutButton = forwardRef<HTMLButtonElement, ButtonProps>(function CheckoutButton(
+    { plan, chain, onSubscribed, children, onClick, disabled, type, ...rest },
+    ref,
+) {
+    const [open, setOpen] = useState(false);
+    const [state, setState] = useState<SubscribeState>('idle');
+    const subscribed = state === 'subscribed';
+
+    function click(event: MouseEvent<HTMLButtonElement>) {
+        onClick?.(event);
+        if (!event.defaultPrevented) setOpen(true);
+    }
+
+    return (
+        <>
+            <button
+                {...rest}
+                ref={ref}
+                type={type ?? 'button'}
+                disabled={Boolean(disabled) || subscribed}
+                onClick={click}
+                data-mesub-subscribe=""
+                data-mesub-state={state}
+            >
+                {state === 'idle' ? (children ?? 'Subscribe') : LABELS[state]}
+            </button>
+            {open ? (
+                <Checkout
+                    plan={plan}
+                    chain={chain ?? 'solana:devnet'}
+                    onStage={(stage) => setState(FROM_STAGE[stage] ?? 'idle')}
+                    onSubscribed={(subscription) => onSubscribed?.(subscription)}
+                    onClose={() => {
+                        setOpen(false);
+                        // Closed before the end: back to where it was.
+                        setState((current) => (current === 'subscribed' ? current : 'idle'));
+                    }}
+                />
+            ) : null}
+        </>
+    );
+});
+
+const InlineButton = forwardRef<HTMLButtonElement, ButtonProps>(function InlineButton(
+    { plan, chain, onSubscribed, children, onClick, disabled, type, ...rest },
+    ref,
+) {
+    const { state, error, subscribe } = useSubscribe(plan, { chain, onSubscribed });
+    const busy = state === 'signing' || state === 'confirming';
+
+    function click(event: MouseEvent<HTMLButtonElement>) {
+        onClick?.(event);
+        if (!event.defaultPrevented) void subscribe();
+    }
+
+    return (
+        <>
+            <button
+                {...rest}
+                ref={ref}
+                type={type ?? 'button'}
+                disabled={Boolean(disabled) || busy || state === 'subscribed'}
+                aria-busy={busy || undefined}
+                onClick={click}
+                data-mesub-subscribe=""
+                data-mesub-state={state}
+            >
+                {state === 'idle' ? (children ?? 'Subscribe') : LABELS[state]}
+            </button>
+            {error ? (
+                <span role="alert" data-mesub-error="">
+                    {error}
+                </span>
+            ) : null}
+        </>
+    );
+});

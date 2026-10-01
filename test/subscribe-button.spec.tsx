@@ -80,7 +80,7 @@ async function setup({ overrides, signedIn = true, props }: Setup = {}) {
     render(
         <MesubProvider publishableKey="PUB_1" apiUrl="http://api.test" fetch={fetch}>
             <Probe />
-            <SubscribeButton plan="pro" onSubscribed={onSubscribed} {...props} />
+            <SubscribeButton plan="pro" checkout={false} onSubscribed={onSubscribed} {...props} />
         </MesubProvider>,
     );
     if (signedIn) await signIn(() => state);

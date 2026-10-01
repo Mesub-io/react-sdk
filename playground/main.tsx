@@ -87,6 +87,8 @@ function Session() {
 
             <Subscribe />
 
+            <CallServer />
+
             {error && (
                 <p className="alert" role="alert">
                     {error}
@@ -105,7 +107,7 @@ function Session() {
 
 /** A plan slug and the button, with what it settled on. */
 function Subscribe() {
-    const [plan, setPlan] = useState('contract');
+    const [plan, setPlan] = useState(import.meta.env['VITE_MESUB_PLAN'] ?? 'contract');
     const [subscribed, setSubscribed] = useState<MesubSubscription | null>(null);
 
     return (
@@ -129,6 +131,77 @@ function Subscribe() {
                 Sends on <code>{chain}</code>. Signs in first when signed out.
             </p>
             {subscribed && <pre>{JSON.stringify(subscribed, null, 2)}</pre>}
+        </section>
+    );
+}
+
+const serverUrl = import.meta.env['VITE_PLAYGROUND_SERVER'] ?? 'http://localhost:5174';
+
+/**
+ * What the access token is for: the merchant's own server reads it and lets
+ * the request through only for a subscriber of the plan (playground/server.mjs).
+ */
+function CallServer() {
+    const { getAccessToken } = useMesub();
+    const [answer, setAnswer] = useState<{ status: number; body: string } | null>(null);
+    const [failure, setFailure] = useState('');
+
+    async function call() {
+        setFailure('');
+        try {
+            const token = await getAccessToken();
+            const response = await fetch(`${serverUrl}/api/reports`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            const body = await response.text();
+            let pretty = body;
+            try {
+                pretty = JSON.stringify(JSON.parse(body), null, 2);
+            } catch {
+                // Not JSON: shown as it came.
+            }
+            setAnswer({ status: response.status, body: pretty });
+        } catch {
+            setAnswer(null);
+            setFailure(`No answer from ${serverUrl}: start it with pnpm playground:server.`);
+        }
+    }
+
+    const meaning: Record<number, string> = {
+        200: 'Let through: the token is valid and the wallet has access.',
+        401: 'No valid token: sign in first.',
+        402: 'Signed in, but no access to the plan: subscribe first.',
+        503: 'Mesub could not be reached to check the token.',
+    };
+
+    return (
+        <section className="card">
+            <h2>Call my server</h2>
+            <p className="hint">
+                Sends your access token to <code>{serverUrl}/api/reports</code>, a route behind{' '}
+                <code>requirePlan</code> from <code>@mesub/node</code>.
+            </p>
+            <div className="actions" style={{ marginTop: 12 }}>
+                <button type="button" onClick={call}>
+                    GET /api/reports
+                </button>
+            </div>
+            {failure && (
+                <p className="alert" style={{ marginTop: 12 }}>
+                    {failure}
+                </p>
+            )}
+            {answer && (
+                <>
+                    <p className="hint" style={{ marginTop: 12 }}>
+                        <span className={`pill ${answer.status === 200 ? 'on' : 'off'}`}>
+                            {answer.status}
+                        </span>{' '}
+                        {meaning[answer.status] ?? ''}
+                    </p>
+                    <pre style={{ marginTop: 8 }}>{answer.body}</pre>
+                </>
+            )}
         </section>
     );
 }

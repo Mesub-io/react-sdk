@@ -10,7 +10,7 @@ import {
     withLock,
     writeTokenCookie,
 } from './session';
-import type { MesubSession } from './types';
+import type { MesubSession, MesubUser } from './types';
 
 const noop = () => undefined;
 
@@ -74,6 +74,18 @@ export class SessionKeeper {
     set(session: MesubSession | null): void {
         this.epoch++;
         this.apply(session);
+    }
+
+    /**
+     * Another wallet's access token, on the same refresh token. Not a new
+     * session: a refresh in flight is let through first, never discarded.
+     */
+    async switchAccess(user: MesubUser, accessToken: string): Promise<MesubSession | null> {
+        if (this.inflight) await this.inflight.catch(noop);
+        const current = this.session;
+        if (!current) return null;
+        this.apply({ ...current, user, accessToken });
+        return this.session;
     }
 
     /** One refresh at a time in this tab, and one per token across tabs. */

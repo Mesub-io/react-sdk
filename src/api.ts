@@ -2,6 +2,7 @@ import { MesubClientError } from './errors';
 import { createPlansApi, type PlansApi } from './plan-api';
 import { createSubscriptionsApi, type SubscriptionsApi } from './subscribe-api';
 import type { ClientSession, WalletProof } from './types';
+import { createWalletsApi, type WalletsApi } from './wallets-api';
 
 export const DEFAULT_API_URL = 'https://api.mesub.io';
 // Every call gives up after this, so a hung request never holds the refresh lock.
@@ -30,13 +31,15 @@ export interface MesubApi {
     subscriptions: SubscriptionsApi;
     // The checkout's summary, under /v1/client/plans.
     plans: PlansApi;
+    // The account's wallets on this project, under /v1/client/auth.
+    wallets: WalletsApi;
 }
 
 /** A POST under `prefix`, JSON in and out, with the key and an optional bearer. */
 export type Post = <T>(path: string, body: unknown, bearer?: string) => Promise<T>;
 
-/** A GET under `prefix`, with the key. */
-export type Get = <T>(path: string) => Promise<T>;
+/** A GET under `prefix`, with the key and an optional bearer. */
+export type Get = <T>(path: string, bearer?: string) => Promise<T>;
 
 export function createApiClient(options: ApiClientOptions): MesubApi {
     const post = createPost(options, '/v1/client/auth');
@@ -51,12 +54,13 @@ export function createApiClient(options: ApiClientOptions): MesubApi {
         logout: (refreshToken) => post('/logout', { refreshToken }),
         subscriptions: createSubscriptionsApi(createPost(options, '/v1/client/subscriptions')),
         plans: createPlansApi(createGet(options, '/v1/client/plans')),
+        wallets: createWalletsApi(createGet(options, '/v1/client/auth'), post),
     };
 }
 
 function createGet(options: ApiClientOptions, prefix: string): Get {
     const request = createRequest(options, prefix);
-    return (path) => request('GET', path, undefined);
+    return (path, bearer) => request('GET', path, undefined, bearer);
 }
 
 function createPost(options: ApiClientOptions, prefix: string): Post {

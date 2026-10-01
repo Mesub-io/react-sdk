@@ -5,7 +5,7 @@ import { useMesubInternal } from './context';
 import type { DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
 import { TIMING } from './timing';
-import type { MesubSession } from './types';
+import type { MesubSession, WalletProof } from './types';
 import { canSignIn, connectAccount, signText } from './wallet';
 
 const CODE_LENGTH = 6;
@@ -17,7 +17,7 @@ export interface SignInMerchant {
     logoUrl: string | null;
 }
 
-type WalletView =
+export type WalletView =
     | { name: 'list' }
     | { name: 'waiting'; wallet: UiWallet }
     | { name: 'rejected'; wallet: UiWallet; message: string }
@@ -172,12 +172,12 @@ export function useSignIn({
     if (step.name === 'wallet') {
         return walletScreen({
             titleId,
-            step,
+            view: step.view,
             wallets,
             setView: (view) => setStep({ ...step, view }),
             pick: (wallet) => void pickWallet(wallet, step),
             // The code is spent: back to the email, where a new one is sent.
-            toEmail: () => {
+            onBack: () => {
                 setCode('');
                 go({ name: 'email' });
             },
@@ -185,51 +185,20 @@ export function useSignIn({
     }
 
     async function pickWallet(wallet: UiWallet, current: Extract<Step, { name: 'wallet' }>) {
-        const view = (next: WalletView) => alive.current && setStep({ ...current, view: next });
-        const refused = (message: string) => view({ name: 'rejected', wallet, message });
-        view({ name: 'waiting', wallet });
-
-        // The wallet's part fails as a refusal, in its own words.
-        let account;
-        try {
-            account = await connectAccount(wallet);
-        } catch (refusal) {
-            refused(
-                `${wallet.name} said: ${refusal instanceof Error ? refusal.message : 'it did not connect.'}`,
-            );
-            return;
-        }
-        if (!account) {
-            refused(`${wallet.name} shared no Solana account.`);
-            return;
-        }
-        try {
-            const { message } = await api.walletChallenge(current.sessionToken, account.address);
-            let signature;
-            try {
-                signature = await signText(wallet, account, message);
-            } catch (refusal) {
-                refused(
-                    `${wallet.name} said: ${refusal instanceof Error ? refusal.message : String(refusal)}`,
-                );
-                return;
-            }
-            const proof = await api.proveWallet(current.sessionToken, {
-                address: account.address,
-                signature,
-            });
-            if (!alive.current) return;
-            rememberWallet(wallet.name);
-            onSignedIn({
-                user: proof.user,
-                refreshToken: current.refreshToken,
-                accessToken: proof.accessToken,
-            });
-        } catch (failure) {
-            const message = messageOf(failure);
-            const taken = failure instanceof MesubClientError && failure.status === 409;
-            view({ name: taken ? 'taken' : 'failed', wallet, message });
-        }
+        const proof = await proveOwnership(
+            wallet,
+            {
+                challenge: (address) => api.walletChallenge(current.sessionToken, address),
+                prove: (signed) => api.proveWallet(current.sessionToken, signed),
+            },
+            (next) => alive.current && setStep({ ...current, view: next }),
+        );
+        if (!proof || !alive.current) return;
+        onSignedIn({
+            user: proof.user,
+            refreshToken: current.refreshToken,
+            accessToken: proof.accessToken,
+        });
     }
 
     if (step.name === 'code') {
@@ -392,27 +361,84 @@ export function Merchant({
     );
 }
 
-function walletScreen({
+/**
+ * Connects the wallet, signs the challenge and proves it, showing each step
+ * through `view`. Null when the wallet refused or the API did, as shown.
+ */
+export async function proveOwnership(
+    wallet: UiWallet,
+    api: {
+        challenge(address: string): Promise<{ message: string }>;
+        prove(proof: { address: string; signature: string }): Promise<WalletProof>;
+    },
+    view: (next: WalletView) => void,
+): Promise<WalletProof | null> {
+    const refused = (message: string) => view({ name: 'rejected', wallet, message });
+    view({ name: 'waiting', wallet });
+
+    // The wallet's part fails as a refusal, in its own words.
+    let account;
+    try {
+        account = await connectAccount(wallet);
+    } catch (refusal) {
+        refused(
+            `${wallet.name} said: ${refusal instanceof Error ? refusal.message : 'it did not connect.'}`,
+        );
+        return null;
+    }
+    if (!account) {
+        refused(`${wallet.name} shared no Solana account.`);
+        return null;
+    }
+    try {
+        const { message } = await api.challenge(account.address);
+        let signature;
+        try {
+            signature = await signText(wallet, account, message);
+        } catch (refusal) {
+            refused(
+                `${wallet.name} said: ${refusal instanceof Error ? refusal.message : String(refusal)}`,
+            );
+            return null;
+        }
+        const proof = await api.prove({ address: account.address, signature });
+        rememberWallet(wallet.name);
+        return proof;
+    } catch (failure) {
+        const message = messageOf(failure);
+        const taken = failure instanceof MesubClientError && failure.status === 409;
+        view({ name: taken ? 'taken' : 'failed', wallet, message });
+        return null;
+    }
+}
+
+/** The wallet step: the installed wallets, then waiting on one, or its refusal. */
+export function walletScreen({
     titleId,
-    step,
+    view,
     wallets,
     setView,
     pick,
-    toEmail,
+    onBack,
+    title = 'Connect a wallet',
+    step = 'wallet',
 }: {
     titleId: string;
-    step: Extract<Step, { name: 'wallet' }>;
+    view: WalletView;
     wallets: UiWallet[];
     setView(view: WalletView): void;
     pick(wallet: UiWallet): void;
-    toEmail(): void;
+    // From the list, or with no wallet installed.
+    onBack(): void;
+    title?: string;
+    // The checkout keeps its own step, so the progress line stays put.
+    step?: string;
 }): DialogScreen {
-    const { view } = step;
     const toList = () => setView({ name: 'list' });
 
     if (view.name === 'waiting') {
         return {
-            step: 'wallet',
+            step,
             view: 'wallet-waiting',
             onBack: toList,
             body: (
@@ -438,7 +464,7 @@ function walletScreen({
               ? 'Could not connect'
               : 'Request rejected';
         return {
-            step: 'wallet',
+            step,
             view: `wallet-${view.name}`,
             onBack: toList,
             body: (
@@ -475,9 +501,9 @@ function walletScreen({
 
     if (wallets.length === 0) {
         return {
-            step: 'wallet',
+            step,
             view: 'wallet-none',
-            onBack: toEmail,
+            onBack,
             body: (
                 <>
                     <div data-mesub-hero="empty" aria-hidden="true" />
@@ -517,12 +543,12 @@ function walletScreen({
 
     const last = lastWallet();
     return {
-        step: 'wallet',
+        step,
         view: 'wallet-list',
-        onBack: toEmail,
+        onBack,
         body: (
             <>
-                <h2 id={titleId}>Connect a wallet</h2>
+                <h2 id={titleId}>{title}</h2>
                 <p>Sign a message to prove it is yours. It is free.</p>
                 <ul data-mesub-wallets="" aria-label="Wallets in this browser">
                     {wallets.map((wallet) => (

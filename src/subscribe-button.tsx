@@ -13,6 +13,7 @@ import { useMesub, useMesubInternal } from './context';
 import { MesubClientError, MesubSignInCancelledError } from './errors';
 import { explorerUrl, formatDate } from './format';
 import { WalletError, type SolanaChain } from './send-transaction';
+import { tokenWallet } from './session';
 import type { MesubSubscription } from './subscribe-api';
 import { NotSettledError, subscribeOnce } from './subscribe-flow';
 
@@ -93,8 +94,9 @@ export function useSubscribe(plan: string, options: UseSubscribeOptions = {}): U
             setError(null);
             setState('signing');
 
-            const address = signedIn.walletAddress;
             const token = await getAccessToken();
+            // The wallet this site pays from: the token's, which a switch may have changed.
+            const address = tokenWallet(token) ?? signedIn.walletAddress;
             if (!address || !token) {
                 fail('You are signed out. Sign in again.');
                 return null;

@@ -4,6 +4,7 @@ import { INSTALL_ICONS } from './brand';
 import { useMesubInternal } from './context';
 import type { DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
+import { hasWallet } from './session';
 import { TIMING } from './timing';
 import type { MesubSession, WalletProof } from './types';
 import { canSignIn, connectAccount, signText } from './wallet';
@@ -147,7 +148,7 @@ export function useSignIn({
             setVerified(false);
             const { user, refreshToken, accessToken } = session;
             // A returning subscriber: the wallet is already proved.
-            if (accessToken && user.walletAddress) {
+            if (hasWallet(user, accessToken)) {
                 onSignedIn({ user, refreshToken, accessToken });
                 return;
             }

@@ -9,7 +9,7 @@ import {
     type MesubTheme,
 } from './context';
 import { MesubClientError, MesubSignInCancelledError } from './errors';
-import { sessionWallet } from './session';
+import { hasWallet, sessionWallet } from './session';
 import { SignInModal } from './sign-in-modal';
 import type { MesubSession, MesubUser, WalletProof } from './types';
 import type { MesubWallet } from './wallets-api';
@@ -32,7 +32,7 @@ interface PendingSignIn {
 }
 
 function isSignedIn(session: MesubSession | null): session is MesubSession {
-    return session !== null && session.accessToken !== null && session.user.walletAddress !== null;
+    return session !== null && hasWallet(session.user, session.accessToken);
 }
 
 /** Keeps the session alive, exposes it through `useMesub()`, and renders the sign-in. */

@@ -241,6 +241,68 @@ describe('the wallet menu', () => {
     });
 });
 
+describe('connecting while the list is unknown', () => {
+    const connect = () =>
+        within(menu() as HTMLElement).getByRole('button', {
+            name: 'Connect another wallet',
+        }) as HTMLButtonElement;
+
+    it('holds Connect until the list is read, then warns about the plans held', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        let answer!: (response: Response) => void;
+        await review(holding(['Pro']), {
+            'GET /auth/wallets': () =>
+                new Promise<Response>((resolve) => {
+                    answer = resolve;
+                }),
+        });
+
+        fireEvent.click(change());
+        await waitFor(() => expect(answer).toBeDefined());
+        expect(connect().disabled).toBe(true);
+        fireEvent.click(connect());
+        expect(dialog().querySelector('[data-mesub-warning]')).toBeNull();
+        expect(
+            within(dialog()).queryByRole('heading', { name: 'Connect another wallet' }),
+        ).toBeNull();
+
+        await act(async () => answer(json(200, { wallets: holding(['Pro']) })));
+        await waitFor(() => expect(connect().disabled).toBe(false));
+        fireEvent.click(connect());
+        expect(dialog().querySelector('[data-mesub-warning]')!.textContent).toBe(
+            'Your Pro subscription will not be recognised on this site with the new wallet.',
+        );
+    });
+
+    it('warns in general terms when the list could not be read', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await review(free, { 'GET /auth/wallets': () => json(503, { message: 'Mesub is down.' }) });
+        fireEvent.click(change());
+        await waitFor(() => expect(connect().disabled).toBe(false));
+
+        fireEvent.click(connect());
+
+        expect(dialog().querySelector('[data-mesub-warning]')!.textContent).toBe(
+            'Any subscription this wallet pays for here will not be recognised on this site with the new wallet.',
+        );
+        expect(
+            within(dialog()).queryByRole('heading', { name: 'Connect another wallet' }),
+        ).toBeNull();
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Switch anyway' }));
+        await within(dialog()).findByRole('heading', { name: 'Connect another wallet' });
+    });
+
+    it('connects at once once the list says no plan is held', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await review();
+        await openMenu();
+
+        fireEvent.click(connect());
+
+        await within(dialog()).findByRole('heading', { name: 'Connect another wallet' });
+    });
+});
+
 describe('picking a linked wallet', () => {
     it('switches at once when the paying wallet holds no plan here, and signs nothing', async () => {
         const phantom = registerWallet({ name: 'Phantom', connected: true });
@@ -526,6 +588,112 @@ describe('connecting another wallet', () => {
 
         await within(dialog()).findByRole('button', { name: /Subscribe and pay/ });
         expect(state().wallet).toBe(W3);
+    });
+
+    it('shows the failure when the access token cannot be refreshed', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        const solflare = registerWallet({ name: 'Solflare', address: W3 });
+        const { fetch, state } = await toList(free, {
+            'POST /auth/refresh': () => Promise.reject(new TypeError('offline')),
+        });
+        // Past the token's expiry: the link has to refresh first.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.UTC(2101, 0, 1));
+        try {
+            fireEvent.click(within(dialog()).getByRole('button', { name: /Solflare/ }));
+
+            await within(dialog()).findByRole('heading', { name: 'Could not connect' });
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(within(dialog()).getByRole('alert').textContent).toBe(
+            'Could not reach the Mesub API',
+        );
+        expect(calls(fetch, 'POST /auth/refresh')).not.toHaveLength(0);
+        expect(calls(fetch, 'POST /auth/wallets/challenge')).toHaveLength(0);
+        expect(solflare.signMessage).not.toHaveBeenCalled();
+        expect(state().wallet).toBe(W1);
+    });
+
+    it('drops a refusal that arrives after backing out to the review', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        const solflare = registerWallet({ name: 'Solflare', address: W3 });
+        let refuse!: (error: Error) => void;
+        solflare.signMessage.mockImplementationOnce(
+            () =>
+                new Promise((_, reject) => {
+                    refuse = reject;
+                }),
+        );
+        const { state } = await toList();
+        fireEvent.click(within(dialog()).getByRole('button', { name: /Solflare/ }));
+        await within(dialog()).findByRole('heading', { name: 'Approve in Solflare' });
+        await waitFor(() => expect(solflare.signMessage).toHaveBeenCalled());
+
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Back' }));
+        fireEvent.click(await within(dialog()).findByRole('button', { name: 'Back' }));
+        await within(dialog()).findByRole('button', { name: /Subscribe and pay/ });
+        await act(async () => refuse(new Error('User rejected the request.')));
+
+        expect(within(dialog()).queryByRole('heading', { name: 'Request rejected' })).toBeNull();
+        expect(within(dialog()).getByRole('button', { name: /Subscribe and pay/ })).toBeTruthy();
+        expect(state().wallet).toBe(W1);
+    });
+
+    it('links nothing when the signature arrives after backing out', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        const solflare = registerWallet({ name: 'Solflare', address: W3 });
+        let sign!: () => void;
+        solflare.signMessage.mockImplementationOnce(
+            (...inputs) =>
+                new Promise((resolve) => {
+                    sign = () =>
+                        resolve(
+                            inputs.map((input) => ({
+                                signedMessage: input.message,
+                                signature: solflare.signature,
+                            })),
+                        );
+                }),
+        );
+        const { fetch, state } = await toList();
+        fireEvent.click(within(dialog()).getByRole('button', { name: /Solflare/ }));
+        await waitFor(() => expect(solflare.signMessage).toHaveBeenCalled());
+
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Back' }));
+        fireEvent.click(await within(dialog()).findByRole('button', { name: 'Back' }));
+        await within(dialog()).findByRole('button', { name: /Subscribe and pay/ });
+        await act(async () => sign());
+
+        expect(calls(fetch, 'POST /auth/wallets')).toHaveLength(0);
+        expect(state().wallet).toBe(W1);
+        expect(paysFrom()).toBe('Wa11…1111');
+        expect(within(dialog()).getByRole('button', { name: /Subscribe and pay/ })).toBeTruthy();
+    });
+
+    it('keeps only the wallet picked last', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        const solflare = registerWallet({ name: 'Solflare', address: W3 });
+        const ledger = registerWallet({ name: 'Ledger', address: W2 });
+        let refuse!: (error: Error) => void;
+        solflare.signMessage.mockImplementationOnce(
+            () =>
+                new Promise((_, reject) => {
+                    refuse = reject;
+                }),
+        );
+        const { state } = await toList();
+        fireEvent.click(within(dialog()).getByRole('button', { name: /Solflare/ }));
+        await waitFor(() => expect(solflare.signMessage).toHaveBeenCalled());
+
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Use another wallet' }));
+        fireEvent.click(await within(dialog()).findByRole('button', { name: /Ledger/ }));
+        await within(dialog()).findByRole('button', { name: /Subscribe and pay/ });
+        await act(async () => refuse(new Error('User rejected the request.')));
+
+        expect(ledger.signMessage).toHaveBeenCalledOnce();
+        expect(state().wallet).toBe(W2);
+        expect(within(dialog()).queryByRole('heading', { name: 'Request rejected' })).toBeNull();
     });
 
     it('links to wallets to install when none is, and Back returns to the review', async () => {

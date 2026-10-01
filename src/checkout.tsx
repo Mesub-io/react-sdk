@@ -188,6 +188,8 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
     const [connecting, setConnecting] = useState<WalletView | null>(null);
 
     const alive = useRef(true);
+    // Bumped on each wallet picked to link, and on leaving it.
+    const attempt = useRef(0);
     const latest = useRef({ wallets, onStage, onSubscribed });
     latest.current = { wallets, onStage, onSubscribed };
 
@@ -306,27 +308,49 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
     }
 
     async function link(picked: UiWallet) {
-        const token = await getAccessToken();
-        if (!alive.current) return;
-        if (!token) {
+        const id = ++attempt.current;
+        // Backed out, or another wallet picked since: this one's answer is dropped.
+        const current = () => alive.current && id === attempt.current;
+        try {
+            const token = await getAccessToken();
+            if (!current()) return;
+            if (!token) {
+                setConnecting(null);
+                setStage('signin');
+                return;
+            }
+            const proof = await proveOwnership(
+                picked,
+                {
+                    challenge: (account) => api.wallets.challenge(token, account),
+                    // Signed after backing out: nothing is linked.
+                    prove: (signed) =>
+                        current()
+                            ? api.wallets.link(token, signed)
+                            : Promise.reject(new Error('left')),
+                },
+                (view) => current() && setConnecting(view),
+            );
+            if (!proof || !current()) return;
+            await adoptWallet(proof);
+            if (!current()) return;
+            // The new wallet pays: the one found for the old one no longer does.
+            setSigner(null);
             setConnecting(null);
-            setStage('signin');
-            return;
+        } catch (error) {
+            if (!current()) return;
+            const message =
+                error instanceof MesubClientError
+                    ? error.message
+                    : 'Something went wrong. Try again.';
+            setConnecting({ name: 'failed', wallet: picked, message });
         }
-        const proof = await proveOwnership(
-            picked,
-            {
-                challenge: (account) => api.wallets.challenge(token, account),
-                prove: (signed) => api.wallets.link(token, signed),
-            },
-            (view) => alive.current && setConnecting(view),
-        );
-        if (!proof || !alive.current) return;
-        await adoptWallet(proof);
-        if (!alive.current) return;
-        // The new wallet pays: the one found for the old one no longer does.
-        setSigner(null);
-        setConnecting(null);
+    }
+
+    // Leaving the wallet being linked: its late answer must not land.
+    function setConnectingView(view: WalletView | null) {
+        if (view === null || view.name === 'list') attempt.current++;
+        setConnecting(view);
     }
 
     let screen: DialogScreen;
@@ -337,9 +361,9 @@ export function Checkout({ plan, chain, onClose, onStage, onSubscribed }: Checko
             titleId,
             view: connecting,
             wallets: wallets.filter(canSignIn),
-            setView: setConnecting,
+            setView: setConnectingView,
             pick: (picked) => void link(picked),
-            onBack: () => setConnecting(null),
+            onBack: () => setConnectingView(null),
             title: 'Connect another wallet',
             step: 'review',
         });

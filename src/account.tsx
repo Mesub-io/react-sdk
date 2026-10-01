@@ -55,6 +55,8 @@ export function Account({
 
     const current = wallets?.find((wallet) => wallet.address === address);
     const held = current?.plans ?? [];
+    // The list could not be read: the plans held are unknown, so warn anyway.
+    const unknown = wallets === null;
     const icon = installedWith(installed, address)?.icon;
 
     // After a refused switch, the refusal stays up while the list is read again.
@@ -101,7 +103,7 @@ export function Account({
     }
 
     function leave(next: Leaving) {
-        if (held.length > 0) {
+        if (held.length > 0 || unknown) {
             setLeaving(next);
             return;
         }
@@ -189,8 +191,9 @@ export function Account({
                     {leaving ? (
                         <div data-mesub-leaving="">
                             <p data-mesub-warning="" role="alert">
-                                Your {listOf(held)} {plural} will not be recognised on this site
-                                with the new wallet.
+                                {held.length > 0
+                                    ? `Your ${listOf(held)} ${plural} will not be recognised on this site with the new wallet.`
+                                    : 'Any subscription this wallet pays for here will not be recognised on this site with the new wallet.'}
                             </p>
                             <button type="button" data-mesub-confirm="" onClick={confirm}>
                                 Switch anyway
@@ -212,7 +215,7 @@ export function Account({
                     <button
                         type="button"
                         data-mesub-connect=""
-                        disabled={busy !== null}
+                        disabled={busy !== null || loading}
                         onClick={() => leave({ kind: 'connect' })}
                     >
                         Connect another wallet

@@ -260,6 +260,31 @@ describe('SessionKeeper.switchAccess', () => {
         expect(localStorage.getItem('mesub:session:PUB_1')).toBe('rt_2');
     });
 
+    it('signs out instead when another tab signed out meanwhile', async () => {
+        const auth = authServer();
+        const onChange = vi.fn();
+        const keeper = new SessionKeeper(
+            createApiClient({
+                publishableKey: 'PUB_1',
+                apiUrl: 'http://api.test',
+                fetch: auth.fetch,
+            }),
+            'PUB_1',
+            onChange,
+        );
+        const stop = keeper.start();
+        keeper.set({ user, ...auth.state.issue() });
+        localStorage.removeItem('mesub:session:PUB_1');
+
+        expect(await keeper.switchAccess(user, walletToken(W2))).toBeNull();
+        stop();
+
+        expect(keeper.session).toBeNull();
+        expect(localStorage.getItem('mesub:session:PUB_1')).toBeNull();
+        expect(localStorage.getItem('mesub:wallet:PUB_1')).toBeNull();
+        expect(onChange).toHaveBeenLastCalledWith(null);
+    });
+
     it('does nothing when signed out meanwhile', async () => {
         const auth = authServer();
         const onChange = vi.fn();

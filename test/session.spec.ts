@@ -2,6 +2,7 @@ import {
     COOKIE_NAME,
     TokenStore,
     expiresAt,
+    hasWallet,
     lockName,
     sessionWallet,
     storageKey,
@@ -50,6 +51,23 @@ describe('tokenWallet', () => {
         ['a payload that is not an object', `h.${Buffer.from('"W2"').toString('base64url')}.s`],
     ])('is null for %s', (_, token) => {
         expect(tokenWallet(token)).toBeNull();
+    });
+});
+
+describe('hasWallet', () => {
+    const unset = { ...user, walletAddress: null };
+
+    it("is true on a token carrying a wallet, even when the account's own is unset", () => {
+        expect(hasWallet(unset, walletToken('W2'))).toBe(true);
+    });
+
+    it("falls back to the account's wallet on a token without the claim", () => {
+        expect(hasWallet(user, jwt(NOW))).toBe(true);
+        expect(hasWallet(unset, jwt(NOW))).toBe(false);
+    });
+
+    it('is false without an access token', () => {
+        expect(hasWallet(user, null)).toBe(false);
     });
 });
 

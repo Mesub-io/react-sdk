@@ -1,5 +1,5 @@
 // Browser plumbing for the session: storage, the token cookie, the JWT expiry, the tab lock.
-import type { MesubSession } from './types';
+import type { MesubSession, MesubUser } from './types';
 
 // Refresh this long before the access token expires.
 export const REFRESH_MARGIN_MS = 60_000;
@@ -13,6 +13,11 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export function storageKey(publishableKey: string): string {
     return `mesub:session:${publishableKey}`;
+}
+
+// The paying wallet, written on a switch so other tabs pick it up.
+export function walletKey(publishableKey: string): string {
+    return `mesub:wallet:${publishableKey}`;
 }
 
 export function lockName(publishableKey: string): string {
@@ -130,6 +135,11 @@ export function withLock<T>(name: string, task: () => Promise<T>): Promise<T> {
     const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
     if (typeof locks?.request !== 'function') return task();
     return locks.request(name, task);
+}
+
+/** Signed in with a wallet: the token's claim, else the account's own for a token without it. */
+export function hasWallet(user: MesubUser, accessToken: string | null): accessToken is string {
+    return accessToken !== null && (tokenWallet(accessToken) ?? user.walletAddress) !== null;
 }
 
 /** Who pays: the token's wallet, else the account's own (a token without the claim). */

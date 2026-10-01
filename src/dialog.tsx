@@ -61,6 +61,17 @@ export function MesubDialog({
                 event.preventDefault();
                 onClose();
             }}
+            onClick={(event) => {
+                // The backdrop is the dialog itself: a click outside its box landed on it.
+                if (event.target !== event.currentTarget) return;
+                const box = event.currentTarget.getBoundingClientRect();
+                const inside =
+                    event.clientX >= box.left &&
+                    event.clientX <= box.right &&
+                    event.clientY >= box.top &&
+                    event.clientY <= box.bottom;
+                if (!inside) onClose();
+            }}
             onKeyDown={(event) => {
                 if (event.key === 'Escape') {
                     event.preventDefault();
@@ -79,8 +90,8 @@ export function MesubDialog({
             ) : null}
             <button type="button" data-mesub-close="" aria-label="Close" onClick={onClose} />
             <div data-mesub-brand="">
-                <MesubMark width={18} height={12} />
-                Mesub
+                <MesubMark width={27} height={18} />
+                mesub.io
             </div>
             <Fragment key={screen.view}>{screen.body}</Fragment>
         </dialog>

@@ -414,7 +414,7 @@ describe('paying', () => {
         await waitFor(() => expect(step()).toBe('subscribed'));
 
         const manage = dialog().querySelector('a[data-mesub-manage]')!;
-        expect(manage.textContent).toBe('See details on Mesub');
+        expect(manage.textContent).toBe('See details on mesub.io');
         expect(manage.getAttribute('href')).toBe('https://mesub.io/subscriptions');
         expect(manage.getAttribute('target')).toBe('_blank');
         expect(manage.querySelector('svg')).not.toBeNull();
@@ -429,6 +429,63 @@ describe('paying', () => {
         await waitFor(() => expect(step()).toBe('subscribed'));
 
         expect(fake.disconnect).not.toHaveBeenCalled();
+    });
+});
+
+describe('going back', () => {
+    it('goes back from approve to the review', async () => {
+        const fake = registerWallet({ name: 'Phantom', connected: true });
+        fake.signAndSendTransaction.mockImplementation(() => new Promise(() => undefined));
+        await setup();
+        await openReview();
+        pay();
+        await waitFor(() => expect(step()).toBe('approve'));
+
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Back' }));
+
+        expect(step()).toBe('review');
+    });
+
+    it('goes back from an error to the review through the icon', async () => {
+        const fake = registerWallet({ name: 'Phantom', connected: true });
+        fake.signAndSendTransaction.mockRejectedValueOnce(new Error('User rejected the request.'));
+        await setup();
+        await openReview();
+        pay();
+        await waitFor(() => expect(heading()).toBe('Not approved'));
+
+        const back = dialog().querySelector<HTMLElement>('[data-mesub-back]:empty')!;
+        expect(dialog().firstElementChild).toBe(back);
+        fireEvent.click(back);
+
+        expect(step()).toBe('review');
+    });
+
+    // A payment may still land: going back could pay twice.
+    it('offers no way back while a payment may be pending', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await setup({
+            overrides: {
+                'POST /subscriptions/sub_1/confirm': () => {
+                    throw new TypeError('Failed to fetch');
+                },
+            },
+        });
+        await openReview();
+        pay();
+        await waitFor(() => expect(heading()).toBe('Still confirming'));
+
+        expect(dialog().querySelector('[data-mesub-back]')).toBeNull();
+    });
+
+    it('offers no way back once subscribed', async () => {
+        registerWallet({ name: 'Phantom', connected: true });
+        await setup();
+        await openReview();
+        pay();
+        await waitFor(() => expect(step()).toBe('subscribed'));
+
+        expect(dialog().querySelector('[data-mesub-back]')).toBeNull();
     });
 });
 

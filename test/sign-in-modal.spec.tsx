@@ -169,7 +169,7 @@ describe('opening', () => {
         expect(close!.getAttribute('aria-label')).toBe('Close');
         expect(close!.childNodes).toHaveLength(0);
         expect(brand!.hasAttribute('data-mesub-brand')).toBe(true);
-        expect(brand!.textContent).toBe('Mesub');
+        expect(brand!.textContent).toBe('mesub.io');
         expect(brand!.querySelector('svg')).not.toBeNull();
     });
 
@@ -281,7 +281,10 @@ describe('the code step', () => {
         setup();
         await toCode();
 
-        expect(slots()).toEqual(['active', 'empty', 'empty', 'empty', 'empty', 'empty']);
+        // 'active' follows the focus, which moves in an effect.
+        await waitFor(() =>
+            expect(slots()).toEqual(['active', 'empty', 'empty', 'empty', 'empty', 'empty']),
+        );
         type('6-digit code', '48');
 
         expect(slots()).toEqual(['filled', 'filled', 'active', 'empty', 'empty', 'empty']);
@@ -494,13 +497,20 @@ describe('the wallet step', () => {
         await waitFor(() => expect(document.activeElement).toBe(within(list).getByRole('button')));
     });
 
-    // The code is spent: there is nothing to go back to.
-    it('has no back icon on the list', async () => {
+    // The code is spent: back means the email again, and a new code.
+    it('goes back from the list to the email, the code spent', async () => {
         registerWallet({ name: 'Phantom' });
-        setup();
+        const { fetch } = setup();
         await toWallet();
 
-        expect(dialog().querySelector('[data-mesub-back]')).toBeNull();
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'Back' }));
+
+        expect(step()).toBe('email');
+        expect(screen.getByLabelText('Email')).toHaveProperty('value', 'ada@example.com');
+        click('Send me a code');
+        await waitFor(() => expect(step()).toBe('code'));
+        expect(calls(fetch, '/code')).toHaveLength(2);
+        expect(screen.getByLabelText('6-digit code')).toHaveProperty('value', '');
     });
 
     it('offers to install a wallet when none is there', async () => {
@@ -785,6 +795,26 @@ describe('closing', () => {
 
         await expect(login).rejects.toBeInstanceOf(MesubSignInCancelledError);
         expect(queryDialog()).toBeNull();
+    });
+
+    it('rejects login() on a click on the backdrop', async () => {
+        const { login } = setup();
+        dialog().getBoundingClientRect = () => new DOMRect(100, 100, 300, 300);
+
+        fireEvent.click(dialog(), { clientX: 20, clientY: 20 });
+
+        await expect(login).rejects.toBeInstanceOf(MesubSignInCancelledError);
+        expect(queryDialog()).toBeNull();
+    });
+
+    it('stays open on a click inside it, its padding included', () => {
+        setup();
+        dialog().getBoundingClientRect = () => new DOMRect(100, 100, 300, 300);
+
+        fireEvent.click(dialog(), { clientX: 105, clientY: 105 });
+        fireEvent.click(screen.getByLabelText('Email'), { clientX: 20, clientY: 20 });
+
+        expect(queryDialog()).not.toBeNull();
     });
 
     it("rejects login() on the browser's own cancel", async () => {

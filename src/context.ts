@@ -25,7 +25,11 @@ export interface MesubInternal {
     cancelSignIn(): void;
     // Replaces and persists the session, without touching a sign-in in progress.
     setSession(session: MesubSession | null): void;
+    // Set on the dialog as data-mesub-theme; undefined leaves it to an ancestor.
+    theme: MesubTheme | undefined;
 }
+
+export type MesubTheme = 'light' | 'dark' | 'auto';
 
 export const MesubContext = createContext<MesubState | null>(null);
 export const MesubInternalContext = createContext<MesubInternal | null>(null);

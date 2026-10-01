@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { MesubProvider, SubscribeButton, useMesub, type MesubSubscription } from '@mesub/react';
 
+import '@mesub/react/styles.css';
 import './style.css';
 
 const publishableKey = import.meta.env['VITE_MESUB_PUBLISHABLE_KEY'] ?? '';

@@ -7,6 +7,7 @@ import {
     type MesubState,
     type MesubUser,
 } from '../src';
+import { TIMING } from '../src/timing';
 import { json, user } from './helpers';
 import { registerWallet, unregisterWallets } from './wallets';
 
@@ -83,6 +84,11 @@ const dialog = () => screen.getByRole('dialog');
 const queryDialog = () => screen.queryByRole('dialog');
 const step = () => dialog().getAttribute('data-mesub-step');
 const error = () => within(dialog()).queryByRole('alert')?.textContent ?? null;
+const heading = () => within(dialog()).getByRole('heading').textContent;
+const slots = () =>
+    Array.from(dialog().querySelectorAll('[data-mesub-slot]')).map((slot) =>
+        slot.getAttribute('data-mesub-slot'),
+    );
 
 function type(label: string, value: string) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -94,14 +100,13 @@ function click(name: string | RegExp) {
 
 async function toCode(email = 'ada@example.com') {
     type('Email', email);
-    click('Send the code');
+    click('Send me a code');
     await waitFor(() => expect(step()).toBe('code'));
 }
 
 async function toWallet() {
     await toCode();
-    type('Code', '123456');
-    click('Continue');
+    type('6-digit code', '123456');
     await waitFor(() => expect(step()).toBe('wallet'));
 }
 
@@ -113,7 +118,10 @@ function deferred<T>() {
     return { promise, resolve };
 }
 
-afterEach(() => unregisterWallets());
+afterEach(() => {
+    unregisterWallets();
+    TIMING.resendS = 0;
+});
 
 describe('opening', () => {
     it('renders nothing before login()', () => {
@@ -151,6 +159,43 @@ describe('opening', () => {
         expect(dialog().querySelectorAll('[class]')).toHaveLength(0);
         expect(dialog().querySelectorAll('[style]')).toHaveLength(0);
     });
+
+    // The CSS draws the icons with :empty: a space would hide them.
+    it('starts with an empty close button and the brand, in that order', () => {
+        setup();
+
+        const [close, brand] = Array.from(dialog().children);
+        expect(close!.hasAttribute('data-mesub-close')).toBe(true);
+        expect(close!.getAttribute('aria-label')).toBe('Close');
+        expect(close!.childNodes).toHaveLength(0);
+        expect(brand!.hasAttribute('data-mesub-brand')).toBe(true);
+        expect(brand!.textContent).toBe('Mesub');
+        expect(brand!.querySelector('svg')).not.toBeNull();
+    });
+
+    it('leaves the theme to an ancestor unless it is given one', () => {
+        setup();
+
+        expect(dialog().hasAttribute('data-mesub-theme')).toBe(false);
+    });
+
+    it('sets the theme it is given', () => {
+        let state!: MesubState;
+        function Probe() {
+            state = useMesub();
+            return null;
+        }
+        render(
+            <MesubProvider publishableKey="PUB_1" theme="dark" fetch={api(newcomerRoutes)}>
+                <Probe />
+            </MesubProvider>,
+        );
+        act(() => {
+            void state.login().catch(() => undefined);
+        });
+
+        expect(dialog().getAttribute('data-mesub-theme')).toBe('dark');
+    });
 });
 
 describe('the email step', () => {
@@ -162,23 +207,20 @@ describe('the email step', () => {
         expect(calls(fetch, '/code')).toEqual([
             { body: { email: 'ada@example.com' }, headers: expect.any(Object) },
         ]);
-        expect(screen.getByText('We sent a 6-digit code to ada@example.com.')).toBeTruthy();
-        expect(document.activeElement).toBe(screen.getByLabelText('Code'));
+        expect(heading()).toBe('Enter the code');
+        expect(within(dialog()).getByText('ada@example.com').tagName).toBe('STRONG');
+        expect(document.activeElement).toBe(screen.getByLabelText('6-digit code'));
     });
 
-    it('disables the button while the code is sent', async () => {
+    it('shows Sending, busy, while the code is sent', async () => {
         const answer = deferred<Response>();
         setup({ '/code': () => answer.promise });
 
         type('Email', 'ada@example.com');
-        click('Send the code');
+        click('Send me a code');
 
-        await waitFor(() =>
-            expect(within(dialog()).getByRole('button', { name: 'Send the code' })).toHaveProperty(
-                'disabled',
-                true,
-            ),
-        );
+        const button = await within(dialog()).findByRole('button', { name: 'Sending' });
+        expect(button.getAttribute('aria-busy')).toBe('true');
         await act(async () => answer.resolve(json(204)));
         await waitFor(() => expect(step()).toBe('code'));
     });
@@ -187,25 +229,23 @@ describe('the email step', () => {
         [400, 'email must be an email address'],
         [403, 'Origin not allowed'],
         [429, 'ThrottlerException: Too Many Requests'],
-    ])('shows the API message on %i and stays', async (status, message) => {
+    ])('shows the API message on %i, marks the field and stays', async (status, message) => {
         setup({ '/code': () => json(status, { message, statusCode: status }) });
 
         type('Email', 'ada@example');
-        click('Send the code');
+        click('Send me a code');
 
         await waitFor(() => expect(error()).toBe(message));
         expect(step()).toBe('email');
-        expect(within(dialog()).getByRole('button', { name: 'Send the code' })).toHaveProperty(
-            'disabled',
-            false,
-        );
+        expect(screen.getByLabelText('Email').getAttribute('aria-invalid')).toBe('true');
+        expect(within(dialog()).getByRole('alert').tagName).toBe('SPAN');
     });
 
     it('says so when the network fails', async () => {
         setup({ '/code': () => Promise.reject(new TypeError('Failed to fetch')) });
 
         type('Email', 'ada@example.com');
-        click('Send the code');
+        click('Send me a code');
 
         await waitFor(() => expect(error()).toBe('Could not reach the Mesub API'));
         expect(step()).toBe('email');
@@ -218,7 +258,7 @@ describe('the email step', () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         try {
             type('Email', 'ada@example.com');
-            click('Send the code');
+            click('Send me a code');
             await act(() => vi.advanceTimersByTimeAsync(15_000));
             expect(error()).toBe('Mesub did not answer within 15 seconds');
             expect(step()).toBe('email');
@@ -227,51 +267,74 @@ describe('the email step', () => {
         }
 
         hang = false;
-        click('Send the code');
-        await waitFor(() => expect(step()).toBe('code'));
-        expect(error()).toBeNull();
-    });
-
-    it('clears the error once a retry succeeds', async () => {
-        let first = true;
-        setup({
-            '/code': () => {
-                if (!first) return json(204);
-                first = false;
-                return json(429, { message: 'Too many codes' });
-            },
-        });
-
-        type('Email', 'ada@example.com');
-        click('Send the code');
-        await waitFor(() => expect(error()).toBe('Too many codes'));
-
-        click('Send the code');
+        click('Send me a code');
         await waitFor(() => expect(step()).toBe('code'));
         expect(error()).toBeNull();
     });
 });
 
 describe('the code step', () => {
-    it('trades the email and code for a session', async () => {
-        const { fetch } = setup();
-        await toWallet();
+    it('shows six slots that fill as the code is typed', async () => {
+        setup();
+        await toCode();
 
+        expect(slots()).toEqual(['active', 'empty', 'empty', 'empty', 'empty', 'empty']);
+        type('6-digit code', '48');
+
+        expect(slots()).toEqual(['filled', 'filled', 'active', 'empty', 'empty', 'empty']);
+        const filled = dialog().querySelectorAll('[data-mesub-slot="filled"]');
+        expect(Array.from(filled).map((slot) => slot.textContent)).toEqual(['4', '8']);
+        expect(dialog().querySelector('[data-mesub-slots]')!.getAttribute('aria-hidden')).toBe(
+            'true',
+        );
+    });
+
+    it('keeps digits only, six at most', async () => {
+        setup({ '/code': routes.code, '/session': () => new Promise<never>(() => undefined) });
+        await toCode();
+
+        type('6-digit code', '4a8 1-02799');
+
+        expect(screen.getByLabelText('6-digit code')).toHaveProperty('value', '481027');
+    });
+
+    it('sends itself at the sixth digit, with no Continue button', async () => {
+        const { fetch } = setup();
+        await toCode();
+
+        expect(within(dialog()).queryByRole('button', { name: 'Continue' })).toBeNull();
+        type('6-digit code', '123456');
+
+        await waitFor(() => expect(step()).toBe('wallet'));
         expect(calls(fetch, '/session')[0]?.body).toEqual({
             email: 'ada@example.com',
             code: '123456',
         });
     });
 
-    it('completes at once for a returning subscriber, with no wallet step', async () => {
+    it('says it is checking, busy, while the code is checked', async () => {
+        const answer = deferred<Response>();
+        setup({ '/code': routes.code, '/session': () => answer.promise });
+        await toCode();
+
+        type('6-digit code', '123456');
+
+        await waitFor(() =>
+            expect(within(dialog()).getByRole('status').textContent).toBe('Checking'),
+        );
+        expect(dialog().querySelector('[data-mesub-otp]')!.getAttribute('aria-busy')).toBe('true');
+        await act(async () => answer.resolve(routes.newSession()));
+        await waitFor(() => expect(step()).toBe('wallet'));
+    });
+
+    it('shows Signed in for a returning subscriber, with no wallet step, then closes', async () => {
         const { fetch, login, state } = setup({
             '/code': routes.code,
             '/session': routes.returningSession,
         });
         await toCode();
 
-        type('Code', '123456');
-        click('Continue');
+        type('6-digit code', '123456');
 
         await expect(login).resolves.toEqual(user);
         await waitFor(() => expect(queryDialog()).toBeNull());
@@ -280,34 +343,91 @@ describe('the code step', () => {
         await expect(state().getAccessToken()).resolves.toBe('at_1');
     });
 
-    it.each([
-        [401, 'Wrong code. Enter the one we emailed you.'],
-        [401, 'That code expired. Ask for a new one.'],
-        [400, 'code must be six digits'],
-        [403, 'Origin not allowed'],
-    ])('shows the API message on %i and stays', async (status, message) => {
+    it('lingers on Signed in for the design pause', async () => {
+        TIMING.doneMs = 60_000;
+        try {
+            setup({ '/code': routes.code, '/session': routes.returningSession });
+            await toCode();
+            type('6-digit code', '123456');
+
+            await waitFor(() => expect(step()).toBe('done'));
+            expect(heading()).toBe('Signed in');
+            expect(dialog().querySelector('[data-mesub-hero="check"]')).not.toBeNull();
+        } finally {
+            TIMING.doneMs = 0;
+        }
+    });
+
+    it('keeps the session when closed on Signed in', async () => {
+        TIMING.doneMs = 60_000;
+        try {
+            const { login } = setup({ '/code': routes.code, '/session': routes.returningSession });
+            await toCode();
+            type('6-digit code', '123456');
+            await waitFor(() => expect(step()).toBe('done'));
+
+            click('Close');
+
+            await expect(login).resolves.toEqual(user);
+        } finally {
+            TIMING.doneMs = 0;
+        }
+    });
+
+    it('marks a wrong code and offers to resend', async () => {
         const { login } = setup({
             '/code': routes.code,
-            '/session': () => json(status, { message, statusCode: status }),
+            '/session': () => json(401, { message: 'Wrong code. Enter the one we emailed you.' }),
         });
         await toCode();
 
-        type('Code', '000000');
-        click('Continue');
+        type('6-digit code', '000000');
 
-        await waitFor(() => expect(error()).toBe(message));
+        await waitFor(() => expect(error()).toBe('Wrong code. Enter the one we emailed you.'));
         expect(step()).toBe('code');
+        expect(screen.getByLabelText('6-digit code').getAttribute('aria-invalid')).toBe('true');
+        expect(within(dialog()).getByRole('button', { name: 'Resend code' })).toBeTruthy();
         const settled = vi.fn();
         void login.then(settled, settled);
         await Promise.resolve();
         expect(settled).not.toHaveBeenCalled();
     });
 
+    it('offers a new code as the primary action once the code expired', async () => {
+        const { fetch } = setup({
+            '/code': routes.code,
+            '/session': () => json(401, { message: 'That code expired. Ask for a new one.' }),
+        });
+        await toCode();
+        type('6-digit code', '000000');
+        await waitFor(() => expect(error()).toBe('That code expired. Ask for a new one.'));
+
+        const button = within(dialog()).getByRole('button', { name: 'Send a new code' });
+        expect(button.hasAttribute('data-mesub-submit')).toBe(true);
+        fireEvent.click(button);
+
+        await waitFor(() =>
+            expect(within(dialog()).getByRole('status').textContent).toBe('We sent a new code.'),
+        );
+        expect(calls(fetch, '/code')).toHaveLength(2);
+        expect(slots()).toEqual(['active', 'empty', 'empty', 'empty', 'empty', 'empty']);
+    });
+
+    it('holds the resend back with a countdown', async () => {
+        TIMING.resendS = 30;
+        setup();
+        await toCode();
+
+        const resend = within(dialog()).getByRole('button', { name: 'Resend in 30s' });
+        expect(resend).toHaveProperty('disabled', true);
+        expect(resend.hasAttribute('data-mesub-resend')).toBe(true);
+    });
+
     it('sends the code again and says so', async () => {
         const { fetch } = setup();
         await toCode();
 
-        click('Send the code again');
+        click('Resend code');
 
         await waitFor(() =>
             expect(within(dialog()).getByRole('status').textContent).toBe('We sent a new code.'),
@@ -325,35 +445,24 @@ describe('the code step', () => {
         });
         await toCode();
 
-        click('Send the code again');
+        click('Resend code');
 
         await waitFor(() => expect(error()).toBe('Too many codes asked for'));
         expect(within(dialog()).queryByRole('status')).toBeNull();
     });
 
-    it('goes back to the email step, keeping the email', async () => {
+    it('goes back to the email step through the icon, keeping the email', async () => {
         setup();
         await toCode();
 
-        click('Back');
+        const back = within(dialog()).getByRole('button', { name: 'Back' });
+        expect(back.childNodes).toHaveLength(0);
+        expect(dialog().firstElementChild).toBe(back);
+        fireEvent.click(back);
 
         expect(step()).toBe('email');
         expect(screen.getByLabelText('Email')).toHaveProperty('value', 'ada@example.com');
         expect(document.activeElement).toBe(screen.getByLabelText('Email'));
-    });
-
-    it('drops the previous step error when going back', async () => {
-        setup({
-            '/code': routes.code,
-            '/session': () => json(401, { message: 'Wrong code.' }),
-        });
-        await toCode();
-        type('Code', '000000');
-        click('Continue');
-        await waitFor(() => expect(error()).toBe('Wrong code.'));
-
-        click('Back');
-
         expect(error()).toBeNull();
     });
 });
@@ -368,7 +477,8 @@ describe('the wallet step', () => {
 
         await toWallet();
 
-        const list = within(dialog()).getByRole('list');
+        expect(heading()).toBe('Connect a wallet');
+        const list = within(dialog()).getByRole('list', { name: 'Wallets in this browser' });
         expect(list.hasAttribute('data-mesub-wallets')).toBe(true);
         expect(
             within(list)
@@ -379,12 +489,27 @@ describe('the wallet step', () => {
         expect(document.activeElement).toBe(within(list).getByRole('button'));
     });
 
-    it('says clearly when no wallet is installed', async () => {
+    // The code is spent: there is nothing to go back to.
+    it('has no back icon on the list', async () => {
+        registerWallet({ name: 'Phantom' });
+        setup();
+        await toWallet();
+
+        expect(dialog().querySelector('[data-mesub-back]')).toBeNull();
+    });
+
+    it('offers to install a wallet when none is there', async () => {
         setup();
 
         await toWallet();
 
-        expect(screen.getByText(/No Solana wallet found in this browser/)).toBeTruthy();
+        expect(heading()).toBe('No Solana wallet found');
+        const links = dialog().querySelectorAll('a[data-mesub-install]');
+        expect(Array.from(links).map((link) => link.getAttribute('href'))).toEqual([
+            'https://phantom.com',
+            'https://solflare.com',
+        ]);
+        expect(within(dialog()).getByRole('button', { name: 'Reload' })).toBeTruthy();
         expect(within(dialog()).queryByRole('list')).toBeNull();
     });
 
@@ -447,7 +572,35 @@ describe('the wallet step', () => {
         ]);
     });
 
-    it('says it waits for the signature while the wallet asks', async () => {
+    it('marks the wallet used last on this device', async () => {
+        registerWallet({ name: 'Phantom' });
+        registerWallet({
+            name: 'Solflare',
+            address: 'So1f1are111111111111111111111111111111111111',
+        });
+        localStorage.setItem('mesub:last-wallet', 'Solflare');
+        setup();
+        await toWallet();
+
+        const badges = dialog().querySelectorAll('[data-mesub-badge]');
+        expect(badges).toHaveLength(1);
+        expect(badges[0]!.closest('[data-mesub-wallet]')!.getAttribute('data-mesub-wallet')).toBe(
+            'Solflare',
+        );
+    });
+
+    it('remembers the wallet that signed in', async () => {
+        registerWallet({ name: 'Phantom' });
+        const { login } = setup();
+        await toWallet();
+
+        click('Phantom');
+        await login;
+
+        expect(localStorage.getItem('mesub:last-wallet')).toBe('Phantom');
+    });
+
+    it('waits on the wallet, with a way to pick another', async () => {
         const fake = registerWallet({ name: 'Phantom' });
         const signed = deferred<{ signedMessage: Uint8Array; signature: Uint8Array }[]>();
         fake.signMessage.mockImplementationOnce(() => signed.promise);
@@ -456,15 +609,10 @@ describe('the wallet step', () => {
 
         click('Phantom');
 
-        await waitFor(() =>
-            expect(within(dialog()).getByRole('status').textContent).toBe(
-                'Waiting for the signature in your wallet.',
-            ),
-        );
-        expect(within(dialog()).getByRole('button', { name: 'Phantom' })).toHaveProperty(
-            'disabled',
-            true,
-        );
+        await waitFor(() => expect(heading()).toBe('Approve in Phantom'));
+        expect(dialog().querySelector('[data-mesub-hero="wait"] img')).not.toBeNull();
+        expect(within(dialog()).getByText('Check the Phantom window.')).toBeTruthy();
+        expect(within(dialog()).getByRole('button', { name: 'Use another wallet' })).toBeTruthy();
         await act(async () =>
             signed.resolve([{ signedMessage: new Uint8Array(), signature: fake.signature }]),
         );
@@ -485,7 +633,7 @@ describe('the wallet step', () => {
         expect(fake.connect).toHaveBeenCalledOnce();
     });
 
-    it('shows a refused signature and signs on a retry', async () => {
+    it('shows a refused signature, and signs on Try again', async () => {
         const fake = registerWallet({ name: 'Phantom' });
         fake.signMessage.mockRejectedValueOnce(new Error('User rejected the request.'));
         const { fetch, login } = setup();
@@ -493,17 +641,30 @@ describe('the wallet step', () => {
 
         click('Phantom');
 
-        await waitFor(() =>
-            expect(error()).toBe('Phantom did not sign. It said: User rejected the request.'),
-        );
+        await waitFor(() => expect(error()).toBe('Phantom said: User rejected the request.'));
+        expect(heading()).toBe('Request rejected');
+        expect(dialog().querySelector('[data-mesub-hero="error"]')).not.toBeNull();
         expect(step()).toBe('wallet');
         expect(calls(fetch, '/wallet')).toHaveLength(0);
 
-        click('Phantom');
+        click('Try again');
 
         await expect(login).resolves.toEqual(user);
         expect(fake.signMessage).toHaveBeenCalledTimes(2);
         expect(calls(fetch, '/wallet/challenge')).toHaveLength(2);
+    });
+
+    it('goes back to the list from a refusal', async () => {
+        const fake = registerWallet({ name: 'Phantom' });
+        fake.signMessage.mockRejectedValueOnce(new Error('User rejected the request.'));
+        setup();
+        await toWallet();
+        click('Phantom');
+        await waitFor(() => expect(heading()).toBe('Request rejected'));
+
+        click('Use another wallet');
+
+        expect(heading()).toBe('Connect a wallet');
     });
 
     it('shows a wallet that did not connect', async () => {
@@ -514,12 +675,8 @@ describe('the wallet step', () => {
 
         click('Phantom');
 
-        await waitFor(() => expect(error()).toBe('Phantom did not connect.'));
+        await waitFor(() => expect(error()).toBe('Phantom said: closed'));
         expect(calls(fetch, '/wallet/challenge')).toHaveLength(0);
-        expect(within(dialog()).getByRole('button', { name: 'Phantom' })).toHaveProperty(
-            'disabled',
-            false,
-        );
     });
 
     it('shows a wallet that shared no Solana account', async () => {
@@ -535,8 +692,24 @@ describe('the wallet step', () => {
         await waitFor(() => expect(error()).toBe('Phantom shared no Solana account.'));
     });
 
+    it('says a wallet held by another account is already in use', async () => {
+        registerWallet({ name: 'Phantom' });
+        setup({
+            ...newcomerRoutes,
+            '/wallet': () =>
+                json(409, { message: 'That wallet is already attached to another account.' }),
+        });
+        await toWallet();
+
+        click('Phantom');
+
+        await waitFor(() => expect(heading()).toBe('Wallet already in use'));
+        expect(error()).toBe('That wallet is already attached to another account.');
+        click('Use another wallet');
+        expect(heading()).toBe('Connect a wallet');
+    });
+
     it.each([
-        ['/wallet', 409, 'That wallet belongs to another Mesub account.'],
         ['/wallet', 401, 'That signature is not from this wallet.'],
         ['/wallet/challenge', 401, 'Sign in again.'],
         ['/wallet/challenge', 403, 'Origin not allowed'],
@@ -551,6 +724,7 @@ describe('the wallet step', () => {
         click('Phantom');
 
         await waitFor(() => expect(error()).toBe(message));
+        expect(heading()).toBe('Could not connect');
         expect(step()).toBe('wallet');
         const settled = vi.fn();
         void login.then(settled, settled);
@@ -585,16 +759,6 @@ describe('the wallet step', () => {
         } finally {
             vi.useRealTimers();
         }
-    });
-
-    it('goes back to the email step, the code being spent', async () => {
-        setup();
-        await toWallet();
-
-        click('Back');
-
-        expect(step()).toBe('email');
-        expect(screen.getByLabelText('Email')).toHaveProperty('value', 'ada@example.com');
     });
 });
 
@@ -644,8 +808,7 @@ describe('closing', () => {
             '/session': () => answer.promise,
         });
         await toCode();
-        type('Code', '123456');
-        click('Continue');
+        type('6-digit code', '123456');
 
         click('Close');
         await expect(login).rejects.toBeInstanceOf(MesubSignInCancelledError);

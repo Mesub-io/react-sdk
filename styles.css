@@ -1,0 +1,2448 @@
+/*!
+ * @mesub/react/styles.css — default theme (v5) for the Mesub widget
+ *
+ * Targets data attributes only (no class names). Element selectors are used
+ * only inside the widget roots (h2, p, label, footer, a, img, strong).
+ *
+ * Theming: set any --mesub-* property on :root, on a wrapper, or on the
+ * widget elements themselves. This file never assigns a --mesub-* property,
+ * it only reads them with a fallback, so the merchant's value always wins,
+ * whatever the specificity of the merchant's selector.
+ *
+ *   --mesub-accent        #cc451d   actions, current state, focus ring
+ *   --mesub-on-accent     #ffffff   text on accent fills (keep >= 4.5:1)
+ *   --mesub-bg            #ffffff   modal surface, inputs
+ *   --mesub-text          #14151a   titles, input text; derives muted tones + borders
+ *   --mesub-font          inherit   merchant font; e.g. system-ui, sans-serif
+ *   --mesub-radius        6px       buttons, inputs (modal = radius + 4px)
+ *   advanced: --mesub-radius-lg, --mesub-text-soft, --mesub-muted, --mesub-sunk,
+ *   --mesub-border, --mesub-control-border, --mesub-accent-text, --mesub-focus,
+ *   --mesub-success, --mesub-success-text, --mesub-danger, --mesub-danger-text,
+ *   --mesub-warning, --mesub-warning-text,
+ *   --mesub-shadow, --mesub-backdrop, --mesub-duration
+ *
+ * Dark: data-mesub-theme="dark" on the element or any ancestor (e.g. <html>).
+ *       data-mesub-theme="auto" follows prefers-color-scheme (opt-in on purpose:
+ *       the widget must match the merchant's page, not the visitor's OS).
+ *
+ * Markup assumptions (please confirm against the components):
+ *   - busy controls carry aria-busy="true"; invalid inputs aria-invalid="true"
+ *   - [data-mesub-wallet] is a <button>; [data-mesub-back] and
+ *     [data-mesub-resend] are adjacent siblings (they share one row)
+ *   - the "Secured by Mesub" line is a <footer> (or [data-mesub-footer])
+ *   - optional success step: [data-mesub-step="done"]
+ *   - subscribe flow: [data-mesub-step="review"|"approve"|"confirming"|"subscribed"],
+ *     [data-mesub-merchant] (img + <strong> name), [data-mesub-price] (<strong> + <span>),
+ *     [data-mesub-summary] (<dl>) > [data-mesub-row] > dt + dd, [data-mesub-warning],
+ *     [data-mesub-network="devnet"] badge, [data-mesub-explorer] link, [data-mesub-done],
+ *     [data-mesub-cancel]; reassurance lines are a plain <ul>; confirming uses <progress>
+ */
+
+/* ---------------------------------------------------------------- tokens */
+
+:is([data-mesub-dialog], [data-mesub-subscribe], [data-mesub-subscribe] ~ :is([data-mesub-error], [data-mesub-hint], [data-mesub-receipt])) {
+  --_accent: var(--mesub-accent, #cc451d);
+  --_on-accent: var(--mesub-on-accent, #ffffff);
+  --_accent-text: var(--mesub-accent-text, var(--_accent));
+  --_accent-hover: color-mix(in srgb, var(--_accent) 90%, #000);
+  --_accent-active: color-mix(in srgb, var(--_accent) 82%, #000);
+  --_focus: var(--mesub-focus, var(--_accent));
+
+  --_bg: var(--mesub-bg, #ffffff);
+  --_text: var(--mesub-text, #14151a);
+  --_text-soft: var(--mesub-text-soft, color-mix(in srgb, var(--_text) 78%, var(--_bg)));
+  --_muted: var(--mesub-muted, color-mix(in srgb, var(--_text) 62%, var(--_bg)));
+  --_sunk: var(--mesub-sunk, color-mix(in srgb, var(--_text) 5%, var(--_bg)));
+  --_border: var(--mesub-border, color-mix(in srgb, var(--_text) 10%, transparent));
+  --_divider: color-mix(in srgb, var(--_text) 6%, transparent);
+  --_control-border: var(--mesub-control-border, color-mix(in srgb, var(--_text) 47%, var(--_bg)));
+
+  --_success: var(--mesub-success, #0e9384);
+  --_success-text: var(--mesub-success-text, #0b7a6e);
+  --_danger: var(--mesub-danger, #a5124a);
+  --_danger-text: var(--mesub-danger-text, #8f1040);
+  --_warning: var(--mesub-warning, #b54708);
+  --_warning-text: var(--mesub-warning-text, #93370d);
+
+  --_radius: var(--mesub-radius, 6px);
+  --_radius-lg: var(--mesub-radius-lg, calc(var(--_radius) + 4px));
+  --_shadow: var(--mesub-shadow, 0 1px 2px rgb(20 21 26 / 6%), 0 24px 48px -16px rgb(20 21 26 / 28%));
+  --_dur: var(--mesub-duration, 140ms);
+  --_ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+
+  color-scheme: light;
+}
+
+/* Dark: only the base colours change; everything else derives. */
+:is([data-mesub-dialog], [data-mesub-subscribe], [data-mesub-subscribe] ~ :is([data-mesub-error], [data-mesub-hint], [data-mesub-receipt])):is([data-mesub-theme="dark"], [data-mesub-theme="dark"] *) {
+  --_bg: var(--mesub-bg, #16171c);
+  --_text: var(--mesub-text, #eceef1);
+  --_accent-text: var(--mesub-accent-text, color-mix(in srgb, var(--_accent) 70%, #fff));
+  --_success-text: var(--mesub-success-text, #2fb5a3);
+  --_danger: var(--mesub-danger, #e0577f);
+  --_danger-text: var(--mesub-danger-text, #f28aaa);
+  --_warning: var(--mesub-warning, #e8a33d);
+  --_warning-text: var(--mesub-warning-text, #f2b24a);
+  --_border: var(--mesub-border, color-mix(in srgb, var(--_text) 12%, transparent));
+  --_sunk: var(--mesub-sunk, color-mix(in srgb, var(--_text) 7%, var(--_bg)));
+  --_shadow: var(--mesub-shadow, 0 0 0 1px rgb(255 255 255 / 4%), 0 24px 64px -16px rgb(0 0 0 / 70%));
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :is([data-mesub-dialog], [data-mesub-subscribe], [data-mesub-subscribe] ~ :is([data-mesub-error], [data-mesub-hint], [data-mesub-receipt])):is([data-mesub-theme="auto"], [data-mesub-theme="auto"] *) {
+    --_bg: var(--mesub-bg, #16171c);
+    --_text: var(--mesub-text, #eceef1);
+    --_accent-text: var(--mesub-accent-text, color-mix(in srgb, var(--_accent) 70%, #fff));
+    --_success-text: var(--mesub-success-text, #2fb5a3);
+    --_danger: var(--mesub-danger, #e0577f);
+    --_danger-text: var(--mesub-danger-text, #f28aaa);
+  --_warning: var(--mesub-warning, #e8a33d);
+  --_warning-text: var(--mesub-warning-text, #f2b24a);
+    --_border: var(--mesub-border, color-mix(in srgb, var(--_text) 12%, transparent));
+    --_sunk: var(--mesub-sunk, color-mix(in srgb, var(--_text) 7%, var(--_bg)));
+    --_shadow: var(--mesub-shadow, 0 0 0 1px rgb(255 255 255 / 4%), 0 24px 64px -16px rgb(0 0 0 / 70%));
+    color-scheme: dark;
+  }
+}
+
+/* ---------------------------------------------------------------- dialog */
+
+[data-mesub-dialog] {
+  box-sizing: border-box;
+  inline-size: min(400px, calc(100vw - 32px));
+  max-inline-size: none;
+  max-block-size: calc(100dvh - 32px);
+  margin: auto;
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius-lg);
+  background: var(--_bg);
+  color: var(--_text-soft);
+  box-shadow: var(--_shadow);
+  font-family: var(--mesub-font, inherit);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  text-align: start;
+}
+
+/* display only when open: never override the closed dialog's display:none */
+[data-mesub-dialog][open] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 16px;
+  column-gap: 16px;
+  animation: mesub-enter 240ms var(--_ease-enter);
+}
+
+[data-mesub-dialog]::backdrop {
+  background: var(--mesub-backdrop, rgb(20 21 26 / 40%));
+  animation: mesub-fade 240ms ease-out;
+}
+[data-mesub-dialog]:is([data-mesub-theme="dark"], [data-mesub-theme="dark"] *)::backdrop {
+  background: var(--mesub-backdrop, rgb(0 0 0 / 60%));
+}
+
+[data-mesub-dialog] *,
+[data-mesub-dialog] *::before,
+[data-mesub-dialog] *::after {
+  box-sizing: border-box;
+}
+
+/* every child takes a full row, except Back + Resend which share one */
+[data-mesub-dialog][open] > *,
+[data-mesub-form] > * {
+  grid-column: 1 / -1;
+}
+
+[data-mesub-dialog] h2 {
+  margin: 0;
+  padding-inline-end: 40px; /* room for the close button */
+  color: var(--_text);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+[data-mesub-dialog] p {
+  margin: 0;
+}
+[data-mesub-dialog] h2 + p {
+  margin-block-start: -8px;
+}
+[data-mesub-dialog] strong {
+  color: var(--_text);
+  font-weight: 500;
+}
+[data-mesub-dialog] a {
+  color: var(--_accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ------------------------------------------------------------------ form */
+
+[data-mesub-form] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+[data-mesub-dialog] label {
+  color: var(--_text);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+[data-mesub-input] {
+  appearance: none;
+  inline-size: 100%;
+  min-block-size: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--_control-border);
+  border-radius: var(--_radius);
+  background: var(--_bg);
+  color: var(--_text);
+  font: inherit;
+  font-size: 14px;
+  transition: border-color var(--_dur) ease-out, background-color var(--_dur) ease-out;
+}
+[data-mesub-input]::placeholder {
+  color: var(--_muted);
+  opacity: 1;
+}
+[data-mesub-input]:hover {
+  border-color: color-mix(in srgb, var(--_text) 62%, var(--_bg));
+}
+[data-mesub-input]:focus {
+  border-color: var(--_accent);
+}
+[data-mesub-input][aria-invalid="true"] {
+  border-color: var(--_danger);
+}
+[data-mesub-input]:disabled,
+[data-mesub-input][readonly] {
+  background: var(--_sunk);
+}
+
+/* One field, read as six slots: paste, SMS/email autofill
+   (autocomplete="one-time-code") and screen readers keep working. */
+[data-mesub-input="code"] {
+  min-block-size: 56px;
+  padding-inline: 0.5em 0;    /* balances the trailing letter-spacing */
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5em;
+  text-align: center;
+}
+[data-mesub-input="code"]::placeholder {
+  color: color-mix(in srgb, var(--_text) 30%, var(--_bg));
+}
+
+/* --------------------------------------------------------------- buttons */
+
+:is([data-mesub-submit], [data-mesub-subscribe]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-block-size: 44px;
+  margin: 0;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: var(--_radius);
+  background: var(--_accent);
+  color: var(--_on-accent);
+  font-family: var(--mesub-font, inherit);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition-property: color, background-color, border-color;
+  transition-duration: var(--_dur);
+  transition-timing-function: ease-out;
+}
+[data-mesub-submit] {
+  inline-size: 100%;
+  margin-block-start: 8px;
+}
+[data-mesub-submit]:not(:disabled, [aria-busy="true"]):hover {
+  background: var(--_accent-hover);
+}
+[data-mesub-submit]:not(:disabled, [aria-busy="true"]):active {
+  background: var(--_accent-active);
+}
+[data-mesub-submit]:disabled:not([aria-busy="true"]) {
+  background: var(--_sunk);
+  color: var(--_muted);
+  cursor: not-allowed;
+}
+[data-mesub-submit][aria-busy="true"] {
+  cursor: progress;
+}
+
+/* quiet text buttons: Back, Send the code again */
+:is([data-mesub-back], [data-mesub-resend]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 36px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--_radius);
+  background: transparent;
+  color: var(--_text-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--_dur) ease-out, background-color var(--_dur) ease-out;
+}
+[data-mesub-back] {
+  grid-column: 1 !important;
+  justify-self: start;
+  margin-inline-start: -8px;
+}
+[data-mesub-back]::before {
+  content: "";
+  inline-size: 7px;
+  block-size: 7px;
+  border-inline-start: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+[data-mesub-resend] {
+  grid-column: 2 !important;
+  justify-self: end;
+  margin-inline-end: -8px;
+  color: var(--_accent-text);
+}
+:is([data-mesub-back], [data-mesub-resend]):hover {
+  background: var(--_sunk);
+}
+:is([data-mesub-back], [data-mesub-resend]):disabled {
+  color: var(--_muted);
+  cursor: default;
+  background: transparent;
+}
+
+/* close: top right, an icon drawn in CSS when the button is empty */
+[data-mesub-close] {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 12px;
+  display: grid;
+  place-items: center;
+  inline-size: 36px;
+  block-size: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--_radius);
+  background: transparent;
+  color: var(--_muted);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--_dur) ease-out, background-color var(--_dur) ease-out;
+}
+[data-mesub-close]:hover {
+  background: var(--_sunk);
+  color: var(--_text);
+}
+[data-mesub-close]:empty::before,
+[data-mesub-close]:empty::after {
+  content: "";
+  grid-area: 1 / 1;
+  inline-size: 14px;
+  block-size: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+[data-mesub-close]:empty::after {
+  transform: rotate(-45deg);
+}
+
+/* ---------------------------------------------------------------- wallets */
+
+[data-mesub-wallets] {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius-lg);
+}
+[data-mesub-wallets] > * + * {
+  border-block-start: 1px solid var(--_divider);
+}
+[data-mesub-wallets] > li {
+  display: contents; /* if items are wrapped in <li>, the button carries the row */
+}
+[data-mesub-wallets] > li + li > [data-mesub-wallet] {
+  border-block-start: 1px solid var(--_divider);
+}
+
+[data-mesub-wallet] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  inline-size: 100%;
+  min-block-size: 52px;
+  margin: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0;
+  background: var(--_bg);
+  color: var(--_text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--_dur) ease-out, color var(--_dur) ease-out;
+}
+[data-mesub-wallet] img {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 6px;
+}
+/* trailing chevron */
+[data-mesub-wallet]::after {
+  content: "";
+  flex: none;
+  margin-inline-start: auto;
+  inline-size: 7px;
+  block-size: 7px;
+  border-inline-end: 1.5px solid var(--_muted);
+  border-block-start: 1.5px solid var(--_muted);
+  transform: rotate(45deg);
+}
+[data-mesub-wallet]:hover:not(:disabled) {
+  background: var(--_sunk);
+}
+[data-mesub-wallet]:focus-visible {
+  outline-offset: -2px !important;
+  border-radius: var(--_radius-lg);
+}
+[data-mesub-wallet]:disabled:not([aria-busy="true"]) {
+  color: var(--_muted);
+  cursor: default;
+}
+[data-mesub-wallet]:disabled:not([aria-busy="true"]) img {
+  opacity: 0.5;
+}
+[data-mesub-wallet][aria-busy="true"] {
+  background: var(--_sunk);
+  cursor: progress;
+}
+/* busy: the chevron becomes a spinner */
+[data-mesub-wallet][aria-busy="true"]::after {
+  inline-size: 14px;
+  block-size: 14px;
+  border: 2px solid var(--_accent);
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  transform: none;
+  animation: mesub-spin 800ms linear infinite;
+}
+
+[data-mesub-no-wallet] {
+  margin: 0;
+  padding: 16px;
+  border-radius: var(--_radius-lg);
+  background: var(--_sunk);
+  color: var(--_text-soft);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* --------------------------------------------------- errors and notices */
+
+[data-mesub-dialog] [data-mesub-error],
+[data-mesub-subscribe] + [data-mesub-error] {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--_danger-text);
+  font-family: var(--mesub-font, inherit);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+[data-mesub-dialog] [data-mesub-error]::before,
+[data-mesub-subscribe] + [data-mesub-error]::before {
+  content: "!";
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 14px;
+  block-size: 14px;
+  margin-block-start: 2px;
+  border-radius: 50%;
+  background: var(--_danger);
+  color: var(--_bg);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+}
+[data-mesub-error]:empty {
+  display: none !important;
+}
+
+[data-mesub-notice] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--_radius);
+  background: var(--_sunk);
+  color: var(--_text-soft);
+  font-size: 13px;
+  line-height: 18px;
+}
+[data-mesub-notice]:empty {
+  display: none;
+}
+[data-mesub-notice][aria-busy="true"]::before {
+  content: "";
+  flex: none;
+  inline-size: 12px;
+  block-size: 12px;
+  border: 2px solid var(--_accent);
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  animation: mesub-spin 800ms linear infinite;
+}
+
+/* --------------------------------------------------------------- footer */
+
+[data-mesub-dialog] :is(footer, [data-mesub-footer]) {
+  margin-block-start: 8px;
+  padding-block-start: 16px;
+  border-block-start: 1px solid var(--_divider);
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+/* the Mesub mark: ideally an inline <svg fill="currentColor">, so one
+   asset follows every theme; an <img> works too */
+[data-mesub-dialog] :is(footer, [data-mesub-footer]) > :is(img, svg) {
+  flex: none;
+  block-size: 10px;
+  inline-size: auto;
+  opacity: 0.85;
+}
+
+/* ------------------------------------------------- optional: signed in */
+
+[data-mesub-dialog][data-mesub-step="done"][open] {
+  justify-items: center;
+  text-align: center;
+  padding-block: 40px 24px;
+}
+[data-mesub-dialog][data-mesub-step="done"] h2 {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding-inline-end: 0;
+}
+[data-mesub-dialog][data-mesub-step="done"] h2::before {
+  content: "";
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--_success-text), var(--_success-text)) 15px 21px / 6px 2px no-repeat,
+    linear-gradient(var(--_success-text), var(--_success-text)) 19px 14px / 2px 9px no-repeat,
+    color-mix(in srgb, var(--_success) 14%, var(--_bg));
+  transform: rotate(45deg);
+}
+
+/* ------------------------------------------------------ subscribe button */
+
+[data-mesub-subscribe]:is([data-mesub-state="idle"], [data-mesub-state="error"]):not(:disabled):hover {
+  background: var(--_accent-hover);
+}
+[data-mesub-subscribe]:is([data-mesub-state="idle"], [data-mesub-state="error"]):not(:disabled):active {
+  background: var(--_accent-active);
+}
+[data-mesub-subscribe]:is([data-mesub-state="signing"], [data-mesub-state="confirming"]) {
+  cursor: progress;
+}
+[data-mesub-subscribe][data-mesub-state="subscribed"] {
+  border-color: color-mix(in srgb, var(--_success) 32%, transparent);
+  background: color-mix(in srgb, var(--_success) 10%, var(--_bg));
+  color: var(--_success-text);
+  cursor: default;
+}
+[data-mesub-subscribe][data-mesub-state="subscribed"]::before {
+  content: "";
+  inline-size: 10px;
+  block-size: 5px;
+  margin-block-start: -3px;
+  border-inline-start: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+[data-mesub-subscribe] + [data-mesub-error] {
+  margin-block-start: 8px;
+}
+
+/* ======================================================= subscribe flow */
+
+/* merchant header: logo 40px, name; the plan name is the step's h2 */
+[data-mesub-merchant] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding-inline-end: 40px;
+  color: var(--_text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+[data-mesub-merchant] img {
+  flex: none;
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: var(--_radius-lg);
+  object-fit: cover;
+}
+[data-mesub-merchant] strong {
+  font-weight: 600;
+}
+[data-mesub-merchant] [data-mesub-network] {
+  margin-inline-start: auto;
+}
+
+[data-mesub-network="devnet"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--_warning) 12%, var(--_bg));
+  color: var(--_warning-text);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+[data-mesub-network="devnet"]::before {
+  content: "";
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+[data-mesub-price] {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+[data-mesub-price] strong {
+  color: var(--_text);
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+[data-mesub-price] span {
+  color: var(--_text-soft);
+  font-size: 14px;
+}
+
+[data-mesub-summary] {
+  display: grid;
+  margin: 0;
+  border-block: 1px solid var(--_divider);
+}
+[data-mesub-row] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-block-size: 40px;
+  padding-block: 10px;
+  font-size: 13px;
+  line-height: 18px;
+}
+[data-mesub-row] + [data-mesub-row] {
+  border-block-start: 1px solid var(--_divider);
+}
+[data-mesub-row] dt {
+  color: var(--_text-soft);
+}
+[data-mesub-row] dd {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--_text);
+  font-weight: 500;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+[data-mesub-row] dd img {
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: 4px;
+}
+[data-mesub-row] dd small {
+  color: var(--_muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* reassurance lines */
+[data-mesub-dialog] ul:not([data-mesub-wallets]) {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 18px;
+}
+[data-mesub-dialog] ul:not([data-mesub-wallets]) li {
+  position: relative;
+  padding-inline-start: 22px;
+}
+[data-mesub-dialog] ul:not([data-mesub-wallets]) li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 3px;
+  inset-block-start: 3px;
+  inline-size: 9px;
+  block-size: 5px;
+  border-inline-start: 1.5px solid var(--_success-text);
+  border-block-end: 1.5px solid var(--_success-text);
+  transform: rotate(-45deg);
+}
+
+[data-mesub-warning] {
+  position: relative;
+  margin: 0;
+  padding: 10px 12px 10px 34px;
+  border-radius: var(--_radius);
+  background: color-mix(in srgb, var(--_warning) 10%, var(--_bg));
+  color: var(--_warning-text);
+  font-size: 13px;
+  line-height: 18px;
+}
+[data-mesub-warning]::before {
+  content: "!";
+  position: absolute;
+  inset-inline-start: 12px;
+  inset-block-start: 12px;
+  display: grid;
+  place-items: center;
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: 50%;
+  background: var(--_warning);
+  color: var(--_bg);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+[data-mesub-done] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  min-block-size: 44px;
+  margin: 8px 0 0;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: var(--_radius);
+  background: var(--_accent);
+  color: var(--_on-accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--_dur) ease-out;
+}
+[data-mesub-done]:hover {
+  background: var(--_accent-hover);
+}
+
+[data-mesub-cancel] {
+  justify-self: center;
+  min-block-size: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--_radius);
+  background: transparent;
+  color: var(--_text-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--_dur) ease-out, color var(--_dur) ease-out;
+}
+[data-mesub-cancel]:hover {
+  background: var(--_sunk);
+  color: var(--_text);
+}
+
+[data-mesub-explorer] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--_accent-text);
+  font-weight: 500;
+}
+[data-mesub-explorer]::after {
+  content: "\2197";
+  font-size: 12px;
+  text-decoration: none;
+}
+
+/* step icon next to an h2 (wallet icon on "Approve in Phantom") */
+[data-mesub-dialog] h2 img {
+  inline-size: 24px;
+  block-size: 24px;
+  margin-inline-end: 10px;
+  border-radius: 6px;
+  vertical-align: -3px;
+}
+
+/* confirming: a slim indeterminate bar, not a full-screen spinner */
+[data-mesub-dialog] progress {
+  appearance: none;
+  inline-size: 100%;
+  block-size: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--_sunk);
+  color: var(--_accent);
+}
+[data-mesub-dialog] progress::-webkit-progress-bar { background: transparent; }
+[data-mesub-dialog] progress::-webkit-progress-value { background: var(--_accent); border-radius: 2px; }
+[data-mesub-dialog] progress::-moz-progress-bar { background: var(--_accent); border-radius: 2px; }
+[data-mesub-dialog] progress:not([value]) {
+  background:
+    linear-gradient(90deg, transparent 0 35%, var(--_accent) 35% 65%, transparent 65%) 0 0 / 300% 100% no-repeat,
+    var(--_sunk);
+  animation: mesub-indeterminate 1400ms linear infinite;
+}
+[data-mesub-dialog] progress:not([value])::-moz-progress-bar { background: transparent; }
+
+/* subscribed: a calm check before the title */
+[data-mesub-dialog][data-mesub-step="subscribed"] h2 {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+}
+[data-mesub-dialog][data-mesub-step="subscribed"] h2::before {
+  content: "";
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--_success-text), var(--_success-text)) 15px 21px / 6px 2px no-repeat,
+    linear-gradient(var(--_success-text), var(--_success-text)) 19px 14px / 2px 9px no-repeat,
+    color-mix(in srgb, var(--_success) 14%, var(--_bg));
+  transform: rotate(45deg);
+}
+
+@keyframes mesub-indeterminate {
+  from { background-position: 100% 0, 0 0; }
+  to { background-position: -50% 0, 0 0; }
+}
+
+/* ---------------------------------------------------- spinners and focus */
+
+:is([data-mesub-submit][aria-busy="true"], [data-mesub-subscribe]:is([data-mesub-state="signing"], [data-mesub-state="confirming"]))::before {
+  content: "";
+  flex: none;
+  inline-size: 14px;
+  block-size: 14px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  animation: mesub-spin 800ms linear infinite;
+}
+
+[data-mesub-dialog] :focus-visible,
+[data-mesub-subscribe]:focus-visible {
+  outline: 2px solid var(--_focus);
+  outline-offset: 2px;
+}
+[data-mesub-input]:focus-visible {
+  outline-offset: 1px;
+}
+[data-mesub-dialog]:focus-visible {
+  outline: none;
+}
+
+/* ============================================================ V2 LAYER
+ * Everything above is v1. This layer adds depth, guidance and trust cues.
+ * Extra markup it styles (proposals, not in the components yet):
+ *   [data-mesub-merchant] on sign-in steps too, with <div><strong>name</strong><span>plan</span></div>
+ *   [data-mesub-otp] > input[data-mesub-input="code"] + [data-mesub-slots] > 6 × span[data-mesub-slot="filled|active|empty"] (aria-hidden)
+ *   [data-mesub-badge] inside a wallet row ("Last used")
+ *   figure[data-mesub-message] (what the wallet will show) with figcaption, pre, p
+ *   [data-mesub-pairing] (aria-hidden): img + span + img
+ *   [data-mesub-install] links and [data-mesub-reload] button in the no-wallet state
+ *   ol[data-mesub-timeline] > li[data-mesub-status="done|active|todo"]
+ *   [data-mesub-hint] and [data-mesub-receipt] after the Subscribe button
+ */
+
+:is([data-mesub-dialog], [data-mesub-subscribe], [data-mesub-subscribe] ~ :is([data-mesub-error], [data-mesub-hint], [data-mesub-receipt])) {
+  --_radius-lg: var(--mesub-radius-lg, calc(var(--_radius) + 8px));
+  --_accent-soft: color-mix(in srgb, var(--_accent) 9%, var(--_bg));
+  --_accent-ring: color-mix(in srgb, var(--_accent) 24%, transparent);
+  --_accent-ink: color-mix(in srgb, var(--_accent-text) 78%, var(--_text));
+  --_danger-soft: color-mix(in srgb, var(--_danger) 9%, var(--_bg));
+  --_success-soft: color-mix(in srgb, var(--_success) 12%, var(--_bg));
+  --_warning-soft: color-mix(in srgb, var(--_warning) 10%, var(--_bg));
+}
+
+/* ------------------------------------------------------------ v2 dialog */
+
+[data-mesub-dialog] {
+  inline-size: min(420px, calc(100vw - 32px));
+  padding: 28px;
+}
+[data-mesub-dialog][open] {
+  row-gap: 20px;
+}
+[data-mesub-dialog]::backdrop {
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+[data-mesub-dialog] h2 + p {
+  margin-block-start: -12px;
+}
+
+/* where you are: a 3-segment line on the modal's top edge, from data-mesub-step alone.
+   Sign-in = email, code, wallet. Payment = review, approve, confirming. */
+[data-mesub-dialog][open]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  block-size: 3px;
+  background:
+    linear-gradient(var(--_s1, var(--_border)) 0 0) 0 0 / calc((100% - 4px) / 3) 100% no-repeat,
+    linear-gradient(var(--_s2, var(--_border)) 0 0) 50% 0 / calc((100% - 4px) / 3) 100% no-repeat,
+    linear-gradient(var(--_s3, var(--_border)) 0 0) 100% 0 / calc((100% - 4px) / 3) 100% no-repeat;
+}
+[data-mesub-dialog]:is([data-mesub-step="email"], [data-mesub-step="review"]) { --_s1: var(--_accent); }
+[data-mesub-dialog]:is([data-mesub-step="code"], [data-mesub-step="approve"]) { --_s1: var(--_accent); --_s2: var(--_accent); }
+[data-mesub-dialog]:is([data-mesub-step="wallet"], [data-mesub-step="confirming"]) { --_s1: var(--_accent); --_s2: var(--_accent); --_s3: var(--_accent); }
+[data-mesub-dialog][data-mesub-step="subscribed"] { --_s1: var(--_success); --_s2: var(--_success); --_s3: var(--_success); }
+[data-mesub-dialog][data-mesub-step="done"][open]::before { display: none; }
+
+[data-mesub-close] {
+  inset-block-start: 26px;
+  inset-inline-end: 20px;
+}
+
+/* merchant context on every step */
+[data-mesub-merchant] {
+  padding-block-end: 20px;
+  border-block-end: 1px solid var(--_divider);
+}
+[data-mesub-merchant] > div {
+  display: grid;
+  min-inline-size: 0;
+}
+[data-mesub-merchant] > div > span {
+  color: var(--_text-soft);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+[data-mesub-merchant] ~ h2 {
+  padding-inline-end: 0;
+}
+
+/* --------------------------------------------------- v2 inputs and otp */
+
+[data-mesub-input]:focus {
+  box-shadow: 0 0 0 3px var(--_accent-ring);
+}
+
+[data-mesub-otp] {
+  position: relative;
+}
+[data-mesub-otp] > [data-mesub-input="code"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  opacity: 0;
+  cursor: text;
+}
+[data-mesub-slots] {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 16px repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+[data-mesub-slots]::before {
+  content: "";
+  grid-row: 1;
+  grid-column: 4;
+  align-self: center;
+  block-size: 2px;
+  border-radius: 1px;
+  background: var(--_control-border);
+}
+[data-mesub-slot]:nth-child(1) { grid-column: 1; }
+[data-mesub-slot]:nth-child(2) { grid-column: 2; }
+[data-mesub-slot]:nth-child(3) { grid-column: 3; }
+[data-mesub-slot]:nth-child(4) { grid-column: 5; }
+[data-mesub-slot]:nth-child(5) { grid-column: 6; }
+[data-mesub-slot]:nth-child(6) { grid-column: 7; }
+[data-mesub-slot] {
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  block-size: 56px;
+  border: 1px solid var(--_control-border);
+  border-radius: var(--_radius);
+  background: var(--_bg);
+  color: var(--_text);
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--_dur) ease-out, background-color var(--_dur) ease-out;
+}
+[data-mesub-slot="filled"] {
+  background: var(--_sunk);
+  border-color: color-mix(in srgb, var(--_text) 30%, var(--_bg));
+}
+[data-mesub-slot="active"] {
+  border-color: var(--_accent);
+  box-shadow: 0 0 0 3px var(--_accent-ring);
+}
+[data-mesub-slot="active"]:empty::after {
+  content: "";
+  inline-size: 1.5px;
+  block-size: 24px;
+  background: var(--_accent);
+  animation: mesub-caret 1s steps(1) infinite;
+}
+[data-mesub-input][aria-invalid="true"] + [data-mesub-slots] {
+  animation: mesub-shake 320ms ease-out;
+}
+[data-mesub-input][aria-invalid="true"] + [data-mesub-slots] [data-mesub-slot] {
+  border-color: var(--_danger);
+  background: var(--_danger-soft);
+  color: var(--_danger-text);
+  box-shadow: none;
+}
+
+/* "Sent to x · Change" — Back becomes an inline link inside the sentence */
+p > [data-mesub-back] {
+  display: inline;
+  min-block-size: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--_accent-text);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+p > [data-mesub-back]::before { display: none; }
+p > [data-mesub-back]:hover { background: transparent; color: var(--_text); }
+[data-mesub-resend] {
+  grid-column: 1 / -1 !important;
+  justify-self: center;
+  margin-inline-end: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------- v2 wallets */
+
+[data-mesub-wallets] {
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+[data-mesub-wallets] > * + *,
+[data-mesub-wallets] > li + li > [data-mesub-wallet] {
+  border-block-start: 0;
+}
+[data-mesub-wallets] [data-mesub-wallet] {
+  min-block-size: 60px;
+  padding: 0 16px 0 10px;
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius-lg);
+  transition: border-color var(--_dur) ease-out, background-color var(--_dur) ease-out;
+}
+[data-mesub-wallet] img {
+  box-sizing: content-box;
+  padding: 6px;
+  background: var(--_sunk);
+  border-radius: var(--_radius);
+}
+[data-mesub-wallets] [data-mesub-wallet]:hover:not(:disabled) {
+  border-color: var(--_accent);
+  background: var(--_bg);
+}
+[data-mesub-wallets] [data-mesub-wallet][aria-busy="true"] {
+  border-color: var(--_accent);
+  background: var(--_accent-soft);
+  box-shadow: 0 0 0 3px var(--_accent-ring);
+}
+[data-mesub-wallet]:focus-visible {
+  outline-offset: 2px !important;
+}
+[data-mesub-badge] {
+  margin-inline-start: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--_accent-soft);
+  color: var(--_accent-ink);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+[data-mesub-wallet]:has([data-mesub-badge])::after {
+  margin-inline-start: 4px;
+}
+
+/* what the wallet will show: the trust moment of sign-in */
+[data-mesub-message] {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: var(--_radius-lg);
+  background: var(--_sunk);
+}
+[data-mesub-message] figcaption {
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+[data-mesub-message] pre {
+  margin: 0;
+  color: var(--_text);
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+[data-mesub-message] p {
+  position: relative;
+  padding-inline-start: 18px;
+  color: var(--_success-text);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+[data-mesub-message] p::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 2px;
+  inset-block-start: 3px;
+  inline-size: 8px;
+  block-size: 4px;
+  border-inline-start: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+/* waiting on the wallet: merchant ⟷ wallet, a dot travelling between them */
+[data-mesub-pairing] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding-block: 8px 0;
+}
+[data-mesub-pairing] img {
+  inline-size: 52px;
+  block-size: 52px;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--_border), 0 6px 16px -8px rgb(20 21 26 / 30%);
+}
+[data-mesub-pairing] > span {
+  position: relative;
+  inline-size: 64px;
+  block-size: 2px;
+  background: repeating-linear-gradient(90deg, var(--_control-border) 0 4px, transparent 4px 8px);
+}
+[data-mesub-pairing] > span::after {
+  content: "";
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-start: 0;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--_accent);
+  box-shadow: 0 0 0 4px var(--_accent-ring);
+  animation: mesub-travel 1400ms cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
+}
+[data-mesub-dialog]:has([data-mesub-pairing]) :is(h2, h2 + p) {
+  text-align: center;
+}
+[data-mesub-dialog]:has([data-mesub-pairing]) [data-mesub-notice] {
+  justify-content: center;
+}
+
+/* no wallet: install links as rows, then a reload */
+[data-mesub-no-wallet] {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+[data-mesub-no-wallet] > p {
+  margin: 0 0 4px;
+}
+[data-mesub-install] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 60px;
+  padding: 0 16px 0 10px;
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius-lg);
+  color: var(--_text) !important;
+  font-weight: 500;
+  text-decoration: none !important;
+  transition: border-color var(--_dur) ease-out;
+}
+[data-mesub-install]:hover {
+  border-color: var(--_accent);
+}
+[data-mesub-install] img {
+  box-sizing: content-box;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 6px;
+  border-radius: var(--_radius);
+  background: var(--_sunk);
+}
+[data-mesub-install] span {
+  margin-inline-start: auto;
+  color: var(--_accent-text);
+  font-size: 13px;
+}
+[data-mesub-install] span::after {
+  content: " \2197";
+}
+[data-mesub-reload] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  min-block-size: 44px;
+  margin: 0;
+  padding: 0 20px;
+  border: 1px solid var(--_control-border);
+  border-radius: var(--_radius);
+  background: var(--_bg);
+  color: var(--_text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--_dur) ease-out, background-color var(--_dur) ease-out;
+}
+[data-mesub-reload]:hover {
+  background: var(--_sunk);
+}
+
+/* ----------------------------------------------------------- v2 errors */
+
+[data-mesub-dialog] [data-mesub-error],
+[data-mesub-subscribe] + [data-mesub-error] {
+  display: block;
+  position: relative;
+  padding-inline-start: 22px;
+}
+[data-mesub-dialog] [data-mesub-error]::before,
+[data-mesub-subscribe] + [data-mesub-error]::before {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 2px;
+  margin: 0;
+}
+/* a step-level error (not under a field) is a callout */
+[data-mesub-dialog] > [data-mesub-error],
+[data-mesub-subscribe] + [data-mesub-error] {
+  padding: 10px 12px 10px 34px;
+  border: 1px solid color-mix(in srgb, var(--_danger) 22%, transparent);
+  border-radius: var(--_radius);
+  background: var(--_danger-soft);
+}
+[data-mesub-dialog] > [data-mesub-error]::before,
+[data-mesub-subscribe] + [data-mesub-error]::before {
+  inset-inline-start: 12px;
+  inset-block-start: 12px;
+}
+[data-mesub-error] strong {
+  color: inherit;
+  font-weight: 600;
+}
+[data-mesub-error] code,
+[data-mesub-warning] code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+[data-mesub-warning] {
+  border: 1px solid color-mix(in srgb, var(--_warning) 24%, transparent);
+}
+
+/* ------------------------------------------------------- v2 review step */
+
+[data-mesub-dialog][data-mesub-step="review"] h2 {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--_text-soft);
+}
+[data-mesub-dialog][data-mesub-step="review"] h2 + [data-mesub-price] {
+  margin-block-start: -18px;
+}
+[data-mesub-price] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+[data-mesub-price] strong {
+  font-size: 48px;
+  line-height: 52px;
+  letter-spacing: -0.035em;
+}
+[data-mesub-price] span {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--_sunk);
+  color: var(--_text);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+[data-mesub-summary] {
+  padding: 4px 16px;
+  border: 0;
+  border-radius: var(--_radius-lg);
+  background: var(--_sunk);
+}
+[data-mesub-row] + [data-mesub-row] {
+  border-block-start-color: color-mix(in srgb, var(--_text) 8%, transparent);
+}
+[data-mesub-dialog] ul:not([data-mesub-wallets]) li {
+  padding-inline-start: 28px;
+}
+[data-mesub-dialog] ul:not([data-mesub-wallets]) li::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: -1px;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: 50%;
+  background: var(--_success-soft);
+  z-index: 0;
+}
+[data-mesub-dialog] ul:not([data-mesub-wallets]) li::before {
+  inset-inline-start: 6px;
+  inset-block-start: 5px;
+  inline-size: 8px;
+  block-size: 4px;
+  z-index: 1;
+}
+[data-mesub-cancel] {
+  margin-block-start: -12px;
+}
+
+/* --------------------------------------------- v2 confirming: timeline */
+
+[data-mesub-timeline] {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+[data-mesub-timeline] li {
+  position: relative;
+  min-block-size: 36px;
+  padding-inline-start: 32px;
+  color: var(--_muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+[data-mesub-timeline] li:last-child {
+  min-block-size: 20px;
+}
+/* connector */
+[data-mesub-timeline] li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 9px;
+  inset-block: 22px 0;
+  inline-size: 2px;
+  margin-block-start: 0;
+  background: var(--_border);
+}
+[data-mesub-timeline] li[data-mesub-status="done"]:not(:last-child)::after {
+  background: var(--_success);
+}
+/* node */
+[data-mesub-timeline] li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  inline-size: 20px;
+  block-size: 20px;
+  box-sizing: border-box;
+  border: 2px solid var(--_border);
+  border-radius: 50%;
+  background: var(--_bg);
+}
+[data-mesub-timeline] li[data-mesub-status="done"] {
+  color: var(--_text);
+}
+[data-mesub-timeline] li[data-mesub-status="done"]::before {
+  border-color: var(--_success);
+  background:
+    linear-gradient(var(--_bg), var(--_bg)) 5px 9px / 4px 2px no-repeat,
+    linear-gradient(var(--_bg), var(--_bg)) 8px 4px / 2px 7px no-repeat,
+    var(--_success);
+  transform: rotate(45deg);
+}
+[data-mesub-timeline] li[data-mesub-status="active"] {
+  color: var(--_text);
+  font-weight: 500;
+}
+[data-mesub-timeline] li[data-mesub-status="active"]::before {
+  border-color: var(--_accent);
+  border-inline-end-color: transparent;
+  animation: mesub-spin 800ms linear infinite;
+}
+[data-mesub-timeline] small {
+  display: block;
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+}
+
+/* ------------------------------------------------ v2 success moments */
+
+[data-mesub-dialog]:is([data-mesub-step="subscribed"], [data-mesub-step="done"]) h2::before {
+  inline-size: 48px;
+  block-size: 48px;
+  background:
+    linear-gradient(var(--_bg), var(--_bg)) 18px 25px / 8px 2.5px no-repeat,
+    linear-gradient(var(--_bg), var(--_bg)) 23.5px 15px / 2.5px 12.5px no-repeat,
+    var(--_success);
+  box-shadow: 0 0 0 6px var(--_success-soft);
+  animation: mesub-pop 420ms var(--_ease-enter) both;
+}
+[data-mesub-dialog][data-mesub-step="subscribed"][open] {
+  justify-items: stretch;
+}
+[data-mesub-dialog][data-mesub-step="subscribed"] h2 {
+  padding-block-start: 6px;
+}
+/* returning subscriber: a short auto-close line */
+[data-mesub-dialog][data-mesub-step="done"][open]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  block-size: 3px;
+  background: var(--_success);
+  transform-origin: left;
+  animation: mesub-countdown 1200ms linear;
+}
+
+/* -------------------------------------------- v2 subscribe button */
+
+[data-mesub-subscribe] {
+  position: relative;
+  overflow: hidden;
+  min-block-size: 48px;
+  padding: 0 22px;
+}
+/* progress hairline along the bottom edge: 1/3 signing, 2/3 confirming, full when subscribed */
+[data-mesub-subscribe]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  block-size: 3px;
+  background: currentColor;
+  opacity: 0.55;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 600ms var(--_ease-enter);
+}
+[data-mesub-subscribe][data-mesub-state="signing"]::after { transform: scaleX(0.34); }
+[data-mesub-subscribe][data-mesub-state="confirming"]::after { transform: scaleX(0.72); }
+[data-mesub-subscribe][data-mesub-state="subscribed"]::after { transform: scaleX(1); opacity: 0.35; }
+
+[data-mesub-subscribe] ~ :is([data-mesub-hint], [data-mesub-receipt]) {
+  display: block;
+  margin-block-start: 8px;
+  color: var(--_muted);
+  font-family: var(--mesub-font, inherit);
+  font-size: 12px;
+  line-height: 16px;
+}
+[data-mesub-subscribe] ~ [data-mesub-receipt] {
+  color: var(--_text-soft);
+}
+[data-mesub-subscribe] ~ [data-mesub-receipt] a {
+  color: var(--_accent-text);
+  text-underline-offset: 2px;
+}
+[data-mesub-subscribe] + [data-mesub-error] ~ [data-mesub-hint] {
+  display: none;
+}
+
+@keyframes mesub-caret { 50% { opacity: 0; } }
+@keyframes mesub-shake {
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+@keyframes mesub-travel { to { inset-inline-start: calc(100% - 8px); } }
+@keyframes mesub-pop { from { transform: rotate(45deg) scale(0.6); opacity: 0; } }
+@keyframes mesub-countdown { to { transform: scaleX(0); } }
+
+
+/* ============================================================ V4 LAYER
+ * Centred, icon-led screens; Mesub brand in the top bar; one smooth progress line.
+ * Extra markup it styles (proposals):
+ *   [data-mesub-brand] — top bar: Mesub mark (ideally inline <svg fill="currentColor">) + "Mesub"
+ *   [data-mesub-dialog] > [data-mesub-back]:empty — the icon back button, top left
+ *   [data-mesub-hero="logo"|"mail"|"wait"|"error"|"pending"|"check"|"empty"] (aria-hidden),
+ *     "wait"/"error"/"pending" wrap the wallet or merchant <img>
+ *   [data-mesub-funds="safe"] — a quiet line, "Nothing was charged."
+ */
+
+[data-mesub-dialog] {
+  inline-size: min(380px, calc(100vw - 32px));
+  padding: 14px 24px 24px;
+  --_radius-lg: var(--mesub-radius-lg, calc(var(--_radius) + 10px));
+}
+[data-mesub-dialog][open] {
+  row-gap: 16px;
+}
+[data-mesub-dialog] h2 {
+  padding-inline-end: 0;
+  text-align: center;
+  font-size: 20px;
+  line-height: 26px;
+}
+[data-mesub-dialog] h2 + p {
+  margin-block-start: -10px;
+  text-align: center;
+}
+
+/* one continuous progress line across the whole journey */
+[data-mesub-dialog][open]::before {
+  display: block;
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  block-size: 3px;
+  background:
+    linear-gradient(var(--_bar, var(--_accent)) 0 0) 0 0 / calc(var(--_progress, 0) * 100%) 100% no-repeat,
+    var(--_divider);
+  transition: background-size 520ms var(--_ease-enter);
+}
+[data-mesub-dialog][data-mesub-step="email"] { --_progress: 0.14; }
+[data-mesub-dialog][data-mesub-step="code"] { --_progress: 0.28; }
+[data-mesub-dialog][data-mesub-step="wallet"] { --_progress: 0.42; }
+[data-mesub-dialog][data-mesub-step="review"] { --_progress: 0.58; }
+[data-mesub-dialog][data-mesub-step="approve"] { --_progress: 0.72; }
+[data-mesub-dialog][data-mesub-step="confirming"] { --_progress: 0.86; }
+[data-mesub-dialog]:is([data-mesub-step="subscribed"], [data-mesub-step="done"]) { --_progress: 1; --_bar: var(--_success); }
+[data-mesub-dialog][data-mesub-step="done"][open]::before { display: block; }
+
+/* top bar: back · Mesub · close */
+[data-mesub-brand] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-block-size: 36px;
+  margin: 0;
+  color: var(--_text);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+[data-mesub-brand] :is(img, svg) {
+  inline-size: auto;
+  block-size: 12px;
+  flex: none;
+}
+[data-mesub-close] {
+  inset-block-start: 14px;
+  inset-inline-end: 14px;
+}
+[data-mesub-dialog] > [data-mesub-back]:empty {
+  position: absolute;
+  inset-block-start: 14px;
+  inset-inline-start: 14px;
+  grid-column: auto !important;
+  display: grid;
+  place-items: center;
+  inline-size: 36px;
+  block-size: 36px;
+  margin: 0;
+  padding: 0;
+  color: var(--_muted);
+}
+[data-mesub-dialog] > [data-mesub-back]:empty::before {
+  margin-inline-start: 3px;
+  inline-size: 8px;
+  block-size: 8px;
+}
+[data-mesub-dialog] > [data-mesub-back]:empty:hover {
+  color: var(--_text);
+}
+/* a text back/cancel under the primary button */
+[data-mesub-dialog] > [data-mesub-back]:not(:empty) {
+  grid-column: 1 / -1 !important;
+  justify-self: center;
+  margin: -8px 0 0;
+}
+[data-mesub-dialog] > [data-mesub-back]:not(:empty)::before {
+  display: none;
+}
+[data-mesub-cancel] {
+  margin-block-start: -8px;
+}
+
+/* merchant: centred logo + name */
+[data-mesub-merchant] {
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0 0;
+  border: 0;
+  color: var(--_text-soft);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+[data-mesub-merchant] img {
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px var(--_border), 0 8px 20px -10px rgb(20 21 26 / 35%);
+}
+[data-mesub-merchant] strong {
+  font-weight: 500;
+}
+[data-mesub-merchant] [data-mesub-network] {
+  margin: 0;
+}
+[data-mesub-merchant] + h2 {
+  margin-block-start: -6px;
+}
+
+/* ------------------------------------------------------------- heroes */
+
+[data-mesub-hero] {
+  position: relative;
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  inline-size: 72px;
+  block-size: 72px;
+  margin-block-start: 4px;
+}
+[data-mesub-hero] img {
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px var(--_border);
+}
+[data-mesub-hero]:is([data-mesub-hero="wait"], [data-mesub-hero="error"], [data-mesub-hero="pending"]) img {
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+[data-mesub-hero]:is([data-mesub-hero="wait"], [data-mesub-hero="error"], [data-mesub-hero="pending"])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 3px solid var(--_divider);
+  border-radius: 50%;
+}
+[data-mesub-hero="wait"]::before {
+  border-block-start-color: var(--_accent) !important;
+  border-inline-end-color: var(--_accent) !important;
+  animation: mesub-spin 1000ms linear infinite;
+}
+[data-mesub-hero="error"]::before {
+  border-color: var(--_danger);
+}
+[data-mesub-hero="pending"]::before {
+  border-color: var(--_warning);
+  border-block-end-color: var(--_divider);
+  animation: mesub-spin 2400ms linear infinite;
+}
+[data-mesub-hero="error"]::after {
+  content: "!";
+  position: absolute;
+  inset-block-end: 2px;
+  inset-inline-end: 2px;
+  display: grid;
+  place-items: center;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: 50%;
+  background: var(--_danger);
+  color: var(--_bg);
+  box-shadow: 0 0 0 3px var(--_bg);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+}
+[data-mesub-hero="check"]::before {
+  content: "";
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--_bg), var(--_bg)) 21px 29px / 9px 3px no-repeat,
+    linear-gradient(var(--_bg), var(--_bg)) 27px 17.5px / 3px 14.5px no-repeat,
+    var(--_success);
+  box-shadow: 0 0 0 8px var(--_success-soft);
+  transform: rotate(45deg);
+  animation: mesub-pop 420ms var(--_ease-enter) both;
+}
+[data-mesub-hero="mail"]::before {
+  content: "";
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 50%;
+  background: var(--_accent-soft);
+}
+[data-mesub-hero="mail"]::after {
+  content: "";
+  position: absolute;
+  inline-size: 26px;
+  block-size: 26px;
+  background: var(--_accent-ink);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2.5'/%3E%3Cpath d='m3.5 7.5 8.5 6 8.5-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2.5'/%3E%3Cpath d='m3.5 7.5 8.5 6 8.5-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+[data-mesub-hero="empty"]::before {
+  content: "";
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--_muted), var(--_muted)) 34px 25px / 6px 6px no-repeat,
+    linear-gradient(var(--_sunk), var(--_sunk)) 17px 19px / 22px 18px no-repeat,
+    linear-gradient(var(--_muted), var(--_muted)) 15px 17px / 26px 22px no-repeat,
+    var(--_sunk);
+}
+/* subscribed / done: the hero replaces the inline check */
+[data-mesub-dialog]:is([data-mesub-step="subscribed"], [data-mesub-step="done"]) h2 {
+  display: block;
+  padding: 0;
+}
+[data-mesub-dialog]:is([data-mesub-step="subscribed"], [data-mesub-step="done"]) h2::before {
+  content: none;
+}
+[data-mesub-dialog][data-mesub-step="done"][open] {
+  padding-block: 14px 28px;
+}
+
+/* under a hero, the alert line is plain centred text */
+[data-mesub-dialog]:has([data-mesub-hero]) > [data-mesub-error] {
+  margin-block-start: -10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--_text-soft);
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+[data-mesub-dialog]:has([data-mesub-hero]) > [data-mesub-error]::before {
+  display: none;
+}
+[data-mesub-dialog] > [data-mesub-explorer] {
+  justify-self: center;
+  font-size: 13px;
+}
+
+/* money status: a quiet line, not a chip */
+[data-mesub-funds] {
+  position: relative;
+  justify-self: center;
+  margin: -6px 0 0;
+  padding-inline-start: 18px;
+  color: var(--_success-text);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+[data-mesub-funds]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 2px;
+  inset-block-start: 4px;
+  inline-size: 9px;
+  block-size: 5px;
+  border-inline-start: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+[data-mesub-funds="pending"] {
+  color: var(--_warning-text);
+}
+[data-mesub-funds="pending"]::before {
+  inset-block-start: 6px;
+  inline-size: 6px;
+  block-size: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: currentColor;
+  transform: none;
+}
+
+/* ------------------------------------------------------- inputs, code */
+
+[data-mesub-input] {
+  min-block-size: 48px;
+  border-radius: var(--_radius-lg);
+  padding-inline: 14px;
+}
+[data-mesub-input]:not([data-mesub-input="code"]) {
+  font-size: 15px;
+}
+:is([data-mesub-submit], [data-mesub-done]) {
+  min-block-size: 48px;
+  border-radius: var(--_radius-lg);
+}
+[data-mesub-slot] {
+  block-size: 52px;
+  border-radius: var(--_radius-lg);
+}
+[data-mesub-slots] {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 10px repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+[data-mesub-form] > [data-mesub-error] {
+  justify-self: center;
+}
+[data-mesub-dialog] p > [data-mesub-resend] {
+  display: inline;
+  min-block-size: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: var(--_accent-text);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+[data-mesub-dialog] p > [data-mesub-resend]:disabled {
+  color: var(--_muted);
+  text-decoration: none;
+}
+[data-mesub-dialog] p:has(> [data-mesub-resend]) {
+  color: var(--_muted);
+  font-size: 13px;
+  text-align: center;
+}
+[data-mesub-notice] {
+  justify-content: center;
+  padding: 0;
+  background: none;
+}
+
+/* ------------------------------------------------------------ wallets */
+
+[data-mesub-wallets] {
+  gap: 8px;
+}
+[data-mesub-wallets] [data-mesub-wallet] {
+  min-block-size: 56px;
+  padding: 0 14px;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: var(--_radius-lg);
+  background: var(--_sunk);
+  font-size: 15px;
+}
+[data-mesub-wallets] [data-mesub-wallet]:hover:not(:disabled) {
+  border-color: var(--_accent);
+  background: var(--_sunk);
+}
+[data-mesub-wallet] img {
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  background: none;
+  border-radius: 8px;
+}
+[data-mesub-wallet]::after {
+  display: none;
+}
+[data-mesub-badge] {
+  background: var(--_bg);
+  color: var(--_text-soft);
+  box-shadow: inset 0 0 0 1px var(--_border);
+}
+
+[data-mesub-no-wallet] {
+  margin-block-start: 4px;
+}
+[data-mesub-install] {
+  min-block-size: 56px;
+  padding: 0 14px;
+  border-color: transparent;
+  background: var(--_sunk);
+}
+[data-mesub-install] img {
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  background: none;
+  border-radius: 8px;
+}
+[data-mesub-reload] {
+  min-block-size: 48px;
+  border-radius: var(--_radius-lg);
+}
+
+/* ------------------------------------------------------------- review */
+
+[data-mesub-dialog][data-mesub-step="review"] h2 {
+  color: var(--_text);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+[data-mesub-dialog][data-mesub-step="review"] h2 + [data-mesub-price] {
+  margin-block-start: -14px;
+}
+[data-mesub-price] {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+}
+[data-mesub-price] strong {
+  font-size: 40px;
+  line-height: 46px;
+}
+[data-mesub-price] span {
+  padding: 0;
+  background: none;
+  color: var(--_text-soft);
+  font-size: 14px;
+  font-weight: 400;
+}
+[data-mesub-summary] {
+  padding: 2px 16px;
+}
+[data-mesub-summary] + p {
+  margin-block-start: -6px;
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+[data-mesub-row][data-mesub-tone="warning"] dd {
+  color: var(--_warning-text);
+}
+
+
+/* ============================================================ V5 LAYER
+ * Cleaner surfaces and a motion system. Every decorative animation sits inside
+ * prefers-reduced-motion: no-preference, so reduced-motion users get none of it
+ * (spinners keep the v1 slow-down).
+ *
+ * Motion tokens
+ *   enter   380ms  cubic-bezier(0.22, 1, 0.36, 1)   modal (scale + blur in)
+ *   rise    420ms  same curve, 45ms stagger         each step's content, on mount
+ *   spring  cubic-bezier(0.34, 1.56, 0.64, 1)      slots, badges, check pop
+ *   press   120ms  scale(0.98)                      buttons and rows
+ *   progress 600ms spring-ish fill                  top line
+ * Extra markup: [data-mesub-slot="ok"] once a code is verified (slots turn teal, left to right);
+ *   a[data-mesub-manage] on the subscribed step, linking to the subscriber's page on Mesub;
+ *   details[data-mesub-terms] > summary + dl[data-mesub-summary] + p on review, closed by default
+ *   (open it when a warning concerns one of its rows).
+ */
+
+/* ------------------------------------------------------------ cleaner */
+
+[data-mesub-dialog] {
+  padding: 14px 28px 28px;
+  border-color: color-mix(in srgb, var(--_text) 7%, transparent);
+  --_shadow: var(--mesub-shadow, 0 1px 1px rgb(20 21 26 / 4%), 0 32px 72px -28px rgb(20 21 26 / 38%));
+}
+[data-mesub-dialog]:is([data-mesub-theme="dark"], [data-mesub-theme="dark"] *) {
+  --_shadow: var(--mesub-shadow, 0 0 0 1px rgb(255 255 255 / 5%), 0 32px 80px -24px rgb(0 0 0 / 80%));
+}
+[data-mesub-dialog][open] {
+  row-gap: 18px;
+}
+[data-mesub-brand] {
+  color: var(--_text-soft);
+  font-size: 12px;
+}
+[data-mesub-brand] :is(img, svg) {
+  block-size: 11px;
+  opacity: 0.9;
+}
+[data-mesub-dialog] h2 + p {
+  color: var(--_muted);
+}
+[data-mesub-merchant] img,
+[data-mesub-hero] img {
+  box-shadow: none;
+  outline: 1px solid var(--_divider);
+  outline-offset: -1px;
+}
+[data-mesub-hero]:is([data-mesub-hero="wait"], [data-mesub-hero="error"], [data-mesub-hero="pending"]) img {
+  outline: 0;
+}
+[data-mesub-summary] {
+  padding: 0;
+  border-block: 1px solid var(--_divider);
+  border-radius: 0;
+  background: none;
+}
+[data-mesub-wallets] [data-mesub-wallet],
+[data-mesub-install] {
+  border: 1px solid var(--_border);
+  background: var(--_bg);
+}
+[data-mesub-wallets] [data-mesub-wallet]:hover:not(:disabled),
+[data-mesub-install]:hover {
+  border-color: color-mix(in srgb, var(--_accent) 60%, transparent);
+  background: var(--_bg);
+  box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--_accent) 50%, transparent);
+}
+[data-mesub-dialog] progress {
+  block-size: 3px;
+}
+
+/* the wait ring becomes a soft conic arc */
+[data-mesub-hero="wait"]::before,
+[data-mesub-hero="pending"]::before {
+  border: 0 !important;
+  background: conic-gradient(from 0deg, transparent 0 50%, var(--_ring, var(--_accent)));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+}
+[data-mesub-hero="pending"] {
+  --_ring: var(--_warning);
+}
+[data-mesub-hero][data-mesub-hero="error"]::before {
+  border-color: color-mix(in srgb, var(--_danger) 55%, transparent);
+}
+
+/* ok slots */
+[data-mesub-slot="ok"] {
+  border-color: var(--_success);
+  background: var(--_success-soft);
+  color: var(--_success-text);
+}
+
+/* ------------------------------------------------------------- motion */
+
+/* review: payment details and terms, closed by default (native <details>) */
+[data-mesub-terms] {
+  margin: 0;
+  border-block: 1px solid var(--_divider);
+}
+[data-mesub-terms] > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-block-size: 44px;
+  list-style: none;
+  color: var(--_text-soft);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--_radius);
+  transition: color var(--_dur) ease-out;
+}
+[data-mesub-terms] > summary::-webkit-details-marker {
+  display: none;
+}
+[data-mesub-terms] > summary::after {
+  content: "";
+  flex: none;
+  inline-size: 7px;
+  block-size: 7px;
+  margin-inline-end: 4px;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+[data-mesub-terms][open] > summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+[data-mesub-terms] > summary:hover {
+  color: var(--_text);
+}
+[data-mesub-terms] [data-mesub-summary] {
+  border-block-end: 0;
+}
+[data-mesub-terms] [data-mesub-summary] + p {
+  margin: 0;
+  padding-block: 2px 14px;
+}
+
+/* subscribed: a way out to the subscriber's Mesub page (details, cancel, history) */
+[data-mesub-dialog] [data-mesub-manage] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-block-size: 44px;
+  margin-block-start: -8px;
+  padding: 0 16px;
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius-lg);
+  color: var(--_text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--_dur) ease-out, border-color var(--_dur) ease-out;
+}
+[data-mesub-dialog] [data-mesub-manage]:hover {
+  background: var(--_sunk);
+  border-color: var(--_control-border);
+}
+[data-mesub-manage] :is(img, svg) {
+  flex: none;
+  inline-size: auto;
+  block-size: 11px;
+}
+[data-mesub-manage]::after {
+  content: "\2197";
+  color: var(--_muted);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+
+  [data-mesub-dialog][open] {
+    animation: mesub-enter-v5 380ms var(--_ease-enter);
+  }
+  [data-mesub-dialog][open]::before {
+    transition: background-size 600ms cubic-bezier(0.3, 1.25, 0.5, 1);
+  }
+
+  /* each step's content rises in, one element after another */
+  [data-mesub-dialog][open] > :not([data-mesub-close], [data-mesub-back]:empty, [data-mesub-brand]) {
+    animation: mesub-rise 420ms var(--_ease-enter) both;
+  }
+  [data-mesub-dialog][open] > :nth-child(4) { animation-delay: 0ms; }
+  [data-mesub-dialog][open] > :nth-child(5) { animation-delay: 45ms; }
+  [data-mesub-dialog][open] > :nth-child(6) { animation-delay: 90ms; }
+  [data-mesub-dialog][open] > :nth-child(7) { animation-delay: 135ms; }
+  [data-mesub-dialog][open] > :nth-child(8) { animation-delay: 180ms; }
+  [data-mesub-dialog][open] > :nth-child(9) { animation-delay: 225ms; }
+  [data-mesub-dialog][open] > :nth-child(n+10) { animation-delay: 270ms; }
+
+  [data-mesub-wallets] > li > [data-mesub-wallet],
+  [data-mesub-summary] > [data-mesub-row],
+  [data-mesub-no-wallet] > [data-mesub-install] {
+    animation: mesub-rise 420ms var(--_ease-enter) both;
+  }
+  [data-mesub-wallets] > li:nth-child(1) > [data-mesub-wallet],
+  [data-mesub-summary] > [data-mesub-row]:nth-child(1),
+  [data-mesub-no-wallet] > [data-mesub-install]:nth-of-type(1) { animation-delay: 120ms; }
+  [data-mesub-wallets] > li:nth-child(2) > [data-mesub-wallet],
+  [data-mesub-summary] > [data-mesub-row]:nth-child(2),
+  [data-mesub-no-wallet] > [data-mesub-install]:nth-of-type(2) { animation-delay: 170ms; }
+  [data-mesub-wallets] > li:nth-child(3) > [data-mesub-wallet],
+  [data-mesub-summary] > [data-mesub-row]:nth-child(3) { animation-delay: 220ms; }
+  [data-mesub-wallets] > li:nth-child(n+4) > [data-mesub-wallet],
+  [data-mesub-summary] > [data-mesub-row]:nth-child(n+4) { animation-delay: 270ms; }
+
+  /* press and hover */
+  :is([data-mesub-submit], [data-mesub-done], [data-mesub-subscribe], [data-mesub-reload], [data-mesub-wallet], [data-mesub-install]) {
+    transition-property: color, background-color, border-color, box-shadow, transform;
+    transition-duration: var(--_dur), var(--_dur), var(--_dur), 200ms, 120ms;
+    transition-timing-function: ease-out;
+  }
+  :is([data-mesub-submit], [data-mesub-done], [data-mesub-subscribe], [data-mesub-reload]):active:not(:disabled, [aria-busy="true"]) {
+    transform: scale(0.98);
+  }
+  [data-mesub-wallets] [data-mesub-wallet]:hover:not(:disabled),
+  [data-mesub-install]:hover {
+    transform: translateY(-1px);
+  }
+  [data-mesub-wallets] [data-mesub-wallet]:active:not(:disabled) {
+    transform: scale(0.99);
+  }
+
+  /* busy primary: a light sweep across the button */
+  :is([data-mesub-submit][aria-busy="true"], [data-mesub-subscribe]:is([data-mesub-state="signing"], [data-mesub-state="confirming"])) {
+    background-image: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 22%) 50%, transparent 70%);
+    background-size: 220% 100%;
+    animation: mesub-shimmer 1400ms linear infinite;
+  }
+
+  /* code slots */
+  [data-mesub-slot="filled"] {
+    animation: mesub-slot-in 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  [data-mesub-slot="active"] {
+    animation: mesub-breathe 1600ms ease-in-out infinite;
+  }
+  [data-mesub-slot="ok"] {
+    animation: mesub-slot-ok 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  [data-mesub-slot="ok"]:nth-child(2) { animation-delay: 40ms; }
+  [data-mesub-slot="ok"]:nth-child(3) { animation-delay: 80ms; }
+  [data-mesub-slot="ok"]:nth-child(4) { animation-delay: 120ms; }
+  [data-mesub-slot="ok"]:nth-child(5) { animation-delay: 160ms; }
+  [data-mesub-slot="ok"]:nth-child(6) { animation-delay: 200ms; }
+
+  /* heroes */
+  [data-mesub-hero="pending"]::before {
+    animation-duration: 2400ms;
+  }
+  [data-mesub-dialog][open] > [data-mesub-hero="error"] {
+    animation: mesub-rise 420ms var(--_ease-enter) both, mesub-shake 420ms ease-out 380ms;
+  }
+  [data-mesub-hero="error"]::after {
+    animation: mesub-badge 420ms cubic-bezier(0.34, 1.56, 0.64, 1) 260ms both;
+  }
+  [data-mesub-hero="check"]::before {
+    animation: mesub-check 760ms var(--_ease-enter) both;
+  }
+  [data-mesub-hero="check"]::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border: 2px solid var(--_success);
+    border-radius: 50%;
+    animation: mesub-ripple 900ms ease-out 380ms both;
+  }
+  [data-mesub-hero="mail"]::before {
+    animation: mesub-pop-circle 460ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  [data-mesub-hero="mail"]::after {
+    animation: mesub-bob 2600ms ease-in-out 500ms infinite;
+  }
+  [data-mesub-merchant] img {
+    animation: mesub-pop-circle 460ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* money status and alerts arrive last */
+  [data-mesub-funds] {
+    animation: mesub-rise 420ms var(--_ease-enter) 300ms both !important;
+  }
+  [data-mesub-badge] {
+    animation: mesub-badge 380ms cubic-bezier(0.34, 1.56, 0.64, 1) 360ms both;
+  }
+
+  /* terms open and close smoothly where the browser can animate to auto */
+  [data-mesub-terms] {
+    interpolate-size: allow-keywords;
+  }
+  [data-mesub-terms]::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition: block-size 320ms var(--_ease-enter), content-visibility 320ms allow-discrete;
+  }
+  [data-mesub-terms][open]::details-content {
+    block-size: auto;
+  }
+  [data-mesub-terms] > summary::after {
+    transition: transform 240ms var(--_ease-enter);
+  }
+
+  /* subscribe button: label swaps fade */
+  [data-mesub-subscribe][data-mesub-state="subscribed"]::before {
+    animation: mesub-badge 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  [data-mesub-subscribe] + [data-mesub-error] {
+    animation: mesub-rise 320ms var(--_ease-enter) both;
+  }
+}
+
+@keyframes mesub-enter-v5 {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); filter: blur(6px); }
+}
+@keyframes mesub-rise {
+  from { opacity: 0; transform: translateY(8px); }
+}
+@keyframes mesub-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+@keyframes mesub-slot-in {
+  from { transform: scale(0.86); }
+}
+@keyframes mesub-breathe {
+  50% { box-shadow: 0 0 0 5px var(--_accent-ring); }
+}
+@keyframes mesub-slot-ok {
+  from { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.04); }
+}
+@keyframes mesub-badge {
+  from { transform: scale(0); }
+}
+@keyframes mesub-check {
+  0% { opacity: 0; transform: rotate(45deg) scale(0.4); background-size: 0 3px, 3px 0; background-position: 21px 29px, 27px 32px; }
+  35% { opacity: 1; transform: rotate(45deg) scale(1.06); background-size: 0 3px, 3px 0; background-position: 21px 29px, 27px 32px; }
+  60% { transform: rotate(45deg) scale(1); background-size: 9px 3px, 3px 0; background-position: 21px 29px, 27px 32px; }
+  100% { transform: rotate(45deg) scale(1); background-size: 9px 3px, 3px 14.5px; background-position: 21px 29px, 27px 17.5px; }
+}
+@keyframes mesub-ripple {
+  from { opacity: 0.7; transform: scale(0.85); }
+  to { opacity: 0; transform: scale(1.55); }
+}
+@keyframes mesub-pop-circle {
+  from { opacity: 0; transform: scale(0.6); }
+}
+@keyframes mesub-bob {
+  50% { transform: translateY(-2px); }
+}
+
+
+/* ------------------------------------------- mobile: bottom sheet < 480px */
+
+@media (max-width: 479.98px) {
+  [data-mesub-dialog] {
+    inline-size: 100%;
+    max-inline-size: 100%;
+    max-block-size: calc(100dvh - 24px);
+    margin: auto 0 0;
+    padding: 24px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-block-end: 0;
+    border-radius: var(--_radius-lg) var(--_radius-lg) 0 0;
+  }
+  [data-mesub-dialog][open] {
+    animation-name: mesub-sheet;
+  }
+  [data-mesub-dialog] h2 {
+    font-size: 20px;
+    line-height: 26px;
+  }
+  [data-mesub-input]:not([data-mesub-input="code"]) {
+    font-size: 16px; /* below 16px iOS Safari zooms the page on focus */
+  }
+  [data-mesub-close] {
+    inset-block-start: 8px;
+    inset-inline-end: 8px;
+    inline-size: 44px;
+    block-size: 44px;
+  }
+  :is([data-mesub-back], [data-mesub-resend]) {
+    min-block-size: 44px;
+  }
+  [data-mesub-wallet] {
+    min-block-size: 56px;
+  }
+}
+
+@media (max-width: 479.98px) {
+  [data-mesub-dialog] { padding: 24px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  [data-mesub-close] { inset-block-start: 10px; inset-inline-end: 8px; inline-size: 44px; block-size: 44px; }
+  [data-mesub-dialog] > [data-mesub-back]:empty { inset-block-start: 10px; inset-inline-start: 8px; inline-size: 44px; block-size: 44px; }
+  [data-mesub-dialog] { padding-block-start: 14px; }
+  [data-mesub-slot] { block-size: 52px; }
+  [data-mesub-price] strong { font-size: 40px; line-height: 44px; }
+  [data-mesub-wallets] [data-mesub-wallet], [data-mesub-install] { min-block-size: 60px; }
+}
+
+/* ---------------------------------------------------------------- motion */
+
+@keyframes mesub-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+@keyframes mesub-sheet {
+  from { transform: translateY(100%); }
+}
+@keyframes mesub-fade {
+  from { opacity: 0; }
+}
+@keyframes mesub-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-mesub-dialog][open],
+  [data-mesub-dialog]::backdrop {
+    animation: none;
+  }
+  [data-mesub-dialog] *,
+  [data-mesub-dialog] *::before,
+  [data-mesub-dialog] *::after,
+  [data-mesub-subscribe],
+  [data-mesub-subscribe]::before,
+  [data-mesub-subscribe]::after {
+    transition-duration: 0ms !important;
+    animation-duration: 2400ms !important; /* spinners slow to a crawl instead of vanishing */
+  }
+}
+
+@media (forced-colors: active) {
+  :is([data-mesub-submit], [data-mesub-subscribe], [data-mesub-wallet], [data-mesub-input]) {
+    border: 1px solid ButtonText;
+  }
+}

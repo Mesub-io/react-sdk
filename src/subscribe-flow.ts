@@ -25,8 +25,8 @@ export interface SubscribeInput {
     chain: SolanaChain;
     // The wallet is about to prompt.
     onSigner?(signer: Signer): void;
-    // The wallet sent it: money may move from here on.
-    onSent?(signature: string): void;
+    // The wallet sent it: money may move from here on. `id` is what confirm takes again.
+    onSent?(signature: string, id: string): void;
 }
 
 /** Reserve, one signature, confirm. Throws MesubClientError, WalletError or NotSettledError. */
@@ -39,7 +39,7 @@ export async function subscribeOnce(
     const signer = await findSigner(input.wallets, input.address);
     input.onSigner?.(signer);
     const signature = await signAndSend(signer, input.chain, transaction);
-    input.onSent?.(signature);
+    input.onSent?.(signature, reserved.id);
 
     const confirmed = await api.subscriptions.confirm(accessToken, reserved.id, signature);
     if (confirmed.reason) throw new NotSettledError(confirmed.reason, signature);

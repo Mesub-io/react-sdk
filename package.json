@@ -17,9 +17,12 @@
     "sdk"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "files": [
-    "dist"
+    "dist",
+    "styles.css"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -35,6 +38,7 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./styles.css": "./styles.css",
     "./package.json": "./package.json"
   },
   "packageManager": "pnpm@11.27.0",

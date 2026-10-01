@@ -16,6 +16,13 @@ const failures = [];
 
 for (const [subpath, conditions] of Object.entries(pkg.exports)) {
     if (subpath === './package.json') continue;
+    // A plain file, the stylesheet: it only has to be there.
+    if (typeof conditions === 'string') {
+        if (!existsSync(new URL(`../${conditions}`, import.meta.url))) {
+            failures.push(`${pkg.name}/${subpath.slice(2)}: ${conditions} is missing`);
+        }
+        continue;
+    }
 
     const specifier = subpath === '.' ? pkg.name : `${pkg.name}/${subpath.slice(2)}`;
 
@@ -52,6 +59,7 @@ if (failures.length > 0) {
     process.exit(1);
 }
 
+const modules = Object.values(pkg.exports).filter((conditions) => typeof conditions !== 'string');
 console.log(
-    `${Object.keys(pkg.exports).length - 1} entry point resolves through import and require.`,
+    `${modules.length} entry point resolves through import and require, and styles.css ships.`,
 );

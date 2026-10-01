@@ -210,7 +210,10 @@ describe('the email step', () => {
         ]);
         expect(heading()).toBe('Enter the code');
         expect(within(dialog()).getByText('ada@example.com').tagName).toBe('STRONG');
-        expect(document.activeElement).toBe(screen.getByLabelText('6-digit code'));
+        // The focus moves in an effect after the step renders.
+        await waitFor(() =>
+            expect(document.activeElement).toBe(screen.getByLabelText('6-digit code')),
+        );
     });
 
     it('shows Sending, busy, while the code is sent', async () => {
@@ -489,7 +492,8 @@ describe('the code step', () => {
 
         expect(step()).toBe('email');
         expect(screen.getByLabelText('Email')).toHaveProperty('value', 'ada@example.com');
-        expect(document.activeElement).toBe(screen.getByLabelText('Email'));
+        // The focus moves in an effect after the step renders.
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Email')));
         expect(error()).toBeNull();
     });
 });
@@ -513,7 +517,8 @@ describe('the wallet step', () => {
                 .map((button) => button.textContent),
         ).toEqual(['Phantom']);
         expect(within(list).getByRole('button').getAttribute('data-mesub-wallet')).toBe('Phantom');
-        expect(document.activeElement).toBe(within(list).getByRole('button'));
+        // The focus moves in an effect after the step renders.
+        await waitFor(() => expect(document.activeElement).toBe(within(list).getByRole('button')));
     });
 
     // The code is spent: back means the email again, and a new code.

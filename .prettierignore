@@ -1,4 +1,5 @@
 dist
 pnpm-lock.yaml
+# Verbatim from the v5 design handoff: never reformatted.
 styles.css
 test/fixtures

@@ -221,8 +221,11 @@ describe('the review', () => {
         await setup();
         await openReview();
 
-        expect(document.activeElement).toBe(
-            within(dialog()).getByRole('button', { name: /Subscribe and pay/ }),
+        // The focus moves in an effect after the step renders.
+        await waitFor(() =>
+            expect(document.activeElement).toBe(
+                within(dialog()).getByRole('button', { name: /Subscribe and pay/ }),
+            ),
         );
     });
 

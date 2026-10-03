@@ -1843,6 +1843,12 @@
 [data-mesub-terms] [data-mesub-message] {
   margin-block-end: 14px;
 }
+/* Right under the list, the terms are its next row: one divider between them,
+   not two with the view's gap in the middle. */
+[data-mesub-summary] + [data-mesub-terms] {
+  margin-block-start: -16px;
+  border-block-start: 0;
+}
 /* the last line of the review, right above the button */
 [data-mesub-footnote] {
   margin: 0;

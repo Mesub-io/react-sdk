@@ -36,8 +36,8 @@ export interface MesubInternal {
     subscribe(request: SubscribeRequest): Promise<MesubSubscription | null>;
     // Opens the cancel, resume or close dialog. Resolves on close.
     manage(request: ManageRequest): Promise<MesubSubscription | null>;
-    // Opens the customer's subscriptions in a dialog: what the Manage button does.
-    openSubscriptions(): void;
+    // Opens the customer's subscription to that plan in a dialog: what the Manage button does.
+    openSubscription(plan: string | undefined): void;
 }
 
 export const MesubContext = createContext<MesubInternal | null>(null);

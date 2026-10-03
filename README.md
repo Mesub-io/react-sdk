@@ -126,12 +126,19 @@ when it did not go through. The hook also gives `subscription` and
 ```tsx
 import { ManageButton } from '@mesub/react';
 
-<ManageButton />;
+<ManageButton plan="pro" />;
 ```
 
-A button, like `SubscribeButton`: it opens the customer's subscriptions in a
-dialog. Put it in your account menu; pass children to word it your way. To
-show the same list in a page of yours instead:
+A button, like `SubscribeButton`: it opens the customer's subscription to that
+plan in the Mesub window. One subscription, not a list: how it stands, what is
+charged next, the latest payments with their receipts, and the one thing it
+allows now (cancel, resume or close). Leave `plan` out to open the customer's
+live subscription whatever its plan. Pass children to word the button your way.
+
+The payments and the next charge come from `GET /subscriptions/:id` of the
+routes; on a server that predates it, the window stands without them.
+
+To list every subscription in a page of yours instead:
 
 ```tsx
 import { ManageSubscriptions } from '@mesub/react';

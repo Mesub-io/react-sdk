@@ -29,6 +29,15 @@ export function formatDate(date: Date): string {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/** `Oct 4`: a date in a list of them, where the year is not in doubt. Null when there is none. */
+export function shortDay(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+        ? null
+        : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 /** An ISO date as `formatDate` writes it, or null when there is none to show. */
 export function day(iso: string | null | undefined): string | null {
     if (!iso) return null;

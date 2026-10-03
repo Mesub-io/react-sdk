@@ -8,6 +8,8 @@ import './style.css';
 
 // The local back runs on devnet.
 const chain = (import.meta.env['VITE_MESUB_CHAIN'] ?? 'solana:devnet') as `solana:${string}`;
+// The plan the page subscribes to and manages, unless another is typed in.
+const PLAN: string = import.meta.env['VITE_MESUB_PLAN'] ?? 'pro';
 
 interface User {
     id: string;
@@ -68,10 +70,10 @@ function Page() {
             <section className="card">
                 <h2>My subscriptions</h2>
                 <p>
-                    <code>&lt;ManageButton /&gt;</code> opens them in a dialog, each with Cancel,
-                    Resume or Close.
+                    <code>&lt;ManageButton plan /&gt;</code> opens the subscription to that plan:
+                    how it stands, its payments, and Cancel, Resume or Close.
                 </p>
-                <ManageButton />
+                <ManageButton plan={PLAN} />
             </section>
 
             <CallServer />
@@ -143,7 +145,7 @@ function Login({
 
 /** A plan slug and the button, with what it settled on. */
 function Subscribe() {
-    const [plan, setPlan] = useState(import.meta.env['VITE_MESUB_PLAN'] ?? 'pro');
+    const [plan, setPlan] = useState(PLAN);
     const [subscribed, setSubscribed] = useState<MesubSubscription | null>(null);
 
     return (

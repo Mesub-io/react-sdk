@@ -90,5 +90,36 @@ export interface WalletTransaction {
     last_valid_block_height: string;
 }
 
+/** One charge Mesub tried, as the merchant's server hands it on. */
+export interface MesubPayment {
+    attempted_at: string;
+    // PAID, REJECTED (the wallet was short), SKIPPED, BLOCKED: a newer one is handed on as is.
+    outcome: string;
+    // The token's base units.
+    amount: string;
+    reason: string | null;
+    // The transaction, once something was sent.
+    signature: string | null;
+}
+
+/** The one charge Mesub announces next, as the merchant's server serves it. */
+export interface MesubUpcoming {
+    // `charge` at the due date of a running one, `retry` of a missed one.
+    kind: string;
+    due_at: string;
+    // The plan's price as a person counts it; null when the server could not read the plan.
+    amount: string | null;
+    amount_display: string | null;
+}
+
+/** What `GET /subscriptions/:id` answers: the subscription, what comes next, its latest charges. */
+export interface MesubSubscriptionDetail {
+    subscription: MesubSubscription;
+    // Soonest first, one at most today. Empty when nothing is due, or on an older server.
+    upcoming: MesubUpcoming[];
+    // Newest first, five at most. Null when they could not be read.
+    payments: MesubPayment[] | null;
+}
+
 /** What a subscription allows now. */
 export type MesubAction = 'cancel' | 'resume' | 'close';

@@ -25,6 +25,7 @@ import {
     TX_BYTES,
     type Handler,
 } from './helpers';
+import { paidIn, paymentSaid, pickSubscription } from '../src/detail-logic';
 import { noteOf } from '../src/subscriptions';
 import { registerWallet, type FakeWalletOptions } from './wallets';
 
@@ -729,65 +730,254 @@ describe('useSubscriptions, for a list of your own', () => {
 });
 
 describe('ManageButton', () => {
-    function mount(children?: string) {
+    const DAY = 86_400_000;
+    const iso = (days: number) => new Date(Date.now() + days * DAY).toISOString();
+    const SIGNATURE = base58(new Uint8Array(64).fill(7));
+
+    function mount({
+        held = [subscription()],
+        detail,
+        plan: slug,
+        children,
+    }: {
+        held?: MesubSubscription[];
+        // What GET /subscriptions/:id answers; left out, the route does not exist.
+        detail?: unknown;
+        plan?: string;
+        children?: string;
+    } = {}) {
         const fetch = server({
             'GET /plans/pro': () => json(200, plan),
-            'GET /subscriptions': () => json(200, { subscriptions: [subscription()] }),
+            'GET /subscriptions': () => json(200, { subscriptions: held }),
+            'GET /subscriptions/sub_1': () =>
+                detail === undefined
+                    ? refusal(404, 'not_found', 'Nothing here.')
+                    : json(200, detail),
             'POST /subscriptions/sub_1/cancel': built,
         });
         registerWallet({ connected: true });
         render(
             <MesubProvider endpoint={ENDPOINT} fetch={fetch}>
-                <ManageButton>{children}</ManageButton>
+                <ManageButton plan={slug}>{children}</ManageButton>
             </MesubProvider>,
         );
         return fetch;
     }
 
-    it('reads nothing until it is clicked, then lists the subscriptions in a dialog', async () => {
+    const open = async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Manage subscription' }));
+        return screen.findByRole('dialog');
+    };
+
+    it('reads nothing until it is clicked, then shows the one subscription', async () => {
         const fetch = mount();
 
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(fetch).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Manage subscription' }));
+        const dialog = await open();
 
-        const dialog = await screen.findByRole('dialog');
-        expect(within(dialog).getByRole('heading', { name: 'Your subscriptions' })).toBeTruthy();
-        expect(await within(dialog).findByRole('button', { name: 'Cancel' })).toBeTruthy();
+        expect(await within(dialog).findByRole('heading', { name: 'Pro' })).toBeTruthy();
+        expect(within(dialog).getByText(`by ${plan.project_name}`)).toBeTruthy();
+        expect(within(dialog).getByText('Active')).toBeTruthy();
+        expect(within(dialog).getByText('Wa11…1111')).toBeTruthy();
+        expect(within(dialog).getByRole('button', { name: 'Cancel subscription' })).toBeTruthy();
     });
 
     it('takes its own words', () => {
-        mount('Billing');
+        mount({ children: 'Billing' });
 
         expect(screen.getByRole('button', { name: 'Billing' })).toBeTruthy();
     });
 
-    it('steps aside for a row action, and comes back when that one is left', async () => {
+    it('lists what comes next, then what was charged, newest first, each paid one with its receipt', async () => {
+        mount({
+            detail: {
+                subscription: subscription(),
+                upcoming: [
+                    { kind: 'charge', due_at: iso(3), amount: '2000000', amount_display: '2' },
+                ],
+                payments: [
+                    {
+                        attempted_at: iso(0),
+                        outcome: 'PAID',
+                        amount: '2000000',
+                        reason: null,
+                        signature: SIGNATURE,
+                    },
+                    {
+                        attempted_at: iso(-3),
+                        outcome: 'REJECTED',
+                        amount: '2000000',
+                        reason: 'insufficient-balance',
+                        signature: SIGNATURE,
+                    },
+                    {
+                        attempted_at: iso(-3),
+                        outcome: 'REFUNDED',
+                        amount: '2000000',
+                        reason: null,
+                        signature: null,
+                    },
+                ],
+            },
+        });
+        const dialog = await open();
+
+        const lines = await waitFor(() => {
+            const found = within(dialog).getAllByRole('listitem');
+            expect(found).toHaveLength(4);
+            return found;
+        });
+
+        expect(lines[0]!.getAttribute('data-mesub-payment')).toBe('upcoming');
+        expect(within(lines[0]!).getByText('Next charge')).toBeTruthy();
+        expect(lines[1]!.getAttribute('data-mesub-payment')).toBe('good');
+        // Only a paid one links to its transaction.
+        expect(within(lines[1]!).getByRole('link').getAttribute('href')).toContain(SIGNATURE);
+        expect(within(lines[2]!).getByText('Missed, wallet was short')).toBeTruthy();
+        expect(within(lines[2]!).queryByRole('link')).toBeNull();
+        // An outcome this version does not know is shown as named, never as paid.
+        expect(within(lines[3]!).getByText('refunded')).toBeTruthy();
+        expect(lines[3]!.getAttribute('data-mesub-payment')).toBe('none');
+        // What comes next is said once: not as a fact above too.
+        expect(within(dialog).getAllByText('Next charge')).toHaveLength(1);
+    });
+
+    it('stands without payments on a server that has no such route', async () => {
         mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Manage subscription' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+        const dialog = await open();
+
+        expect(await within(dialog).findByRole('heading', { name: 'Pro' })).toBeTruthy();
+        expect(within(dialog).queryByText('Payments')).toBeNull();
+        // The next charge is still said, as a fact.
+        expect(within(dialog).getByText('Next charge')).toBeTruthy();
+    });
+
+    it('stands without them when the server could not read them', async () => {
+        mount({ detail: { subscription: subscription(), upcoming: [], payments: null } });
+        const dialog = await open();
+
+        expect(await within(dialog).findByRole('heading', { name: 'Pro' })).toBeTruthy();
+        expect(within(dialog).queryByRole('listitem')).toBeNull();
+    });
+
+    it('says so when the customer has no subscription to that plan', async () => {
+        mount({ held: [subscription({ plan: 'team' })], plan: 'pro' });
+        const dialog = await open();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'No subscription yet' }),
+        ).toBeTruthy();
+        expect(within(dialog).queryByRole('button', { name: 'Cancel subscription' })).toBeNull();
+    });
+
+    it('steps aside for its action, and comes back when that one is left', async () => {
+        mount();
+        const dialog = await open();
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'Cancel subscription' }));
 
         // One dialog at a time: the cancel's own.
-        await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
         fireEvent.click(await screen.findByRole('button', { name: 'Keep it' }));
+        await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
 
-        const back = await screen.findByRole('dialog');
-        expect(within(back).getByRole('heading', { name: 'Your subscriptions' })).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Pro' })).toBeTruthy();
     });
 
     it('closes on Done, and opens again', async () => {
         mount();
-        const button = screen.getByRole('button', { name: 'Manage subscription' });
 
-        fireEvent.click(button);
-        fireEvent.click(
-            within(await screen.findByRole('dialog')).getByRole('button', { name: 'Close' }),
-        );
+        fireEvent.click(within(await open()).getByRole('button', { name: 'Done' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-        fireEvent.click(button);
-        expect(await screen.findByRole('dialog')).toBeTruthy();
+        expect(await open()).toBeTruthy();
+    });
+});
+
+describe('which subscription the window is about', () => {
+    const at = (id: string, status: MesubSubscription['status'], createdAt: string, slug = 'pro') =>
+        subscription({ id, status, created_at: createdAt, plan: slug });
+
+    it('takes the one to that plan, a live one before an ended one', () => {
+        const rows = [
+            at('ended_new', 'ended', '2026-10-03T00:00:00.000Z'),
+            at('active_old', 'active', '2026-09-01T00:00:00.000Z'),
+            at('other_plan', 'active', '2026-10-04T00:00:00.000Z', 'team'),
+        ];
+
+        expect(pickSubscription(rows, 'pro')?.id).toBe('active_old');
+        expect(pickSubscription(rows, 'team')?.id).toBe('other_plan');
+        // No plan named: the newest live one, whatever its plan.
+        expect(pickSubscription(rows)?.id).toBe('other_plan');
+    });
+
+    it('takes the newest ended one when nothing is live', () => {
+        const rows = [
+            at('older', 'ended', '2026-08-01T00:00:00.000Z'),
+            at('newer', 'ended', '2026-09-01T00:00:00.000Z'),
+        ];
+
+        expect(pickSubscription(rows, 'pro')?.id).toBe('newer');
+    });
+
+    it.each(['pending', 'expired', 'failed', 'superseded'] as const)(
+        'never takes a %s row',
+        (status) => {
+            expect(
+                pickSubscription([at('x', status, '2026-10-01T00:00:00.000Z')], 'pro'),
+            ).toBeNull();
+        },
+    );
+
+    it('answers null for nothing, and for no subscription to that plan', () => {
+        expect(pickSubscription([], 'pro')).toBeNull();
+        expect(
+            pickSubscription([at('x', 'active', '2026-10-01T00:00:00.000Z', 'team')], 'pro'),
+        ).toBeNull();
+    });
+});
+
+describe('how a charge reads', () => {
+    it.each([
+        [
+            { outcome: 'PAID', reason: null },
+            { label: 'Paid', tone: 'good' },
+        ],
+        [
+            { outcome: 'REJECTED', reason: 'insufficient-balance' },
+            { label: 'Missed, wallet was short', tone: 'bad' },
+        ],
+        [
+            { outcome: 'REJECTED', reason: 'something-new' },
+            { label: 'Missed', tone: 'bad' },
+        ],
+        [
+            { outcome: 'REJECTED', reason: null },
+            { label: 'Missed', tone: 'bad' },
+        ],
+        [
+            { outcome: 'SKIPPED', reason: null },
+            { label: 'Skipped', tone: 'none' },
+        ],
+        [
+            { outcome: 'BLOCKED', reason: 'terms-missing' },
+            { label: 'Not charged', tone: 'none' },
+        ],
+        [
+            { outcome: 'CHARGED_BACK', reason: null },
+            { label: 'charged back', tone: 'none' },
+        ],
+    ])('says %j as %j', (payment, said) => {
+        expect(paymentSaid(payment)).toEqual(said);
+    });
+
+    it("writes an amount in the plan's token, and nothing when the plan is unknown", () => {
+        const format = (amount: string, decimals: number) => `${Number(amount) / 10 ** decimals}`;
+
+        expect(paidIn('2000000', { decimals: 6, symbol: 'USDC' }, format)).toBe('2 USDC');
+        expect(paidIn('2000000', { decimals: 6, symbol: null }, format)).toBe('2');
+        expect(paidIn('2000000', undefined, format)).toBeNull();
+        expect(paidIn('2.5', { decimals: 6, symbol: 'USDC' }, format)).toBeNull();
     });
 });
 

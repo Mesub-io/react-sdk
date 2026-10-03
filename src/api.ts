@@ -1,8 +1,11 @@
 import { MesubClientError } from './errors';
 import type {
     MesubAction,
+    MesubPayment,
     MesubPlan,
     MesubSubscription,
+    MesubSubscriptionDetail,
+    MesubUpcoming,
     PreparedSubscription,
     Settled,
     WalletTransaction,
@@ -25,6 +28,8 @@ export interface ApiOptions {
 export interface MesubApi {
     plan(slug: string): Promise<MesubPlan>;
     subscriptions(): Promise<MesubSubscription[]>;
+    // One of them with its latest charges.
+    subscription(id: string): Promise<MesubSubscriptionDetail>;
     prepare(plan: string, wallet: string): Promise<PreparedSubscription>;
     submit(id: string, signed: { transaction: string; terms_signature: string }): Promise<Settled>;
     build(action: MesubAction, id: string): Promise<WalletTransaction>;
@@ -120,6 +125,18 @@ export function createApi(options: ApiOptions): MesubApi {
             return Array.isArray(answer.subscriptions)
                 ? (answer.subscriptions as MesubSubscription[])
                 : [];
+        },
+        subscription: async (id) => {
+            const answer = await request('GET', at(id), undefined, REQUEST_TIMEOUT_MS);
+            return {
+                subscription: answer.subscription as MesubSubscription,
+                upcoming: Array.isArray(answer.upcoming)
+                    ? (answer.upcoming as MesubUpcoming[])
+                    : [],
+                payments: Array.isArray(answer.payments)
+                    ? (answer.payments as MesubPayment[])
+                    : null,
+            };
         },
         prepare: async (plan, wallet) =>
             (await request(

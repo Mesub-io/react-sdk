@@ -2231,6 +2231,189 @@
   }
 }
 
+/* ============================================================ ONE SUBSCRIPTION
+ * [data-mesub-step="subscription"]: what the Manage button opens. Read top to
+ * bottom: who and what, how it stands, the facts, what comes and what was
+ * charged, then the one thing it allows. No card inside the window: the
+ * window is the frame, hairlines do the grouping.
+ */
+[data-mesub-step="subscription"] {
+  text-align: start;
+}
+[data-mesub-identity] {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-inline-size: 0;
+}
+[data-mesub-identity] [data-mesub-logo] {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 12px;
+  background: var(--_sunk);
+  color: var(--_text-soft);
+  font-size: 16px;
+  font-weight: 600;
+  object-fit: cover;
+}
+[data-mesub-identity] > div {
+  flex: 1;
+  display: grid;
+  min-inline-size: 0;
+}
+[data-mesub-dialog] [data-mesub-identity] h2 {
+  overflow: hidden;
+  padding: 0;
+  font-size: 17px;
+  line-height: 22px;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-mesub-identity] > div > span {
+  overflow: hidden;
+  color: var(--_muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-mesub-dialog] p[data-mesub-rate] {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--_text-soft);
+  font-size: 14px;
+  line-height: 20px;
+  text-align: start;
+  font-variant-numeric: tabular-nums;
+}
+[data-mesub-rate] strong {
+  color: var(--_text);
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+[data-mesub-dialog] p[data-mesub-state-note] {
+  grid-column: 1 / -1;
+  margin: -8px 0 0;
+  color: var(--_text-soft);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: start;
+}
+[data-mesub-step="subscription"] > [data-mesub-summary] {
+  grid-column: 1 / -1;
+}
+
+/* what comes and what was charged: three columns, the date, the word, the amount */
+[data-mesub-payments] {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  margin-block-start: -4px;
+}
+[data-mesub-payments] h3 {
+  margin: 0;
+  color: var(--_muted);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+[data-mesub-payments] ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* What Mesub serves fits; a longer list scrolls here, the action staying in reach. */
+  max-block-size: 260px;
+  overflow: auto;
+}
+[data-mesub-payment] {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 36px;
+  font-size: 13px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+[data-mesub-payment] + [data-mesub-payment] {
+  border-block-start: 1px solid var(--_divider);
+}
+[data-mesub-payment] > span:first-child {
+  color: var(--_muted);
+}
+/* the word, with a dot of its tone before it */
+[data-mesub-payment] > span:nth-child(2) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  color: var(--_text);
+}
+[data-mesub-payment] > span:nth-child(2)::before {
+  content: "";
+  flex: none;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--_muted);
+}
+[data-mesub-payment="good"] > span:nth-child(2)::before {
+  background: var(--_success);
+}
+[data-mesub-payment="bad"] > span:nth-child(2)::before {
+  background: var(--_danger);
+}
+/* not yet: a hollow dot and softer words, so it cannot read as a charge made */
+[data-mesub-payment="upcoming"] > span:nth-child(2) {
+  color: var(--_text-soft);
+}
+[data-mesub-payment="upcoming"] > span:nth-child(2)::before {
+  border: 1.5px solid var(--_muted);
+  background: transparent;
+}
+[data-mesub-payment] > span:last-child {
+  color: var(--_text);
+  font-weight: 500;
+  text-align: end;
+}
+/* only what was paid is bold: an amount not taken, or not yet, reads softer */
+:is([data-mesub-payment="upcoming"], [data-mesub-payment="bad"], [data-mesub-payment="none"])
+  > span:last-child {
+  color: var(--_text-soft);
+  font-weight: 400;
+}
+[data-mesub-dialog] [data-mesub-payment] a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--_border);
+  text-underline-offset: 3px;
+}
+[data-mesub-dialog] [data-mesub-payment] a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* the one action: full width, neutral, the rarest thing on the screen */
+[data-mesub-step="subscription"] > [data-mesub-action] {
+  grid-column: 1 / -1;
+  inline-size: 100%;
+  min-block-size: 44px;
+  border-color: var(--_border);
+  border-radius: var(--_radius-lg);
+}
+[data-mesub-step="subscription"] > [data-mesub-retry] {
+  grid-column: 1 / -1;
+}
+
 /* the list inside the dialog: the dialog is the frame, the list brings none */
 [data-mesub-dialog] [data-mesub-subscriptions][data-mesub-in-dialog] {
   grid-column: 1 / -1;

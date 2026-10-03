@@ -9,7 +9,7 @@ import {
     type SubscribeRequest,
 } from './context';
 import { Manage } from './manage';
-import { SubscriptionsDialog } from './subscriptions';
+import { SubscriptionDialog } from './detail';
 import type { MesubPlan, MesubSubscription } from './types';
 import type { SolanaChain } from './wallet';
 
@@ -52,9 +52,9 @@ export function MesubProvider({
     const [open, setOpen] = useState<Open | null>(null);
     const [revision, setRevision] = useState(0);
     const pending = useRef<Pending | null>(null);
-    // The list of subscriptions, up behind whatever one of its rows opens.
-    const [listed, setListed] = useState(false);
-    const openSubscriptions = useCallback(() => setListed(true), []);
+    // The subscription's own window, up behind whatever its action opens.
+    const [managed, setManaged] = useState<{ plan: string | undefined } | null>(null);
+    const openSubscription = useCallback((plan: string | undefined) => setManaged({ plan }), []);
 
     // Unmounted with a dialog up: whoever waits on it is answered.
     useEffect(
@@ -120,9 +120,9 @@ export function MesubProvider({
             revision,
             subscribe,
             manage,
-            openSubscriptions,
+            openSubscription,
         }),
-        [api, chain, theme, manageUrl, plan, revision, subscribe, manage, openSubscriptions],
+        [api, chain, theme, manageUrl, plan, revision, subscribe, manage, openSubscription],
     );
 
     return (
@@ -139,8 +139,10 @@ export function MesubProvider({
                     onClose={close}
                 />
             ) : null}
-            {/* One native dialog at a time: the list steps aside while a row's action runs. */}
-            {listed && !open ? <SubscriptionsDialog onClose={() => setListed(false)} /> : null}
+            {/* One native dialog at a time: it steps aside while its action runs. */}
+            {managed && !open ? (
+                <SubscriptionDialog plan={managed.plan} onClose={() => setManaged(null)} />
+            ) : null}
             {open?.kind === 'manage' ? (
                 <Manage
                     subscription={open.request.subscription}

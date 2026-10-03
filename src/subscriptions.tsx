@@ -2,7 +2,6 @@ import {
     forwardRef,
     useCallback,
     useEffect,
-    useId,
     useRef,
     useState,
     type ButtonHTMLAttributes,
@@ -10,7 +9,6 @@ import {
 } from 'react';
 import { signedOut } from './api';
 import { useMesubInternal } from './context';
-import { MesubDialog } from './dialog';
 import { MesubClientError } from './errors';
 import { cadence, day, shortAddress } from './format';
 import type { MesubAction, MesubPlan, MesubSubscription } from './types';
@@ -131,7 +129,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
     return { state, subscriptions, error, reload, manage };
 }
 
-const STATUS: Record<string, string> = {
+export const STATUS: Record<string, string> = {
     active: 'Active',
     unpaid: 'Payment late',
     cancelled: 'Cancelled',
@@ -142,7 +140,7 @@ const STATUS: Record<string, string> = {
 const ACTION: Record<MesubAction, string> = { cancel: 'Cancel', resume: 'Resume', close: 'Close' };
 
 /** The one date that matters now: the next charge, the next try, or when access ends. */
-function fact(row: MesubHeldSubscription): { term: string; date: string } | null {
+export function fact(row: MesubHeldSubscription): { term: string; date: string } | null {
     const pick = (term: string, iso: string | null) => {
         const date = day(iso);
         return date ? { term, date } : null;
@@ -335,43 +333,20 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
     );
 }
 
-/** The customer's subscriptions in the Mesub dialog: what the Manage button opens. */
-export function SubscriptionsDialog({ onClose }: { onClose(): void }) {
-    const titleId = useId();
-
-    return (
-        <MesubDialog
-            titleId={titleId}
-            onClose={onClose}
-            screen={{
-                step: 'subscriptions',
-                view: 'subscriptions',
-                body: (
-                    <>
-                        <h2 id={titleId}>Your subscriptions</h2>
-                        <ManageSubscriptions data-mesub-in-dialog="" />
-                        {/* "Done", not "Close": a row may offer to close a subscription. */}
-                        <button type="button" data-mesub-cancel="" onClick={onClose}>
-                            Done
-                        </button>
-                    </>
-                ),
-            }}
-        />
-    );
+export interface ManageButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+    // The plan whose subscription it opens. Left out: the customer's live one, whatever the plan.
+    plan?: string | undefined;
 }
 
-export type ManageButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
-
 /**
- * Opens the customer's subscriptions in a dialog, each with what it allows
- * now: cancel, resume or close. Put it wherever your account menu is.
+ * Opens the customer's subscription to a plan in the Mesub window: how it
+ * stands, what comes next, what was charged, and cancel, resume or close.
  */
 export const ManageButton = forwardRef<HTMLButtonElement, ManageButtonProps>(function ManageButton(
-    { children, onClick, ...rest },
+    { plan, children, onClick, ...rest },
     ref,
 ) {
-    const { openSubscriptions, theme } = useMesubInternal();
+    const { openSubscription, theme } = useMesubInternal();
 
     return (
         <button
@@ -382,7 +357,7 @@ export const ManageButton = forwardRef<HTMLButtonElement, ManageButtonProps>(fun
             data-mesub-theme={theme}
             onClick={(event) => {
                 onClick?.(event);
-                if (!event.defaultPrevented) openSubscriptions();
+                if (!event.defaultPrevented) openSubscription(plan);
             }}
         >
             {children ?? 'Manage subscription'}

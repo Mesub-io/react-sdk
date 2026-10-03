@@ -1857,15 +1857,35 @@
   line-height: 18px;
   text-align: center;
 }
-/* the terms as rows of the list above: a value may run over two lines */
+/* What the toggle opens: set in from the list above and lighter than it, with
+   a rule down its side, so it reads as the toggle's own content and not as
+   more rows of that list. */
+[data-mesub-terms] [data-mesub-summary] {
+  margin: 0 0 14px;
+  padding: 2px 0 2px 14px;
+  border: 0;
+  border-inline-start: 2px solid var(--_border);
+  border-radius: 0;
+  background: transparent;
+}
 [data-mesub-terms] [data-mesub-row] {
   align-items: flex-start;
+  min-block-size: 0;
+  padding-block: 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+[data-mesub-terms] [data-mesub-row] + [data-mesub-row] {
+  border-block-start: 0;
 }
 [data-mesub-terms] [data-mesub-row] dt {
   flex: none;
+  color: var(--_muted);
 }
 [data-mesub-terms] [data-mesub-row] dd {
   display: block;
+  color: var(--_text-soft);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 /* the token, as a small button that opens where it is traded */
@@ -1900,14 +1920,14 @@
     transition: none;
   }
 }
-/* where the subscription is stopped: a quiet button under the terms, opening that page */
+/* where the subscription is stopped: a quiet button on the done screen, opening that page */
 [data-mesub-dialog] a[data-mesub-manage] {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   min-block-size: 40px;
-  margin-block: 12px 14px;
+  margin: 0;
   border: 1px solid var(--_border);
   border-radius: var(--_radius);
   color: var(--_text);

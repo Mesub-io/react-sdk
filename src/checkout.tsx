@@ -50,6 +50,7 @@ type View =
           signer: Signer;
           subscription: MesubSubscription;
           signature: string | null;
+          cancelUrl: string | null;
       }
     | { name: 'failed'; failure: Failure; signer: Signer | null; signature: string | null }
     | { name: 'signed-out' };
@@ -127,6 +128,8 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         signed: { transaction: string; terms_signature: string };
         signer: Signer;
         signature: string | null;
+        // Where the terms said it can be stopped, for the done screen.
+        cancelUrl: string | null;
     } | null>(null);
     const latest = useRef({ onState, onSubscribed });
     latest.current = { onState, onSubscribed };
@@ -259,6 +262,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             signed: { transaction: signed.transaction, terms_signature: termsSignature },
             signer,
             signature: signed.signature,
+            cancelUrl: termsCancelUrl(prepared.terms.message),
         };
         await submit();
     }
@@ -267,7 +271,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
     async function submit() {
         const handed = sent.current;
         if (!handed) return;
-        const { id, signed, signer, signature } = handed;
+        const { id, signed, signer, signature, cancelUrl } = handed;
         const current = begin();
         setView({ name: 'submitting', signer, signature });
         try {
@@ -295,6 +299,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
                     signer,
                     subscription: settled.subscription,
                     signature,
+                    cancelUrl,
                 });
             }
         } catch (error) {
@@ -564,7 +569,6 @@ function stageScreen(props: {
 
     if (view.name === 'review') {
         const { terms } = view.prepared;
-        const cancelUrl = termsCancelUrl(terms.message);
         const nextCharge = new Date(Date.now() + plan.period_hours * 3_600_000);
         return {
             step: 'review',
@@ -621,16 +625,6 @@ function stageScreen(props: {
                                 </div>
                             ))}
                         </dl>
-                        {cancelUrl ? (
-                            <a
-                                data-mesub-manage=""
-                                href={cancelUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                Cancel any time
-                            </a>
-                        ) : null}
                     </details>
                     {/* Last before the button: what clicking it starts. */}
                     <p data-mesub-footnote="">
@@ -738,6 +732,17 @@ function stageScreen(props: {
                 <button type="button" data-mesub-done="" onClick={props.onClose}>
                     Done
                 </button>
+                {/* Only once it runs: where it is stopped is of no use before. */}
+                {view.cancelUrl ? (
+                    <a
+                        data-mesub-manage=""
+                        href={view.cancelUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        Cancel any time
+                    </a>
+                ) : null}
             </>
         ),
     };

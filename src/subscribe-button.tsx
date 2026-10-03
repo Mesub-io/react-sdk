@@ -56,6 +56,8 @@ export function useSubscribe(plan: string, options: UseSubscribeOptions = {}): U
                 if (alive.current) {
                     setSubscription(confirmed);
                     setSignature(paid);
+                    // It may land after the dialog was closed: the button says so all the same.
+                    setState('subscribed');
                 }
                 latest.current.onSubscribed?.(confirmed);
             },

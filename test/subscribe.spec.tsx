@@ -781,6 +781,8 @@ describe('submit', () => {
 
         await act(async () => answer(json(201, { subscription: subscription() })));
         await waitFor(() => expect(onSubscribed).toHaveBeenCalledWith(subscription()));
+        // The button under it follows, though its dialog is gone.
+        await waitFor(() => expect(button().getAttribute('data-mesub-state')).toBe('subscribed'));
     });
 });
 

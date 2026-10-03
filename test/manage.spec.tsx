@@ -397,6 +397,23 @@ describe('the wallet that pays', () => {
         expect(wallet.signAndSendTransaction).toHaveBeenCalledTimes(1);
     });
 
+    it('asks which wallet when one never answers the silent connect', async () => {
+        const { wallet } = setup();
+        wallet.connect.mockReturnValueOnce(new Promise(() => undefined));
+
+        fireEvent.click(within(await row()).getByRole('button', { name: 'Cancel' }));
+        const dialog = await screen.findByRole('dialog');
+        vi.useFakeTimers();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel subscription' }));
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(4_000);
+        });
+        vi.useRealTimers();
+
+        expect(await within(dialog).findByRole('button', { name: 'Fake Wallet' })).toBeTruthy();
+        expect(wallet.signAndSendTransaction).not.toHaveBeenCalled();
+    });
+
     it('refuses a wallet on another account: nothing is built, nothing is signed', async () => {
         const { fetch, wallet } = setup({ wallet: { address: OTHER_WALLET } });
 

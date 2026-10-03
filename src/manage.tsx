@@ -43,6 +43,7 @@ type View =
       }
     | { name: 'signed-out' };
 
+const FIND_TIMEOUT_MS = 4_000;
 const SAFE = 'Nothing changed.';
 const PENDING = 'The transaction may still land.';
 
@@ -157,7 +158,11 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
         if (shown.current.name !== 'confirm') return;
         const current = begin();
         setView({ name: 'finding' });
-        const signer = await findConnected(latest.current.wallets, payer, 'manage');
+        // A wallet that never answers a silent connect must not hold the dialog.
+        const signer = await Promise.race([
+            findConnected(latest.current.wallets, payer, 'manage'),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), FIND_TIMEOUT_MS)),
+        ]);
         if (!current()) return;
         if (signer) await run(signer);
         else setView({ name: 'wallet', pick: { name: 'list' } });

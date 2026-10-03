@@ -5,6 +5,7 @@ import {
     formatAmount,
     formatSol,
     shortAddress,
+    termsCancelUrl,
     termsFacts,
     termsLines,
 } from '../src/format';
@@ -150,8 +151,9 @@ describe('termsFacts', () => {
             ['Paid to', '69Nh…E7WB'],
             ['Subscription', 'Pro, from Acme'],
             ['Token', 'USDC'],
-            ['Cancel any time', 'mesub.io/subscriptions'],
         ]);
+        // Where to cancel is a button, not a row.
+        expect(termsCancelUrl(MESSAGE)).toBe('https://mesub.io/subscriptions');
     });
 
     it('keeps the whole value of what it shortened, for a tooltip', () => {
@@ -192,5 +194,22 @@ describe('termsFacts', () => {
             { label: 'Grace', value: '3 days' },
         ]);
         expect(termsFacts('')).toEqual([]);
+    });
+});
+
+describe('termsCancelUrl', () => {
+    it('answers the address only when it is one a browser can open', () => {
+        expect(
+            termsCancelUrl('Mesub: terms\nCancel any time: http://localhost:3000/subscriptions'),
+        ).toBe('http://localhost:3000/subscriptions');
+        for (const value of [
+            'from your wallet',
+            'javascript:alert(1)',
+            'https://a.co then b',
+            '',
+        ]) {
+            expect(termsCancelUrl(`Mesub: terms\nCancel any time: ${value}`)).toBeNull();
+        }
+        expect(termsCancelUrl('Mesub: terms')).toBeNull();
     });
 });

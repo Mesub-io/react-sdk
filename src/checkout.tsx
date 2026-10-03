@@ -4,7 +4,7 @@ import { signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { cadence, day, formatDate, shortAddress, termsFacts } from './format';
+import { cadence, day, formatDate, shortAddress, termsCancelUrl, termsFacts } from './format';
 import {
     Explorer,
     failureScreen,
@@ -564,6 +564,7 @@ function stageScreen(props: {
 
     if (view.name === 'review') {
         const { terms } = view.prepared;
+        const cancelUrl = termsCancelUrl(terms.message);
         const nextCharge = new Date(Date.now() + plan.period_hours * 3_600_000);
         return {
             step: 'review',
@@ -607,6 +608,16 @@ function stageScreen(props: {
                                 </div>
                             ))}
                         </dl>
+                        {cancelUrl ? (
+                            <a
+                                data-mesub-manage=""
+                                href={cancelUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Cancel any time
+                            </a>
+                        ) : null}
                     </details>
                     {/* Last before the button: what clicking it starts. */}
                     <p data-mesub-footnote="">

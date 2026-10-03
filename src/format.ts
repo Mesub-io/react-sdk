@@ -69,8 +69,27 @@ export function termsLines(message: string): TermsLine[] {
         });
 }
 
+/** The line that says where a subscription is stopped: a link, not a fact to read. */
+const CANCEL_LABEL = 'Cancel any time';
+
+/** Where the terms say the subscription can be cancelled, when it is a web address. */
+export function termsCancelUrl(message: string): string | null {
+    const line = termsLines(message).find((each) => each.label === CANCEL_LABEL);
+
+    return line && /^https?:\/\/\S+$/.test(line.value) ? line.value : null;
+}
+
 /** Lines of the terms a person does not read: said elsewhere on the screen, or for machines. */
-const NOT_SHOWN = new Set(['Amount', 'Plan', 'Plan details', 'Wallet', 'Nonce', 'Expires']);
+const NOT_SHOWN = new Set([
+    'Amount',
+    'Plan',
+    'Plan details',
+    'Wallet',
+    'Nonce',
+    'Expires',
+    // Shown as a button under the list.
+    CANCEL_LABEL,
+]);
 
 const ADDRESS = /[1-9A-HJ-NP-Za-km-z]{32,44}/;
 
@@ -83,7 +102,7 @@ export interface TermsFact {
 
 /**
  * The terms as a short list a person reads: the first charge, what follows,
- * who is paid, in which token, and how to stop. The price, the wallet and the
+ * who is paid and in which token. The price, the wallet and the
  * lines meant for machines (the plan's address, the nonce, the expiry) are
  * left out, and addresses are shortened: the wallet shows the full text when
  * it asks to sign.

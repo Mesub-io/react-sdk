@@ -1843,6 +1843,14 @@
 [data-mesub-terms] [data-mesub-message] {
   margin-block-end: 14px;
 }
+/* what closes the review, under the buttons */
+[data-mesub-footnote] {
+  margin: 0;
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
 /* the terms as a list: its name, then the fact, each on its own line of the grid */
 [data-mesub-terms] [data-mesub-message] {
   gap: 0;

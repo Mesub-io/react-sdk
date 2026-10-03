@@ -596,9 +596,6 @@ function stageScreen(props: {
                             <dd>{formatDate(nextCharge)}</dd>
                         </div>
                     </dl>
-                    <p>
-                        Two approvals in {wallet.name}: the terms, then the payment. Cancel anytime.
-                    </p>
                     <details data-mesub-terms="">
                         <summary>The terms you sign</summary>
                         {/* Every line of what the wallet signs, as a list: nothing dropped. */}
@@ -627,6 +624,10 @@ function stageScreen(props: {
                     <button type="button" data-mesub-cancel="" onClick={props.onClose}>
                         Cancel
                     </button>
+                    {/* Last, under the buttons: a reminder, not a step. */}
+                    <p data-mesub-footnote="">
+                        Two approvals in {wallet.name}: the terms, then the payment. Cancel anytime.
+                    </p>
                 </>
             ),
         };

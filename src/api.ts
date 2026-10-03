@@ -39,6 +39,26 @@ export interface MesubApi {
 const isObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** The fewest charges a server lists when it lists them all: under it, the list is whole. */
+const LISTED_AT_MOST = 5;
+
+/**
+ * What was paid since the subscription began. `paid` is the server's own
+ * total. A server that predates it only sums the charges it lists
+ * (`listed_paid`): that is the total only while the list is whole.
+ */
+function paidOf(answer: Record<string, unknown>): MesubSubscriptionDetail['paid'] {
+    const read = (value: unknown) =>
+        isObject(value) && typeof value.count === 'number'
+            ? { count: value.count, amount: typeof value.amount === 'string' ? value.amount : null }
+            : null;
+    const total = read(answer.paid);
+    if (total) return total;
+
+    const whole = Array.isArray(answer.payments) && answer.payments.length < LISTED_AT_MOST;
+    return whole ? read(answer.listed_paid) : null;
+}
+
 export function createApi(options: ApiOptions): MesubApi {
     const base = options.endpoint.replace(/\/+$/, '');
     // Read at call time, so a fetch stubbed after the client is built is still used.
@@ -136,6 +156,7 @@ export function createApi(options: ApiOptions): MesubApi {
                 payments: Array.isArray(answer.payments)
                     ? (answer.payments as MesubPayment[])
                     : null,
+                paid: paidOf(answer),
             };
         },
         prepare: async (plan, wallet) =>

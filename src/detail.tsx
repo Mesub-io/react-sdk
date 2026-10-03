@@ -123,7 +123,9 @@ export function SubscriptionDialog({
         const since = day(row.confirmed_at);
         const note = noteOf(row);
         const upcoming = detail?.upcoming ?? [];
-        const payments = detail?.payments ?? null;
+        const past = detail?.payments ?? [];
+        // In the plan's token; left out while the plan or the total is unknown, never guessed.
+        const total = detail?.paid?.amount ? paidIn(detail.paid.amount, plan, formatAmount) : null;
         // What comes next is told once: on its own line when the server serves it, as a fact otherwise.
         const facts = upcoming.length > 0 && dated?.term !== 'Access until' ? null : dated;
 
@@ -170,56 +172,82 @@ export function SubscriptionDialog({
                             <dd>{since}</dd>
                         </div>
                     ) : null}
+                    {total ? (
+                        <div data-mesub-row="">
+                            <dt>Total paid</dt>
+                            <dd>{total}</dd>
+                        </div>
+                    ) : null}
                     <div data-mesub-row="">
                         <dt>Pays from</dt>
                         <dd title={row.wallet}>{shortAddress(row.wallet)}</dd>
                     </div>
                 </dl>
 
-                {upcoming.length > 0 || (payments && payments.length > 0) ? (
-                    <section data-mesub-payments="" aria-labelledby={`${titleId}-payments`}>
-                        <h3 id={`${titleId}-payments`}>Payments</h3>
-                        <ul>
-                            {upcoming.map((next) => (
-                                <li key={`next-${next.due_at}`} data-mesub-payment="upcoming">
-                                    <span>{shortDay(next.due_at)}</span>
-                                    <span>{UPCOMING[next.kind] ?? next.kind}</span>
-                                    <span>
-                                        {next.amount_display
-                                            ? `${next.amount_display}${plan?.symbol ? ` ${plan.symbol}` : ''}`
-                                            : ''}
-                                    </span>
-                                </li>
-                            ))}
-                            {(payments ?? []).map((payment) => {
-                                const said = paymentSaid(payment);
-                                const amount = paidIn(payment.amount, plan, formatAmount);
-                                return (
-                                    <li
-                                        key={`${payment.attempted_at}-${payment.signature ?? ''}`}
-                                        data-mesub-payment={said.tone}
-                                    >
-                                        <span>{shortDay(payment.attempted_at)}</span>
-                                        <span>{said.label}</span>
-                                        <span>
-                                            {payment.signature && payment.outcome === 'PAID' ? (
-                                                <a
-                                                    href={explorerUrl(payment.signature, chain)}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    title="See the transaction"
-                                                >
-                                                    {amount ?? 'Receipt'}
-                                                </a>
-                                            ) : (
-                                                amount
-                                            )}
-                                        </span>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </section>
+                {upcoming.length > 0 || past.length > 0 ? (
+                    // Closed until asked for, as the terms are on the checkout: same toggle.
+                    <details data-mesub-terms="" data-mesub-payments="">
+                        <summary>Payments</summary>
+                        {upcoming.length > 0 ? (
+                            <section aria-label="Incoming payments">
+                                <h3>Incoming</h3>
+                                <ul>
+                                    {upcoming.map((next) => (
+                                        <li
+                                            key={`next-${next.due_at}`}
+                                            data-mesub-payment="upcoming"
+                                        >
+                                            <span>{shortDay(next.due_at)}</span>
+                                            <span>{UPCOMING[next.kind] ?? next.kind}</span>
+                                            <span>
+                                                {next.amount_display
+                                                    ? `${next.amount_display}${plan?.symbol ? ` ${plan.symbol}` : ''}`
+                                                    : ''}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        ) : null}
+                        {past.length > 0 ? (
+                            <section aria-label="Past payments">
+                                <h3>Past</h3>
+                                <ul>
+                                    {past.map((payment) => {
+                                        const said = paymentSaid(payment);
+                                        const amount = paidIn(payment.amount, plan, formatAmount);
+                                        return (
+                                            <li
+                                                key={`${payment.attempted_at}-${payment.signature ?? ''}`}
+                                                data-mesub-payment={said.tone}
+                                            >
+                                                <span>{shortDay(payment.attempted_at)}</span>
+                                                <span>{said.label}</span>
+                                                <span>
+                                                    {payment.signature &&
+                                                    payment.outcome === 'PAID' ? (
+                                                        <a
+                                                            href={explorerUrl(
+                                                                payment.signature,
+                                                                chain,
+                                                            )}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            title="See the transaction"
+                                                        >
+                                                            {amount ?? 'Receipt'}
+                                                        </a>
+                                                    ) : (
+                                                        amount
+                                                    )}
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </section>
+                        ) : null}
+                    </details>
                 ) : null}
 
                 {row.action ? (

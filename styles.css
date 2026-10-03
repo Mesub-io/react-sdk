@@ -2310,12 +2310,22 @@
   grid-column: 1 / -1;
 }
 
-/* what comes and what was charged: three columns, the date, the word, the amount */
-[data-mesub-payments] {
+/* Payments: the checkout's toggle, opening on two groups, what comes and what
+   was charged. Each line has three columns: the date, the word, the amount. */
+[data-mesub-step="subscription"] > [data-mesub-payments] {
   grid-column: 1 / -1;
+}
+[data-mesub-payments] > section {
   display: grid;
-  gap: 4px;
-  margin-block-start: -4px;
+  gap: 2px;
+  padding-inline-start: 14px;
+  border-inline-start: 2px solid var(--_border);
+}
+[data-mesub-payments] > section + section {
+  margin-block-start: 12px;
+}
+[data-mesub-payments] > section:last-child {
+  margin-block-end: 14px;
 }
 [data-mesub-payments] h3 {
   margin: 0;
@@ -2331,8 +2341,8 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  /* What Mesub serves fits; a longer list scrolls here, the action staying in reach. */
-  max-block-size: 260px;
+  /* A long history scrolls here, the action under it staying in reach. */
+  max-block-size: 216px;
   overflow: auto;
 }
 [data-mesub-payment] {

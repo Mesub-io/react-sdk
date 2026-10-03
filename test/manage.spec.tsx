@@ -844,6 +844,79 @@ describe('ManageButton', () => {
         expect(within(dialog).getAllByText('Next charge')).toHaveLength(1);
     });
 
+    const paid = (attempted_at: string) => ({
+        attempted_at,
+        outcome: 'PAID',
+        amount: '2000000',
+        reason: null,
+        signature: SIGNATURE,
+    });
+
+    it('groups the payments under one toggle: Incoming, then Past', async () => {
+        mount({
+            detail: {
+                subscription: subscription(),
+                upcoming: [
+                    { kind: 'charge', due_at: iso(3), amount: '2000000', amount_display: '2' },
+                ],
+                payments: [paid(iso(0))],
+                paid: { count: 1, amount: '2000000' },
+            },
+        });
+        const dialog = await open();
+
+        const toggle = await within(dialog).findByText('Payments');
+        expect(toggle.tagName).toBe('SUMMARY');
+        const groups = within(toggle.parentElement!).getAllByRole('heading', { level: 3 });
+        expect(groups.map((heading) => heading.textContent)).toEqual(['Incoming', 'Past']);
+    });
+
+    it("shows the total the server gives, in the plan's token", async () => {
+        mount({
+            detail: {
+                subscription: subscription(),
+                upcoming: [],
+                payments: [paid(iso(0))],
+                paid: { count: 4, amount: '8000000' },
+            },
+        });
+        const dialog = await open();
+
+        const label = await within(dialog).findByText('Total paid');
+        expect(label.nextElementSibling?.textContent).toBe('8 USDC');
+    });
+
+    it('takes the sum of the charges listed as the total only while the list is whole', async () => {
+        mount({
+            detail: {
+                subscription: subscription(),
+                upcoming: [],
+                payments: [paid(iso(0)), paid(iso(-3))],
+                listed_paid: { count: 2, amount: '4000000' },
+            },
+        });
+        const dialog = await open();
+
+        expect(
+            (await within(dialog).findByText('Total paid')).nextElementSibling?.textContent,
+        ).toBe('4 USDC');
+    });
+
+    it('shows no total when the list may be cut short and the server gives none', async () => {
+        mount({
+            detail: {
+                subscription: subscription(),
+                upcoming: [],
+                payments: [0, -3, -6, -9, -12].map((days) => paid(iso(days))),
+                listed_paid: { count: 5, amount: '10000000' },
+            },
+        });
+        const dialog = await open();
+
+        await waitFor(() => expect(within(dialog).getAllByRole('listitem')).toHaveLength(5));
+        expect(within(dialog).queryByText('Total paid')).toBeNull();
+    });
+
     it('stands without payments on a server that has no such route', async () => {
         mount();
         const dialog = await open();

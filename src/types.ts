@@ -117,8 +117,10 @@ export interface MesubSubscriptionDetail {
     subscription: MesubSubscription;
     // Soonest first, one at most today. Empty when nothing is due, or on an older server.
     upcoming: MesubUpcoming[];
-    // Newest first, five at most. Null when they could not be read.
+    // Newest first. Null when they could not be read.
     payments: MesubPayment[] | null;
+    // What was paid since it began, in base units. Null when the server does not say.
+    paid: { count: number; amount: string | null } | null;
 }
 
 /** What a subscription allows now. */

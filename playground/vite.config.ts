@@ -18,5 +18,10 @@ export default defineConfig({
             },
         ],
     },
-    server: { port: 5173, strictPort: true },
+    server: {
+        port: 5173,
+        strictPort: true,
+        // The merchant's server, on the page's own origin: its cookie travels with the widget's calls.
+        proxy: { '/api': process.env['PLAYGROUND_SERVER'] ?? 'http://localhost:5174' },
+    },
 });

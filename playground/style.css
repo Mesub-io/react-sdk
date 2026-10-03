@@ -1,4 +1,4 @@
-/* The playground's own look, never shipped: the package stays unstyled. */
+/* The playground's own look, never shipped. The widget's is @mesub/react/styles.css. */
 :root {
     --bg: #f6f6f4;
     --card: #ffffff;
@@ -136,7 +136,7 @@ pre {
 }
 
 /* Not inside the widget: its own stylesheet styles it. */
-button:not([data-mesub-dialog] *) {
+button:not([data-mesub-dialog] *, [data-mesub-subscriptions] *, [data-mesub-subscribe]) {
     font: inherit;
     padding: 8px 14px;
     border-radius: 8px;
@@ -146,7 +146,7 @@ button:not([data-mesub-dialog] *) {
     cursor: pointer;
 }
 
-button:not([data-mesub-dialog] *):hover {
+button:not([data-mesub-dialog] *, [data-mesub-subscriptions] *, [data-mesub-subscribe]):hover {
     border-color: var(--muted);
 }
 
@@ -156,7 +156,7 @@ button.primary:not([data-mesub-dialog] *) {
     color: var(--accent-text);
 }
 
-button:not([data-mesub-dialog] *):disabled {
+button:not([data-mesub-dialog] *, [data-mesub-subscriptions] *, [data-mesub-subscribe]):disabled {
     opacity: 0.5;
     cursor: default;
 }
@@ -194,49 +194,6 @@ button:not([data-mesub-dialog] *):disabled {
 
 .actions:has(.field) {
     align-items: end;
-}
-
-[data-mesub-error] {
-    display: block;
-    width: 100%;
-    color: var(--error);
-    font-size: 13px;
-}
-
-/* Readable defaults for the unstyled widget, here only, so it can be tried. */
-[data-mesub-modal],
-dialog {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 24px;
-    background: var(--card);
-    color: var(--text);
-    max-width: 380px;
-    width: calc(100% - 32px);
-}
-
-dialog::backdrop {
-    background: rgb(0 0 0 / 0.4);
-}
-
-[data-mesub-modal] input,
-dialog input {
-    font: inherit;
-    width: 100%;
-    padding: 8px 10px;
-    margin: 6px 0 12px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--bg);
-    color: var(--text);
-}
-
-[data-mesub-modal] ul,
-dialog ul {
-    list-style: none;
-    padding: 0;
-    display: grid;
-    gap: 8px;
 }
 
 a {

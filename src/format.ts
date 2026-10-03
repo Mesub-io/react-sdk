@@ -1,4 +1,4 @@
-import type { SolanaChain } from './send-transaction';
+import type { SolanaChain } from './wallet';
 
 /** `2000000` at 6 decimals is `2`, `2500000` is `2.5`: exact, no float. */
 export function formatAmount(amount: string, decimals: number): string {
@@ -19,9 +19,21 @@ export function cadence(hours: number): string {
     return hours === 1 ? 'every hour' : `every ${hours} hours`;
 }
 
+/** Lamports as SOL: `2039280` is `0.00203928 SOL`. */
+export function formatSol(lamports: string): string {
+    return `${formatAmount(lamports, 9)} SOL`;
+}
+
 /** `Oct 4, 2026`, in the subscriber's own locale. */
 export function formatDate(date: Date): string {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** An ISO date as `formatDate` writes it, or null when there is none to show. */
+export function day(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? null : formatDate(date);
 }
 
 export function shortAddress(address: string): string {

@@ -1,4 +1,3 @@
-import { useWallets } from '@wallet-standard/react';
 import {
     forwardRef,
     useCallback,
@@ -8,61 +7,37 @@ import {
     type ButtonHTMLAttributes,
     type MouseEvent,
 } from 'react';
-import { Checkout, type CheckoutStage } from './checkout';
-import { useMesub, useMesubInternal } from './context';
-import { MesubClientError, MesubSignInCancelledError } from './errors';
-import { explorerUrl, formatDate } from './format';
-import { WalletError, type SolanaChain } from './send-transaction';
-import { tokenWallet } from './session';
-import type { MesubSubscription } from './subscribe-api';
-import { NotSettledError, subscribeOnce } from './subscribe-flow';
-
-export type SubscribeState = 'idle' | 'signing' | 'confirming' | 'subscribed' | 'error';
+import { useMesubInternal, type SubscribeState } from './context';
+import { day, explorerUrl } from './format';
+import type { MesubSubscription } from './types';
 
 export interface UseSubscribeOptions {
-    // The network the wallet sends on. Defaults to solana:devnet while Mesub runs there.
-    chain?: SolanaChain | undefined;
+    // Called once Mesub confirmed it, even if the dialog was closed meanwhile.
     onSubscribed?: ((subscription: MesubSubscription) => void) | undefined;
 }
 
 /** What `useSubscribe()` returns. */
 export interface UseSubscribeResult {
+    // `open` while the dialog is up and nothing is being signed.
     state: SubscribeState;
-    // The API's or the wallet's message, in the error state.
-    error: string | null;
     subscription: MesubSubscription | null;
-    // The transaction that paid the first period, base58, once subscribed.
+    // The transaction that paid the first period, base58, when the wallet is its first signer.
     signature: string | null;
-    // Signs in first if needed. Resolves with the subscription, or null when it did not go through.
+    // Opens the checkout. Resolves when it closes: the subscription, or null if it did not go through.
     subscribe(): Promise<MesubSubscription | null>;
 }
 
-function messageOf(error: unknown): string {
-    if (
-        error instanceof MesubClientError ||
-        error instanceof WalletError ||
-        error instanceof NotSettledError
-    ) {
-        return error.message;
-    }
-    return 'Something went wrong. Try again.';
-}
-
-/** The Subscribe flow, for a button of your own: sign in, reserve, sign once, confirm. */
+/** The subscribe flow, for a button of your own: `subscribe()` opens the Mesub checkout. */
 export function useSubscribe(plan: string, options: UseSubscribeOptions = {}): UseSubscribeResult {
-    const { user, login, getAccessToken } = useMesub();
-    const { api } = useMesubInternal();
-    const wallets = useWallets();
+    const { subscribe: open } = useMesubInternal();
 
     const [state, setState] = useState<SubscribeState>('idle');
-    const [error, setError] = useState<string | null>(null);
     const [subscription, setSubscription] = useState<MesubSubscription | null>(null);
     const [signature, setSignature] = useState<string | null>(null);
 
-    // Read at call time: the latest render's values, without new callbacks.
-    const latest = useRef({ user, wallets, options });
-    latest.current = { user, wallets, options };
-    const running = useRef(false);
+    // Read at call time: the latest render's callback, without a new `subscribe`.
+    const latest = useRef(options);
+    latest.current = options;
     const alive = useRef(true);
     useEffect(() => {
         alive.current = true;
@@ -72,234 +47,87 @@ export function useSubscribe(plan: string, options: UseSubscribeOptions = {}): U
     }, []);
 
     const subscribe = useCallback(async (): Promise<MesubSubscription | null> => {
-        if (running.current) return null;
-        running.current = true;
-        const fail = (message: string) => {
-            if (!alive.current) return;
-            setError(message);
-            setState('error');
-        };
-        try {
-            let signedIn = latest.current.user;
-            if (!signedIn) {
-                try {
-                    signedIn = await login();
-                } catch (cancelled) {
-                    // Closing the sign-in is not an error: back to where it was.
-                    if (cancelled instanceof MesubSignInCancelledError) return null;
-                    throw cancelled;
+        let done = false;
+        const result = await open({
+            plan,
+            onState: (next) => alive.current && setState(next),
+            onSubscribed: (confirmed, paid) => {
+                done = true;
+                if (alive.current) {
+                    setSubscription(confirmed);
+                    setSignature(paid);
                 }
-            }
-            if (!alive.current) return null;
-            setError(null);
-            setState('signing');
+                latest.current.onSubscribed?.(confirmed);
+            },
+        });
+        // Closed before the end: back to where it was.
+        if (alive.current) setState(done ? 'subscribed' : 'idle');
+        return result;
+    }, [open, plan]);
 
-            const token = await getAccessToken();
-            // The wallet this site pays from: the token's, which a switch may have changed.
-            const address = tokenWallet(token) ?? signedIn.walletAddress;
-            if (!address || !token) {
-                fail('You are signed out. Sign in again.');
-                return null;
-            }
-
-            const { subscription: confirmed, signature: paid } = await subscribeOnce({
-                api,
-                accessToken: token,
-                plan,
-                wallets: latest.current.wallets,
-                address,
-                chain: latest.current.options.chain ?? 'solana:devnet',
-                onSent: () => {
-                    if (alive.current) setState('confirming');
-                },
-            });
-            if (alive.current) {
-                setSubscription(confirmed);
-                setSignature(paid);
-                setState('subscribed');
-            }
-            latest.current.options.onSubscribed?.(confirmed);
-            return confirmed;
-        } catch (failure) {
-            fail(messageOf(failure));
-            return null;
-        } finally {
-            running.current = false;
-        }
-    }, [api, plan, login, getAccessToken]);
-
-    return { state, error, subscription, signature, subscribe };
+    return { state, subscription, signature, subscribe };
 }
 
 export interface SubscribeButtonProps
     extends UseSubscribeOptions, ButtonHTMLAttributes<HTMLButtonElement> {
-    // The plan's slug, as set in the dashboard.
+    // The plan's slug, as set in the Mesub dashboard.
     plan: string;
-    // Opens the Mesub checkout (default). False: signs at once, the button alone shows progress.
-    checkout?: boolean | undefined;
 }
 
-const LABELS: Record<Exclude<SubscribeState, 'idle'>, string> = {
+const LABELS: Partial<Record<SubscribeState, string>> = {
     signing: 'Approve in your wallet',
     confirming: 'Confirming',
     subscribed: 'Subscribed',
-    error: 'Try again',
 };
 
-// The button underneath the checkout follows it, so it reads right once closed.
-const FROM_STAGE: Partial<Record<CheckoutStage, SubscribeState>> = {
-    approve: 'signing',
-    confirming: 'confirming',
-    subscribed: 'subscribed',
-};
-
-/** One signature for the whole subscription. Unstyled: style it by its data-mesub-* attributes. */
+/**
+ * Opens the Mesub checkout for a plan. Busy is aria-disabled, not disabled, so
+ * the keyboard focus stays on it; only subscribed disables it.
+ */
 export const SubscribeButton = forwardRef<HTMLButtonElement, SubscribeButtonProps>(
-    function SubscribeButton({ checkout = true, ...props }, ref) {
-        return checkout ? (
-            <CheckoutButton {...props} ref={ref} />
-        ) : (
-            <InlineButton {...props} ref={ref} />
+    function SubscribeButton(
+        { plan, onSubscribed, children, onClick, disabled, type, ...rest },
+        ref,
+    ) {
+        const { chain, theme } = useMesubInternal();
+        const { state, subscription, signature, subscribe } = useSubscribe(plan, { onSubscribed });
+        const busy = state === 'signing' || state === 'confirming';
+        const due = day(subscription?.next_charge_at);
+
+        function click(event: MouseEvent<HTMLButtonElement>) {
+            if (busy) return;
+            onClick?.(event);
+            if (!event.defaultPrevented) void subscribe();
+        }
+
+        return (
+            <>
+                <button
+                    {...rest}
+                    ref={ref}
+                    type={type ?? 'button'}
+                    disabled={Boolean(disabled) || state === 'subscribed'}
+                    aria-busy={busy || undefined}
+                    aria-disabled={busy || undefined}
+                    onClick={click}
+                    data-mesub-subscribe=""
+                    data-mesub-state={state}
+                    data-mesub-theme={theme}
+                >
+                    {LABELS[state] ?? children ?? 'Subscribe'}
+                </button>
+                {state === 'subscribed' && (due || signature) ? (
+                    <span data-mesub-receipt="" data-mesub-theme={theme}>
+                        {due ? `Next charge ${due}` : null}
+                        {due && signature ? ' · ' : null}
+                        {signature ? (
+                            <a href={explorerUrl(signature, chain)} target="_blank" rel="noopener">
+                                Receipt
+                            </a>
+                        ) : null}
+                    </span>
+                ) : null}
+            </>
         );
     },
 );
-
-type ButtonProps = Omit<SubscribeButtonProps, 'checkout'>;
-
-interface FaceProps extends Omit<ButtonProps, 'plan' | 'chain' | 'onSubscribed'> {
-    state: SubscribeState;
-    error: string | null;
-    subscription: MesubSubscription | null;
-    signature: string | null;
-    chain: SolanaChain;
-    onStart(): void;
-}
-
-/**
- * The button and the spans that follow it. Busy is aria-disabled, not
- * disabled, so the keyboard focus stays on it; only subscribed disables it.
- */
-const Face = forwardRef<HTMLButtonElement, FaceProps>(function Face(
-    {
-        state,
-        error,
-        subscription,
-        signature,
-        chain,
-        onStart,
-        children,
-        onClick,
-        disabled,
-        type,
-        ...rest
-    },
-    ref,
-) {
-    const busy = state === 'signing' || state === 'confirming';
-    const due = subscription?.dueAt ? new Date(subscription.dueAt) : null;
-
-    function click(event: MouseEvent<HTMLButtonElement>) {
-        if (busy) return;
-        onClick?.(event);
-        if (!event.defaultPrevented) onStart();
-    }
-
-    return (
-        <>
-            <button
-                {...rest}
-                ref={ref}
-                type={type ?? 'button'}
-                disabled={Boolean(disabled) || state === 'subscribed'}
-                aria-busy={busy || undefined}
-                aria-disabled={busy || undefined}
-                onClick={click}
-                data-mesub-subscribe=""
-                data-mesub-state={state}
-            >
-                {state === 'idle' ? (children ?? 'Subscribe') : LABELS[state]}
-            </button>
-            {state === 'error' && error ? (
-                <span role="alert" data-mesub-error="">
-                    {error}
-                </span>
-            ) : null}
-            {state === 'subscribed' && (due || signature) ? (
-                <span data-mesub-receipt="">
-                    {due ? `Next charge ${formatDate(due)}` : null}
-                    {due && signature ? ' · ' : null}
-                    {signature ? (
-                        <a href={explorerUrl(signature, chain)} target="_blank" rel="noopener">
-                            Receipt
-                        </a>
-                    ) : null}
-                </span>
-            ) : null}
-        </>
-    );
-});
-
-const CheckoutButton = forwardRef<HTMLButtonElement, ButtonProps>(function CheckoutButton(
-    { plan, chain = 'solana:devnet', onSubscribed, ...rest },
-    ref,
-) {
-    const [open, setOpen] = useState(false);
-    const [state, setState] = useState<SubscribeState>('idle');
-    const [paid, setPaid] = useState<{ subscription: MesubSubscription; signature: string } | null>(
-        null,
-    );
-
-    return (
-        <>
-            <Face
-                {...rest}
-                ref={ref}
-                state={state}
-                error={null}
-                subscription={paid?.subscription ?? null}
-                signature={paid?.signature ?? null}
-                chain={chain}
-                onStart={() => setOpen(true)}
-            />
-            {open ? (
-                <Checkout
-                    plan={plan}
-                    chain={chain}
-                    onStage={(stage) => setState(FROM_STAGE[stage] ?? 'idle')}
-                    onSubscribed={(subscription, signature) => {
-                        setPaid({ subscription, signature });
-                        onSubscribed?.(subscription);
-                    }}
-                    onClose={() => {
-                        setOpen(false);
-                        // Closed before the end: back to where it was.
-                        setState((current) => (current === 'subscribed' ? current : 'idle'));
-                    }}
-                />
-            ) : null}
-        </>
-    );
-});
-
-const InlineButton = forwardRef<HTMLButtonElement, ButtonProps>(function InlineButton(
-    { plan, chain = 'solana:devnet', onSubscribed, ...rest },
-    ref,
-) {
-    const { state, error, subscription, signature, subscribe } = useSubscribe(plan, {
-        chain,
-        onSubscribed,
-    });
-
-    return (
-        <Face
-            {...rest}
-            ref={ref}
-            state={state}
-            error={error}
-            subscription={subscription}
-            signature={signature}
-            chain={chain}
-            onStart={() => void subscribe()}
-        />
-    );
-});

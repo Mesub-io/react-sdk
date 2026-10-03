@@ -87,6 +87,8 @@ const NOT_SHOWN = new Set([
     'Wallet',
     'Nonce',
     'Expires',
+    // The merchant may change where it is paid: not a term a subscriber holds them to.
+    'Paid to',
     // Shown as a button under the list.
     CANCEL_LABEL,
 ]);
@@ -98,11 +100,18 @@ export interface TermsFact {
     label: string;
     value: string;
     full?: string;
+    /** Where the value leads, when it is worth a click: the token's page on Jupiter. */
+    href?: string;
+}
+
+/** The token's page on Jupiter, where it is bought or swapped. */
+export function jupiterUrl(mint: string): string {
+    return `https://jup.ag/tokens/${mint}`;
 }
 
 /**
  * The terms as a short list a person reads: the first charge, what follows,
- * who is paid and in which token. The price, the wallet and the
+ * which subscription and in which token. The price, the wallet and the
  * lines meant for machines (the plan's address, the nonce, the expiry) are
  * left out, and addresses are shortened: the wallet shows the full text when
  * it asks to sign.
@@ -113,12 +122,20 @@ export function termsFacts(message: string): TermsFact[] {
         .filter((line) => !NOT_SHOWN.has(line.label))
         .map(({ label, value }) => {
             // "USDC, mint 4zMM..." is the token's name; a mint alone stays, shortened.
-            const named = /^(.+), mint [1-9A-HJ-NP-Za-km-z]{32,44}$/.exec(value);
-            if (named) return { label, value: named[1]!, full: value };
+            const named = /^(.+), mint ([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(value);
+            if (named) {
+                return { label, value: named[1]!, full: value, href: jupiterUrl(named[2]!) };
+            }
 
             const address = ADDRESS.exec(value)?.[0];
             if (address) {
-                return { label, value: value.replace(address, shortAddress(address)), full: value };
+                return {
+                    label,
+                    value: value.replace(address, shortAddress(address)),
+                    full: value,
+                    // A mint with no name is still a token to get.
+                    ...(label === 'Token' && { href: jupiterUrl(address) }),
+                };
             }
 
             // The transaction comes right after: the screen's own button says so.

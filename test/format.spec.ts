@@ -5,6 +5,7 @@ import {
     formatAmount,
     formatSol,
     shortAddress,
+    jupiterUrl,
     termsCancelUrl,
     termsFacts,
     termsLines,
@@ -148,7 +149,6 @@ describe('termsFacts', () => {
         expect(termsFacts(MESSAGE).map((fact) => [fact.label, fact.value])).toEqual([
             ['First charge', '2 USDC now'],
             ['Then', '2 USDC every 3 days, until you cancel'],
-            ['Paid to', '69Nh…E7WB'],
             ['Subscription', 'Pro, from Acme'],
             ['Token', 'USDC'],
         ]);
@@ -159,17 +159,37 @@ describe('termsFacts', () => {
     it('keeps the whole value of what it shortened, for a tooltip', () => {
         const facts = Object.fromEntries(termsFacts(MESSAGE).map((fact) => [fact.label, fact]));
 
-        expect(facts['Paid to']?.full).toBe('69NhtEhTjxGq1pGRgwZjqVoGyr5nNY7w7By6vTh1E7WB');
         expect(facts['Token']?.full).toBe(
             'USDC, mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
         );
         expect(facts['Then']?.full).toBeUndefined();
     });
 
+    it('links the token to its page on Jupiter, named or not, and nothing else', () => {
+        const MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+        const facts = Object.fromEntries(termsFacts(MESSAGE).map((fact) => [fact.label, fact]));
+
+        expect(facts['Token']?.href).toBe(`https://jup.ag/tokens/${MINT}`);
+        expect(jupiterUrl(MINT)).toBe(`https://jup.ag/tokens/${MINT}`);
+        // Nothing else is a link.
+        expect(facts['Subscription']?.href).toBeUndefined();
+        expect(termsFacts(`Mesub: terms\nToken: mint ${MINT}`)[0]?.href).toBe(
+            `https://jup.ag/tokens/${MINT}`,
+        );
+    });
+
     it('leaves out the heading, the sentences and the lines for machines', () => {
         const labels = termsFacts(MESSAGE).map((fact) => fact.label);
 
-        for (const hidden of ['Amount', 'Plan', 'Plan details', 'Wallet', 'Nonce', 'Expires']) {
+        for (const hidden of [
+            'Amount',
+            'Paid to',
+            'Plan',
+            'Plan details',
+            'Wallet',
+            'Nonce',
+            'Expires',
+        ]) {
             expect(labels).not.toContain(hidden);
         }
         expect(labels).not.toContain('Mesub');
@@ -185,6 +205,7 @@ describe('termsFacts', () => {
                 label: 'Token',
                 value: 'mint 4zMM…ncDU',
                 full: 'mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+                href: 'https://jup.ag/tokens/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
             },
         ]);
     });

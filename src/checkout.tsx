@@ -604,7 +604,20 @@ function stageScreen(props: {
                             {termsFacts(terms.message).map((fact) => (
                                 <div data-mesub-row="" key={fact.label}>
                                     <dt>{fact.label}</dt>
-                                    <dd title={fact.full}>{fact.value}</dd>
+                                    <dd title={fact.full}>
+                                        {fact.href ? (
+                                            <a
+                                                data-mesub-token=""
+                                                href={fact.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                {fact.value}
+                                            </a>
+                                        ) : (
+                                            fact.value
+                                        )}
+                                    </dd>
                                 </div>
                             ))}
                         </dl>

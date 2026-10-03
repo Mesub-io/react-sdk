@@ -614,6 +614,10 @@ function stageScreen(props: {
                             )}
                         </div>
                     </details>
+                    {/* Last before the button: what clicking it starts. */}
+                    <p data-mesub-footnote="">
+                        Two approvals in {wallet.name}: the terms, then the payment. Cancel anytime.
+                    </p>
                     <button
                         type="button"
                         data-mesub-submit=""
@@ -624,10 +628,6 @@ function stageScreen(props: {
                     <button type="button" data-mesub-cancel="" onClick={props.onClose}>
                         Cancel
                     </button>
-                    {/* Last, under the buttons: a reminder, not a step. */}
-                    <p data-mesub-footnote="">
-                        Two approvals in {wallet.name}: the terms, then the payment. Cancel anytime.
-                    </p>
                 </>
             ),
         };

@@ -1843,7 +1843,7 @@
 [data-mesub-terms] [data-mesub-message] {
   margin-block-end: 14px;
 }
-/* what closes the review, under the buttons */
+/* the last line of the review, right above the button */
 [data-mesub-footnote] {
   margin: 0;
   color: var(--_muted);

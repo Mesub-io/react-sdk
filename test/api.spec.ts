@@ -1,393 +1,273 @@
-import { createApiClient, REQUEST_TIMEOUT_MS } from '../src/api';
+import { createApi } from '../src/api';
 import { MesubClientError } from '../src/errors';
-import { json, mockFetch, user } from './helpers';
+import { json, plan, prepared, refusal, subscription } from './helpers';
 
-const clientSession = { user, sessionToken: 'st_1', refreshToken: 'rt_1', accessToken: null };
+function client(response: () => Response | Promise<Response>, endpoint = '/api/mesub') {
+    const fetch = vi.fn((_url: string, _init: RequestInit) => Promise.resolve(response()));
+    return { api: createApi({ endpoint, fetch }), fetch };
+}
 
-function call(fetch: ReturnType<typeof mockFetch>, index = 0) {
-    const [url, init] = fetch.mock.calls[index]!;
+/** The one request made: its url and what it was sent with. */
+function sent(fetch: ReturnType<typeof client>['fetch']) {
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0]!;
     return {
         url,
-        init,
-        headers: init.headers as Record<string, string>,
-        body: JSON.parse(init.body as string) as unknown,
+        method: init.method,
+        credentials: init.credentials,
+        headers: init.headers,
+        body: init.body === undefined ? undefined : JSON.parse(init.body as string),
     };
 }
 
-describe('createApiClient', () => {
-    it('defaults to https://api.mesub.io', async () => {
-        const fetch = mockFetch();
-        await createApiClient({ publishableKey: 'PUB_1', fetch }).sendCode('ada@example.com');
+describe('the requests, as the routes of @mesub/node expect them', () => {
+    it('reads a plan', async () => {
+        const { api, fetch } = client(() => json(200, plan));
 
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/code');
+        await expect(api.plan('pro')).resolves.toEqual(plan);
+        expect(sent(fetch)).toEqual({
+            url: '/api/mesub/plans/pro',
+            method: 'GET',
+            credentials: 'include',
+            headers: { Accept: 'application/json' },
+            body: undefined,
+        });
     });
 
-    it('drops trailing slashes from apiUrl', async () => {
-        const fetch = mockFetch();
-        await createApiClient({
-            publishableKey: 'PUB_1',
-            apiUrl: 'http://localhost:3000//',
-            fetch,
-        }).sendCode('ada@example.com');
+    it("reads the customer's subscriptions", async () => {
+        const { api, fetch } = client(() => json(200, { subscriptions: [subscription()] }));
 
-        expect(call(fetch).url).toBe('http://localhost:3000/v1/client/auth/code');
+        await expect(api.subscriptions()).resolves.toEqual([subscription()]);
+        expect(sent(fetch)).toMatchObject({
+            url: '/api/mesub/subscriptions',
+            method: 'GET',
+            credentials: 'include',
+            body: undefined,
+        });
     });
 
-    it('sends the key, JSON and no cookies on every request', async () => {
-        const fetch = mockFetch();
-        await createApiClient({ publishableKey: 'PUB_1', fetch }).sendCode('ada@example.com');
+    it('prepares a subscription with the plan and the wallet', async () => {
+        const answer = prepared();
+        const { api, fetch } = client(() => json(201, answer));
 
-        const { init, headers } = call(fetch);
-        expect(init.method).toBe('POST');
-        expect(init.credentials).toBe('omit');
-        expect(headers).toEqual({ 'X-Mesub-Key': 'PUB_1', 'Content-Type': 'application/json' });
+        await expect(api.prepare('pro', 'Wa11et')).resolves.toEqual(answer);
+        expect(sent(fetch)).toEqual({
+            url: '/api/mesub/subscriptions',
+            method: 'POST',
+            credentials: 'include',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+            body: { plan: 'pro', wallet: 'Wa11et' },
+        });
     });
 
-    it('uses globalThis.fetch when none is given', async () => {
-        const fetch = mockFetch();
+    it('submits the signed transaction and the terms signature', async () => {
+        const { api, fetch } = client(() => json(201, { subscription: subscription() }));
+
+        await api.submit('sub_1', { transaction: 'c2lnbmVk', terms_signature: 'sig58' });
+        expect(sent(fetch)).toMatchObject({
+            url: '/api/mesub/subscriptions/sub_1/submit',
+            method: 'POST',
+            credentials: 'include',
+            body: { transaction: 'c2lnbmVk', terms_signature: 'sig58' },
+        });
+    });
+
+    it.each(['cancel', 'resume', 'close'] as const)(
+        'builds a %s as a JSON POST with nothing to say',
+        async (action) => {
+            const { api, fetch } = client(() =>
+                json(201, { transaction: 'dHg=', last_valid_block_height: '9' }),
+            );
+
+            await expect(api.build(action, 'sub_1')).resolves.toEqual({
+                transaction: 'dHg=',
+                last_valid_block_height: '9',
+            });
+            // The routes answer 415 to a POST that is not JSON.
+            expect(sent(fetch)).toEqual({
+                url: `/api/mesub/subscriptions/sub_1/${action}`,
+                method: 'POST',
+                credentials: 'include',
+                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                body: {},
+            });
+        },
+    );
+
+    it.each(['cancel', 'resume', 'close'] as const)(
+        'confirms a %s with the signature',
+        async (action) => {
+            const { api, fetch } = client(() => json(201, { subscription: subscription() }));
+
+            await api.confirm(action, 'sub_1', 'sig58');
+            expect(sent(fetch)).toMatchObject({
+                url: `/api/mesub/subscriptions/sub_1/${action}/confirm`,
+                method: 'POST',
+                credentials: 'include',
+                body: { signature: 'sig58' },
+            });
+        },
+    );
+
+    it('takes an absolute endpoint, and one written with a trailing slash', async () => {
+        const { api, fetch } = client(() => json(200, plan), 'https://shop.test/api/mesub/');
+
+        await api.plan('pro');
+        expect(sent(fetch).url).toBe('https://shop.test/api/mesub/plans/pro');
+    });
+
+    it('never lets an id rewrite the path', async () => {
+        const { api, fetch } = client(() => json(201, { transaction: 'dHg=' }));
+
+        await api.build('cancel', '../plans/pro');
+        expect(sent(fetch).url).toBe('/api/mesub/subscriptions/..%2Fplans%2Fpro/cancel');
+    });
+
+    it('uses the global fetch when none is given', async () => {
+        const fetch = vi.fn(async () => json(200, plan));
         vi.stubGlobal('fetch', fetch);
         try {
-            await createApiClient({ publishableKey: 'PUB_1' }).sendCode('ada@example.com');
+            await createApi({ endpoint: '/api/mesub' }).plan('pro');
+            expect(fetch).toHaveBeenCalledWith(
+                '/api/mesub/plans/pro',
+                expect.objectContaining({ credentials: 'include' }),
+            );
         } finally {
             vi.unstubAllGlobals();
         }
-
-        expect(fetch).toHaveBeenCalledOnce();
-    });
-
-    it('sendCode posts the email and handles 204 with no body', async () => {
-        const fetch = mockFetch(() => json(204));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).sendCode(
-            'ada@example.com',
-        );
-
-        expect(result).toBeUndefined();
-        expect(call(fetch).body).toEqual({ email: 'ada@example.com' });
-    });
-
-    it('createSession posts email and code and returns the session', async () => {
-        const fetch = mockFetch(() => json(201, clientSession));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).createSession(
-            'ada@example.com',
-            '123456',
-        );
-
-        expect(result).toEqual(clientSession);
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/session');
-        expect(call(fetch).body).toEqual({ email: 'ada@example.com', code: '123456' });
-        expect(call(fetch).headers).not.toHaveProperty('Authorization');
-    });
-
-    it('walletChallenge sends the session token as bearer', async () => {
-        const fetch = mockFetch(() => json(201, { message: 'sign me' }));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).walletChallenge(
-            'st_1',
-            'Wa11et',
-        );
-
-        expect(result).toEqual({ message: 'sign me' });
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallet/challenge');
-        expect(call(fetch).headers.Authorization).toBe('Bearer st_1');
-        expect(call(fetch).body).toEqual({ address: 'Wa11et' });
-    });
-
-    it('proveWallet sends address, signature and label with the bearer', async () => {
-        const fetch = mockFetch(() => json(201, { user, accessToken: 'at_1' }));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).proveWallet(
-            'st_1',
-            { address: 'Wa11et', signature: 'SiG', label: 'Phantom' },
-        );
-
-        expect(result).toEqual({ user, accessToken: 'at_1' });
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallet');
-        expect(call(fetch).headers.Authorization).toBe('Bearer st_1');
-        expect(call(fetch).body).toEqual({ address: 'Wa11et', signature: 'SiG', label: 'Phantom' });
-    });
-
-    it('refresh posts the refresh token and returns the new session', async () => {
-        const fetch = mockFetch(() => json(201, { ...clientSession, refreshToken: 'rt_2' }));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).refresh('rt_1');
-
-        expect(result.refreshToken).toBe('rt_2');
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/refresh');
-        expect(call(fetch).body).toEqual({ refreshToken: 'rt_1' });
-    });
-
-    it('logout posts the refresh token', async () => {
-        const fetch = mockFetch(() => json(204));
-        await createApiClient({ publishableKey: 'PUB_1', fetch }).logout('rt_1');
-
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/logout');
-        expect(call(fetch).body).toEqual({ refreshToken: 'rt_1' });
     });
 });
 
-describe('wallets', () => {
-    const proof = { user, accessToken: 'at_2' };
-    const linked = { address: 'W2', label: 'Ledger', selected: false, plans: ['Pro'] };
-
-    it('list GETs /wallets with the key and the access token, and returns the array', async () => {
-        const fetch = mockFetch(() => json(200, { wallets: [linked] }));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).wallets.list(
-            'at_1',
+describe('what goes wrong', () => {
+    it("throws the route's refusal with its status, code and message", async () => {
+        const { api } = client(() =>
+            refusal(409, 'already_subscribed', 'This wallet already holds this plan.'),
         );
 
-        expect(result).toEqual([linked]);
-        const [url, init] = fetch.mock.calls[0]!;
-        expect(url).toBe('https://api.mesub.io/v1/client/auth/wallets');
-        expect(init.method).toBe('GET');
-        expect(init.body).toBeUndefined();
-        expect(init.headers).toEqual({ 'X-Mesub-Key': 'PUB_1', Authorization: 'Bearer at_1' });
-    });
-
-    it('select posts the address to /wallet/select with the access token', async () => {
-        const fetch = mockFetch(() => json(201, proof));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).wallets.select(
-            'at_1',
-            'W2',
-        );
-
-        expect(result).toEqual(proof);
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallet/select');
-        expect(call(fetch).body).toEqual({ address: 'W2' });
-        expect(call(fetch).headers.Authorization).toBe('Bearer at_1');
-    });
-
-    it('challenge posts the address to /wallets/challenge with the access token', async () => {
-        const fetch = mockFetch(() => json(201, { message: 'Sign this' }));
-        const result = await createApiClient({
-            publishableKey: 'PUB_1',
-            fetch,
-        }).wallets.challenge('at_1', 'W2');
-
-        expect(result).toEqual({ message: 'Sign this' });
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallets/challenge');
-        expect(call(fetch).body).toEqual({ address: 'W2' });
-        expect(call(fetch).headers.Authorization).toBe('Bearer at_1');
-    });
-
-    it('link posts the proof to /wallets with the access token', async () => {
-        const fetch = mockFetch(() => json(201, proof));
-        const result = await createApiClient({ publishableKey: 'PUB_1', fetch }).wallets.link(
-            'at_1',
-            { address: 'W2', signature: 'sig', label: 'Ledger' },
-        );
-
-        expect(result).toEqual(proof);
-        expect(call(fetch).url).toBe('https://api.mesub.io/v1/client/auth/wallets');
-        expect(call(fetch).body).toEqual({ address: 'W2', signature: 'sig', label: 'Ledger' });
-        expect(call(fetch).headers.Authorization).toBe('Bearer at_1');
-    });
-
-    it.each([
-        ['select', 404, 'That wallet is not linked to your account.'],
-        ['link', 409, 'That wallet is already attached to another account.'],
-    ] as const)('%s throws the API refusal with its status', async (route, status, message) => {
-        const fetch = mockFetch(() => json(status, { message }));
-        const wallets = createApiClient({ publishableKey: 'PUB_1', fetch }).wallets;
-        const attempt =
-            route === 'select'
-                ? wallets.select('at_1', 'W2')
-                : wallets.link('at_1', { address: 'W2', signature: 'sig' });
-
-        await expect(attempt).rejects.toMatchObject({ status, message });
-        await attempt.catch((error: unknown) => expect(error).toBeInstanceOf(MesubClientError));
-    });
-});
-
-describe('API errors', () => {
-    async function failure(response: () => Response | Promise<Response>) {
-        const fetch = mockFetch(response);
-        return createApiClient({ publishableKey: 'PUB_1', fetch })
-            .sendCode('ada@example.com')
-            .then(
-                () => expect.fail('should have thrown'),
-                (error: unknown) => error as MesubClientError,
-            );
-    }
-
-    it('joins an array message on 400', async () => {
-        const error = await failure(() =>
-            json(400, {
-                message: ['email must be an email', 'email should not be empty'],
-                error: 'Bad Request',
-                statusCode: 400,
-            }),
-        );
-
+        const error = await api.prepare('pro', 'Wa11et').catch((caught: unknown) => caught);
         expect(error).toBeInstanceOf(MesubClientError);
-        expect(error.status).toBe(400);
-        expect(error.message).toBe('email must be an email; email should not be empty');
+        expect(error).toMatchObject({
+            status: 409,
+            code: 'already_subscribed',
+            message: 'This wallet already holds this plan.',
+        });
     });
 
-    it.each([
-        [401, 'Unknown publishable key', 'Unauthorized'],
-        [403, 'Origin not allowed', 'Forbidden'],
-        [409, 'Wallet belongs to another account', 'Conflict'],
-        [429, 'ThrottlerException: Too Many Requests', 'Too Many Requests'],
-    ])('keeps the status and message on %i', async (status, message, name) => {
-        const error = await failure(() =>
-            json(status, { message, error: name, statusCode: status }),
+    it('reads Retry-After on a 429', async () => {
+        const { api } = client(() =>
+            refusal(429, 'rate_limited', 'Too many requests.', { 'Retry-After': '30' }),
         );
 
-        expect(error).toBeInstanceOf(MesubClientError);
-        expect(error.status).toBe(status);
-        expect(error.message).toBe(message);
+        await expect(api.subscriptions()).rejects.toMatchObject({ status: 429, retryAfter: 30 });
     });
 
-    it('falls back to the status when the body is not JSON', async () => {
-        const error = await failure(() => new Response('Bad Gateway', { status: 502 }));
+    it('falls back on the status when the refusal is not JSON', async () => {
+        const { api } = client(() => new Response('<html>', { status: 502 }));
 
-        expect(error.status).toBe(502);
-        expect(error.message).toBe('Mesub API answered 502');
+        await expect(api.plan('pro')).rejects.toMatchObject({
+            status: 502,
+            code: null,
+            message: 'The server answered 502.',
+        });
     });
 
-    it('has status null on a network failure', async () => {
-        const error = await failure(() => Promise.reject(new TypeError('Failed to fetch')));
+    it('refuses a page served where the routes should be', async () => {
+        const { api } = client(() => new Response('<!doctype html>', { status: 200 }));
 
-        expect(error).toBeInstanceOf(MesubClientError);
-        expect(error.name).toBe('MesubClientError');
-        expect(error.status).toBeNull();
-        expect(error.cause).toBeInstanceOf(TypeError);
+        await expect(api.plan('pro')).rejects.toMatchObject({
+            status: 200,
+            code: 'bad_response',
+        });
+    });
+
+    it('says the network failed, with no status', async () => {
+        const fetch = vi.fn(async () => {
+            throw new TypeError('Failed to fetch');
+        });
+        const api = createApi({ endpoint: '/api/mesub', fetch });
+
+        await expect(api.plan('pro')).rejects.toMatchObject({
+            status: null,
+            code: 'network',
+            message: 'Could not reach the server.',
+        });
+    });
+
+    it('answers an empty list when the server names none', async () => {
+        const { api } = client(() => json(200, {}));
+
+        await expect(api.subscriptions()).resolves.toEqual([]);
     });
 });
 
 describe('timeouts', () => {
-    const MESSAGE = 'Mesub did not answer within 15 seconds';
+    const hang = () => new Promise<Response>(() => undefined);
 
-    beforeEach(() => {
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-    });
-
-    function client(response: (init: RequestInit) => Promise<Response>) {
-        const fetch = vi.fn((_input: string, init: RequestInit) => response(init));
-        const api = createApiClient({ publishableKey: 'PUB_1', fetch });
-        const signal = () => fetch.mock.calls[0]![1].signal!;
-        return { api, fetch, signal };
+    async function timesOutAt(call: (api: ReturnType<typeof createApi>) => Promise<unknown>) {
+        vi.useFakeTimers();
+        const fetch = vi.fn((_url: string, _init: RequestInit) => hang());
+        const settled = vi.fn();
+        call(createApi({ endpoint: '/api/mesub', fetch })).catch(settled);
+        return {
+            fetch,
+            settled,
+            pass: (ms: number) => vi.advanceTimersByTimeAsync(ms),
+        };
     }
 
-    /** Settles `promise` into a result, so a rejection is never unhandled. */
-    function outcome<T>(promise: Promise<T>) {
-        const result: { value?: T; error?: MesubClientError; done: boolean } = { done: false };
-        void promise.then(
-            (value) => Object.assign(result, { value, done: true }),
-            (error: MesubClientError) => Object.assign(result, { error, done: true }),
+    it.each([
+        ['plan', (api: ReturnType<typeof createApi>) => api.plan('pro')],
+        ['subscriptions', (api: ReturnType<typeof createApi>) => api.subscriptions()],
+        ['prepare', (api: ReturnType<typeof createApi>) => api.prepare('pro', 'Wa11et')],
+        ['build', (api: ReturnType<typeof createApi>) => api.build('cancel', 'sub_1')],
+    ])('gives a read or a build 15 seconds: %s', async (_name, call) => {
+        const { fetch, settled, pass } = await timesOutAt(call);
+
+        await pass(14_999);
+        expect(settled).not.toHaveBeenCalled();
+        await pass(1);
+        expect(settled).toHaveBeenCalledWith(
+            expect.objectContaining({
+                status: null,
+                code: 'timeout',
+                message: 'No answer within 15 seconds.',
+            }),
         );
-        return result;
-    }
-
-    const never = () => new Promise<never>(() => undefined);
-
-    it('is 15 seconds', () => {
-        expect(REQUEST_TIMEOUT_MS).toBe(15_000);
-    });
-
-    it('rejects a request that never answers after 15 seconds, with status null', async () => {
-        const { api, signal } = client(never);
-        const result = outcome(api.sendCode('ada@example.com'));
-
-        await vi.advanceTimersByTimeAsync(14_999);
-        expect(result.done).toBe(false);
-        expect(signal().aborted).toBe(false);
-
-        await vi.advanceTimersByTimeAsync(1);
-        expect(result.error).toBeInstanceOf(MesubClientError);
-        expect(result.error!.status).toBeNull();
-        expect(result.error!.message).toBe(MESSAGE);
-        expect(result.error!.cause).toBeInstanceOf(DOMException);
-        expect((result.error!.cause as DOMException).name).toBe('TimeoutError');
-        expect(signal().aborted).toBe(true);
-        expect(signal().reason).toBe(result.error!.cause);
-    });
-
-    it('times out, not "Could not reach", when fetch rejects on the abort', async () => {
-        const { api } = client(
-            (init) =>
-                new Promise((_, reject) => {
-                    init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
-                }),
-        );
-        const result = outcome(api.sendCode('ada@example.com'));
-
-        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
-        expect(result.error!.message).toBe(MESSAGE);
-        expect(result.error!.status).toBeNull();
-    });
-
-    it('succeeds when the answer comes at 14.9 seconds', async () => {
-        const { api, signal } = client(
-            () =>
-                new Promise((resolve) =>
-                    setTimeout(() => resolve(json(201, { message: 'm' })), 14_900),
-                ),
-        );
-        const result = outcome(api.walletChallenge('st_1', 'Wa11et'));
-
-        await vi.advanceTimersByTimeAsync(14_900);
-        expect(result.value).toEqual({ message: 'm' });
-
-        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
-        expect(signal().aborted).toBe(false);
+        // The request is dropped, not left running.
+        expect(fetch.mock.calls[0]![1].signal?.aborted).toBe(true);
     });
 
     it.each([
-        ['a success', () => json(201, { message: 'm' })],
-        ['a 204', () => json(204)],
-        ['an HTTP error', () => json(409, { message: 'Conflict' })],
-    ])('clears its timer after %s, leaving no late abort', async (_, response) => {
-        const { api, signal } = client(() => Promise.resolve(response()));
-        const result = outcome(api.walletChallenge('st_1', 'Wa11et'));
+        [
+            'submit',
+            (api: ReturnType<typeof createApi>) =>
+                api.submit('sub_1', { transaction: 'dHg=', terms_signature: 'sig' }),
+        ],
+        ['confirm', (api: ReturnType<typeof createApi>) => api.confirm('cancel', 'sub_1', 'sig')],
+    ])('gives the chain 90 seconds: %s', async (_name, call) => {
+        const { settled, pass } = await timesOutAt(call);
 
-        await vi.advanceTimersByTimeAsync(0);
-        expect(result.done).toBe(true);
-        expect(vi.getTimerCount()).toBe(0);
-
-        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
-        expect(signal().aborted).toBe(false);
-        expect(result.error?.message ?? null).not.toBe(MESSAGE);
+        await pass(89_999);
+        expect(settled).not.toHaveBeenCalled();
+        await pass(1);
+        expect(settled).toHaveBeenCalledWith(
+            expect.objectContaining({
+                status: null,
+                code: 'timeout',
+                message: 'No answer within 90 seconds.',
+            }),
+        );
     });
 
-    it('clears its timer after a network failure', async () => {
-        const { api } = client(() => Promise.reject(new TypeError('Failed to fetch')));
-        const result = outcome(api.sendCode('ada@example.com'));
+    it('times out a fetch that ignores the signal, and a body that never ends', async () => {
+        vi.useFakeTimers();
+        const body = new Response(null, { status: 200 });
+        vi.spyOn(body, 'json').mockReturnValue(new Promise(() => undefined));
+        const api = createApi({ endpoint: '/api/mesub', fetch: async () => body });
+        const settled = vi.fn();
+        api.plan('pro').catch(settled);
 
-        await vi.advanceTimersByTimeAsync(0);
-        expect(result.error!.message).toBe('Could not reach the Mesub API');
-        expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it.each([
-        ['a success', true, 201],
-        ['an error', false, 500],
-    ])('times out a body that never ends, on %s', async (_, ok, status) => {
-        const hung = { ok, status, json: never } as unknown as Response;
-        const { api } = client(() => Promise.resolve(hung));
-        const result = outcome(api.walletChallenge('st_1', 'Wa11et'));
-
-        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1);
-        expect(result.done).toBe(false);
-
-        await vi.advanceTimersByTimeAsync(1);
-        expect(result.error!.message).toBe(MESSAGE);
-        expect(result.error!.status).toBeNull();
-    });
-
-    it('times each request on its own', async () => {
-        let calls = 0;
-        const { api } = client(() => (calls++ === 0 ? never() : Promise.resolve(json(204))));
-        const first = outcome(api.sendCode('ada@example.com'));
-
-        await vi.advanceTimersByTimeAsync(10_000);
-        const second = outcome(api.sendCode('ada@example.com'));
-        await vi.advanceTimersByTimeAsync(0);
-        expect(second.done).toBe(true);
-        expect(second.error).toBeUndefined();
-
-        await vi.advanceTimersByTimeAsync(5_000);
-        expect(first.error!.message).toBe(MESSAGE);
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(settled).toHaveBeenCalledWith(expect.objectContaining({ code: 'timeout' }));
     });
 });

@@ -1,4 +1,4 @@
-import { cadence, explorerUrl, formatAmount, shortAddress } from '../src/format';
+import { cadence, day, explorerUrl, formatAmount, formatSol, shortAddress } from '../src/format';
 
 describe('formatAmount', () => {
     it.each([
@@ -10,6 +10,27 @@ describe('formatAmount', () => {
         ['42', 0, '42'],
     ])('%s at %i decimals is %s', (amount, decimals, expected) => {
         expect(formatAmount(amount, decimals)).toBe(expected);
+    });
+});
+
+describe('formatSol', () => {
+    it.each([
+        ['2039280', '0.00203928 SOL'],
+        ['10000', '0.00001 SOL'],
+        ['1000000000', '1 SOL'],
+        ['0', '0 SOL'],
+    ])('%s lamports is %s', (lamports, expected) => {
+        expect(formatSol(lamports)).toBe(expected);
+    });
+});
+
+describe('day', () => {
+    it('writes an ISO date as a day', () => {
+        expect(day('2026-10-04T12:00:00.000Z')).toMatch(/2026/);
+    });
+
+    it.each([null, undefined, '', 'soon'])('is null for %s', (value) => {
+        expect(day(value)).toBeNull();
     });
 });
 

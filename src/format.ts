@@ -68,3 +68,45 @@ export function termsLines(message: string): TermsLine[] {
             return named ? { label: named[1]!, value: named[2]! } : { label: null, value: line };
         });
 }
+
+/** Lines of the terms a person does not read: said elsewhere on the screen, or for machines. */
+const NOT_SHOWN = new Set(['Amount', 'Plan', 'Plan details', 'Wallet', 'Nonce', 'Expires']);
+
+const ADDRESS = /[1-9A-HJ-NP-Za-km-z]{32,44}/;
+
+/** One fact of the terms, as the review lists it. `full` is the whole value when it was shortened. */
+export interface TermsFact {
+    label: string;
+    value: string;
+    full?: string;
+}
+
+/**
+ * The terms as a short list a person reads: the first charge, what follows,
+ * who is paid, in which token, and how to stop. The price, the wallet and the
+ * lines meant for machines (the plan's address, the nonce, the expiry) are
+ * left out, and addresses are shortened: the wallet shows the full text when
+ * it asks to sign.
+ */
+export function termsFacts(message: string): TermsFact[] {
+    return termsLines(message)
+        .filter((line): line is { label: string; value: string } => line.label !== null)
+        .filter((line) => !NOT_SHOWN.has(line.label))
+        .map(({ label, value }) => {
+            // "USDC, mint 4zMM..." is the token's name; a mint alone stays, shortened.
+            const named = /^(.+), mint [1-9A-HJ-NP-Za-km-z]{32,44}$/.exec(value);
+            if (named) return { label, value: named[1]!, full: value };
+
+            const address = ADDRESS.exec(value)?.[0];
+            if (address) {
+                return { label, value: value.replace(address, shortAddress(address)), full: value };
+            }
+
+            // The transaction comes right after: the screen's own button says so.
+            const trimmed = value
+                .replace(/, in the transaction you sign next$/, '')
+                .replace(/^https?:\/\//, '');
+
+            return trimmed === value ? { label, value } : { label, value: trimmed, full: value };
+        });
+}

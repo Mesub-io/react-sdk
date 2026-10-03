@@ -5,6 +5,7 @@ import {
     formatAmount,
     formatSol,
     shortAddress,
+    termsFacts,
     termsLines,
 } from '../src/format';
 
@@ -121,5 +122,75 @@ describe('termsLines', () => {
             { label: 'B', value: 'c' },
         ]);
         expect(termsLines('')).toEqual([]);
+    });
+});
+
+describe('termsFacts', () => {
+    const MESSAGE = [
+        'Mesub: the terms of the subscription you are about to sign.',
+        'Amount: 2 USDC every 3 days',
+        'First charge: 2 USDC now, in the transaction you sign next',
+        'Then: 2 USDC every 3 days, until you cancel',
+        'Paid to: 69NhtEhTjxGq1pGRgwZjqVoGyr5nNY7w7By6vTh1E7WB',
+        'Subscription: Pro, from Acme',
+        'Token: USDC, mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        'Cancel any time: https://mesub.io/subscriptions',
+        'Plan: EZcr6mpXS48uMccxQWn7UhUW9b8WBwYTYyyLzGwWH6En',
+        'Plan details: https://api.mesub.io/m/EZcr6mpXS48uMccxQWn7UhUW9b8WBwYTYyyLzGwWH6En',
+        'Wallet: 2YwUMbyZPC42iEXx2peDe5V46LGLrZgdU6rd89fbRaJr',
+        'Signing this message moves nothing by itself.',
+        'Nonce: 9f2c1e7ab04d',
+        'Expires: 2026-10-03T21:30:00.000Z',
+    ].join('\n');
+
+    it('lists what a person reads, in the order of the message', () => {
+        expect(termsFacts(MESSAGE).map((fact) => [fact.label, fact.value])).toEqual([
+            ['First charge', '2 USDC now'],
+            ['Then', '2 USDC every 3 days, until you cancel'],
+            ['Paid to', '69Nh…E7WB'],
+            ['Subscription', 'Pro, from Acme'],
+            ['Token', 'USDC'],
+            ['Cancel any time', 'mesub.io/subscriptions'],
+        ]);
+    });
+
+    it('keeps the whole value of what it shortened, for a tooltip', () => {
+        const facts = Object.fromEntries(termsFacts(MESSAGE).map((fact) => [fact.label, fact]));
+
+        expect(facts['Paid to']?.full).toBe('69NhtEhTjxGq1pGRgwZjqVoGyr5nNY7w7By6vTh1E7WB');
+        expect(facts['Token']?.full).toBe(
+            'USDC, mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        );
+        expect(facts['Then']?.full).toBeUndefined();
+    });
+
+    it('leaves out the heading, the sentences and the lines for machines', () => {
+        const labels = termsFacts(MESSAGE).map((fact) => fact.label);
+
+        for (const hidden of ['Amount', 'Plan', 'Plan details', 'Wallet', 'Nonce', 'Expires']) {
+            expect(labels).not.toContain(hidden);
+        }
+        expect(labels).not.toContain('Mesub');
+    });
+
+    it('shows a token with no symbol by its mint, shortened', () => {
+        const facts = termsFacts(
+            'Mesub: terms\nToken: mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        );
+
+        expect(facts).toEqual([
+            {
+                label: 'Token',
+                value: 'mint 4zMM…ncDU',
+                full: 'mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+            },
+        ]);
+    });
+
+    it('shows a line it does not know as it is, and nothing for an empty message', () => {
+        expect(termsFacts('Mesub: terms\nGrace: 3 days')).toEqual([
+            { label: 'Grace', value: '3 days' },
+        ]);
+        expect(termsFacts('')).toEqual([]);
     });
 });

@@ -4,7 +4,7 @@ import { signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { cadence, day, formatDate, shortAddress, termsLines } from './format';
+import { cadence, day, formatDate, shortAddress, termsFacts } from './format';
 import {
     Explorer,
     failureScreen,
@@ -598,21 +598,15 @@ function stageScreen(props: {
                     </dl>
                     <details data-mesub-terms="">
                         <summary>The terms you sign</summary>
-                        {/* Every line of what the wallet signs, as a list: nothing dropped. */}
-                        <div data-mesub-message="">
-                            {termsLines(terms.message).map((line, index) =>
-                                line.label ? (
-                                    <div data-mesub-term="" key={index}>
-                                        <span>{line.label}</span>
-                                        <span>{line.value}</span>
-                                    </div>
-                                ) : (
-                                    <p data-mesub-term-note="" key={index}>
-                                        {line.value}
-                                    </p>
-                                ),
-                            )}
-                        </div>
+                        {/* A plain list, the rows of the one above: what a person needs of the terms. */}
+                        <dl data-mesub-summary="">
+                            {termsFacts(terms.message).map((fact) => (
+                                <div data-mesub-row="" key={fact.label}>
+                                    <dt>{fact.label}</dt>
+                                    <dd title={fact.full}>{fact.value}</dd>
+                                </div>
+                            ))}
+                        </dl>
                     </details>
                     {/* Last before the button: what clicking it starts. */}
                     <p data-mesub-footnote="">

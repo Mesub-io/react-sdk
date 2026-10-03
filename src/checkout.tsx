@@ -56,7 +56,7 @@ type View =
 
 const SAFE = 'Nothing was charged.';
 const PENDING = 'Payment may be pending.';
-const REFRESHED = 'The terms had expired. These are fresh: check them again.';
+const FRESH_TERMS = 'The terms had expired. These are fresh: check them again.';
 
 const STATES: Partial<Record<View['name'], SubscribeState>> = {
     signing: 'signing',
@@ -224,7 +224,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             );
         // Never sign stale terms: ask the server again, and show what it answers.
         if (expired(prepared)) {
-            await prepare(signer, REFRESHED);
+            await prepare(signer, FRESH_TERMS);
             return;
         }
 
@@ -239,7 +239,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         if (!current()) return;
         // The wallet's window stayed open past the terms' life.
         if (expired(prepared)) {
-            await prepare(signer, REFRESHED);
+            await prepare(signer, FRESH_TERMS);
             return;
         }
 

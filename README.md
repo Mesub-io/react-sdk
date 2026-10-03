@@ -1,122 +1,72 @@
 # @mesub/react
 
-React SDK for [Mesub](https://mesub.io), recurring payments on Solana.
+The browser side of [Mesub](https://mesub.io), recurring payments on Solana: a
+Subscribe button and a list of subscriptions that handle the wallet for you.
 
-It runs on the merchant's own site: it signs a subscriber in (email, then
-wallet) and subscribes them to a plan in one signature. The server side is
-[`@mesub/node`](https://github.com/Mesub-io/node-sdk), which verifies the
-access token this package holds and answers whether the subscriber has access.
+It is a complement to [`@mesub/node`](https://github.com/Mesub-io/node-sdk),
+which does everything on its own. This package only spares you the wallet
+part in the browser: picking one, connecting it, signing in the right order.
 
-> **Status: in progress, not published.** See the
+- It **never talks to Mesub** and holds **no key**. It calls your own server,
+  on the routes `@mesub/node` mounts there.
+- Your customer has **no Mesub account**. Who they are comes from your own
+  login: there is no sign-in here, no session, no token.
+- It is **not a wallet connector** for your site. It asks a wallet for an
+  account when it needs a signature, and never disconnects one.
+
+> **Status: in progress, not published.** It needs the widget routes of
+> Mesub-io/node-sdk#86. See the
 > [board](https://github.com/orgs/Mesub-io/projects/5) and the
 > [issues](https://github.com/Mesub-io/react-sdk/issues).
 
 ## Requirements
 
 React 18 or 19. Works with Next.js's App Router: the build starts with
-`'use client'`.
+`'use client'`. Nothing Solana to install on your side.
 
-## Usage
+## One line on each side
 
-Wrap the app once, with the project's publishable key:
+On your server, after your own login
+([details](https://github.com/Mesub-io/node-sdk#routes-for-the-react-widget)):
+
+```ts
+import { mesubRoutes } from '@mesub/node/express';
+
+app.use(
+    '/api/mesub',
+    mesubRoutes({ customer: (req) => (req.user ? { external_id: req.user.id } : null) }),
+);
+```
+
+In your app, once:
 
 ```tsx
 import { MesubProvider } from '@mesub/react';
+import '@mesub/react/styles.css';
 
 export function App({ children }) {
-    return <MesubProvider publishableKey="PUB_...">{children}</MesubProvider>;
+    return <MesubProvider endpoint="/api/mesub">{children}</MesubProvider>;
 }
 ```
 
-`apiUrl` points it at another API (defaults to `https://api.mesub.io`).
+| Prop       | What it is                                                                       |
+| ---------- | -------------------------------------------------------------------------------- |
+| `endpoint` | Where you mounted the routes. A path on your site, or a full URL.                |
+| `chain`    | The network the wallet signs for: `solana:devnet` (default) or `solana:mainnet`. |
+| `fetch`    | Your own `(url, init) => Promise<Response>`, to add headers or credentials.      |
+| `theme`    | `light`, `dark` or `auto`, set on the widget as `data-mesub-theme`.              |
 
-Import the stylesheet once, anywhere in the app:
-
-```tsx
-import '@mesub/react/styles.css';
-```
-
-It styles the widget only, through its `data-mesub-*` attributes, and reads
-your `--mesub-*` custom properties without ever setting them: set
-`--mesub-accent`, `--mesub-bg`, `--mesub-text`, `--mesub-font` or
-`--mesub-radius` on `:root` to brand it. Dark mode is `data-mesub-theme="dark"`
-on the widget or an ancestor, `"auto"` follows the system, and
-`<MesubProvider theme="dark">` sets it on the widget for you. Under 480px the
-modal is a bottom sheet. Leave the stylesheet out to style the attributes
-yourself.
-
-Then read the session anywhere below it:
+Requests go with `credentials: 'include'`, so your session cookie travels. If
+your login is a bearer token instead, add it in `fetch`:
 
 ```tsx
-import { useMesub } from '@mesub/react';
-
-function Account() {
-    const { ready, user, wallet, login, logout, getAccessToken } = useMesub();
-
-    if (!ready) return null;
-    if (!user) return <button onClick={() => login()}>Sign in</button>;
-    return <button onClick={() => logout()}>Sign out {wallet}</button>;
-}
+<MesubProvider
+    endpoint="/api/mesub"
+    fetch={(url, init) =>
+        fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } })
+    }
+>
 ```
-
-- `login()` opens the sign-in modal, resolves with the user once they are
-  signed in with a wallet, and rejects with `MesubSignInCancelledError` if they
-  close it.
-- `getAccessToken()` is what to send to your server, which checks it with
-  `@mesub/node`.
-- A failed API call throws `MesubClientError`, with the HTTP `status` (null
-  when the network failed).
-- API calls time out after 15 seconds, with a `MesubClientError` whose `status` is null.
-
-## Sign-in
-
-The provider renders the modal itself while a `login()` waits: there is no
-component to place. One Mesub account per person, email first, then the
-wallet:
-
-1. The email: Mesub mails a 6-digit code.
-2. The code: six slots, sent on the sixth digit. A new code can be asked for
-   after 30 seconds. A returning subscriber, whose account already has a
-   wallet, is signed in here, sees "Signed in" for a moment, and signs nothing.
-3. The wallet: the modal lists the installed wallets that can sign a message on
-   Solana ([Wallet Standard](https://github.com/wallet-standard/wallet-standard),
-   so Phantom, Solflare and the others), marks the one used last on this
-   device, connects the one picked and asks it to sign a message. It costs
-   nothing and moves nothing. With no wallet installed, it links to Phantom and
-   Solflare.
-
-Each step shows the API's own error (wrong or expired code, origin not allowed,
-a wallet already on another account) or the wallet's refusal. Close or Escape
-cancels. Nothing Solana to install on the merchant's side.
-
-The modal is a native `<dialog>` with no class names: every part carries a
-`data-mesub-*` attribute, and `data-mesub-step` on the dialog says where it is
-(`email`, `code`, `wallet` or `done`). The DOM follows the v5 design handoff
-exactly, which `test/markup.spec.tsx` checks against `test/fixtures/v5`.
-
-## Session
-
-The session survives reloads. The refresh token is kept in the site's
-`localStorage`, under `mesub:session:<publishableKey>`, and nothing else is: on
-load the provider trades it for a fresh session, and `ready` stays false until
-that answers. A refused token (spent, expired, revoked) is cleared and the user
-is signed out; an unreachable API keeps it, signed out, and tries again when
-the browser is back online.
-
-The access token lasts an hour. The provider refreshes it a minute before it
-expires, and `getAccessToken()` refreshes first when it is expired or about to
-be, one refresh for every concurrent caller. Each refresh rotates the refresh
-token, and presenting a spent one ends every session of the account, so the
-tabs of a site take turns: a refresh always spends the token `localStorage`
-holds at that moment, under a [Web Lock](https://developer.mozilla.org/docs/Web/API/Web_Locks_API)
-shared by the tabs, and a tab picks up the token another one rotated through
-the `storage` event. Signing in or out in one tab does the same in the others.
-
-The access token is also written to a `mesub-token` cookie on the site's own
-domain (`Path=/`, `SameSite=Lax`, `Secure` except on `http://localhost`), for
-as long as the token lives, and rewritten on each refresh. That is what
-`@mesub/node` reads on page loads and server rendering. `logout()` clears the
-storage and the cookie, then ends the session on the API.
 
 ## Subscribe
 
@@ -128,109 +78,152 @@ import { SubscribeButton } from '@mesub/react';
 </SubscribeButton>;
 ```
 
-`plan` is the plan's slug, as set in the dashboard. On click it opens the
-Mesub checkout, one dialog from the click to the receipt:
+`plan` is the plan's slug, as set in the Mesub dashboard. The click opens one
+dialog, from the plan to the receipt:
 
-1. **Sign-in**, when nobody is signed in: the steps of the modal above, in the
-   same window.
-2. **Review**: the merchant, the plan, the price and its cadence, what is due
-   today, the next charge, the paying wallet and the cancel terms, read from
-   `GET /v1/client/plans/:slug`. Nothing is signed until "Subscribe and pay".
-   A plan that takes no new subscribers says so, and its button is disabled.
-3. **Approve**: the wallet signs and sends one transaction for all of it (the
-   subscription and the first period's payment).
-4. **Confirming**, then **Subscribed**: the next charge and the transaction on
-   Solana Explorer. `onSubscribed` fires once it is confirmed.
-
-- The wallet that signs is the one the session proved. A wallet on another
-  account is refused with a message saying which to switch to.
-- It needs a wallet with `solana:signAndSendTransaction`: the wallet sends the
-  transaction itself, so there is no RPC to configure.
-- `chain` names the network the wallet sends on: `solana:devnet` by default
-  while Mesub runs on devnet, `solana:mainnet` once it runs there. Off mainnet
-  the review marks a test network.
-- An error stays on its step and says whether money moved: a refusal before
-  the wallet sent ends on "Nothing was charged.", a transaction that may have
-  landed says to wait for it.
-- `checkout={false}` skips the dialog: the click signs at once (signing in
-  first through the modal above) and the button alone shows the progress.
-
-In the checkout, `data-mesub-step` is also `review`, `approve`, `confirming` or
-`subscribed`. Every error says whether money moved (`data-mesub-funds`, `safe`
-or `pending`). A confirmation that is slow to come asks Mesub again for the same
-transaction ("Check again"), and never pays twice. "See details on Mesub" opens
-`https://mesub.io/subscriptions` in a new tab.
+1. **The plan**: its name, price and period, from `GET /plans/:slug`.
+2. **A wallet**: the installed wallets that can sign
+   ([Wallet Standard](https://github.com/wallet-standard/wallet-standard), so
+   Phantom, Solflare and the others). The one picked is asked for its account.
+3. **The review**: your server prepares the subscription
+   (`POST /subscriptions`), and the dialog shows what it costs before the wallet
+   is asked anything: the price, the next charge, the paying wallet, the deposit
+   returned when the subscription is closed, the network fee, and the terms.
+4. **Two approvals**: the wallet signs the terms, a message
+   (`solana:signMessage`), then the transaction, without sending it
+   (`solana:signTransaction`).
+5. **Confirming**: both go to `POST /subscriptions/:id/submit`. Mesub co-signs
+   and sends the transaction, and `onSubscribed` fires once it landed.
 
 The button is a `<button>` with `data-mesub-subscribe` and `data-mesub-state`
-(`idle`, `signing`, `confirming`, `subscribed` or `error`), following the
-checkout. While busy it is `aria-disabled` rather than disabled, so the
-keyboard focus stays on it. Once subscribed it is followed by
-`<span data-mesub-receipt>` (the next charge and the receipt), and with
-`checkout={false}` by `<span role="alert" data-mesub-error>` in the error state. `children` is the idle label, and every
-other button prop (`className`, `id`, `onClick`, a `ref`) goes to the button.
-An `onClick` that calls `preventDefault()` stops the flow.
+(`idle`, `open`, `signing`, `confirming` or `subscribed`). `children` is its
+label, every other button prop goes to the button, and an `onClick` that calls
+`preventDefault()` stops the flow. Once subscribed it is followed by
+`<span data-mesub-receipt>`.
 
-For a button of your own, `useSubscribe` runs the same flow:
+For a button of your own, `useSubscribe` opens the same dialog:
 
 ```tsx
 import { useSubscribe } from '@mesub/react';
 
 function Buy() {
-    const { state, error, subscribe } = useSubscribe('pro', { chain: 'solana:devnet' });
+    const { state, subscribe } = useSubscribe('pro', { onSubscribed: unlock });
     return (
-        <button disabled={state === 'signing' || state === 'confirming'} onClick={subscribe}>
-            {state === 'subscribed' ? 'Thanks!' : (error ?? 'Buy')}
+        <button disabled={state !== 'idle'} onClick={() => void subscribe()}>
+            {state === 'subscribed' ? 'Thanks!' : 'Buy'}
         </button>
     );
 }
 ```
 
-`subscribe()` resolves with the subscription, or null when it did not go
-through.
+`subscribe()` resolves when the dialog closes: with the subscription, or null
+when it did not go through. The hook also gives `subscription` and
+`signature`, the transaction's id when the wallet is its first signer.
 
-## Wallets
-
-An account keeps every wallet it proved, and each merchant site remembers
-which one pays there. `wallet` is that one: the access token's, which is also
-the only wallet `@mesub/node` checks access for.
-
-The checkout's review starts with the account: "Signed in as", the paying
-wallet (its icon when it is installed, its label or short address) and
-**Change**. Change lists the account's wallets, the paying one checked, with
-the plans each holds on this site:
-
-- Picking another one switches at once, with no signature: the wallet is
-  already proved. "Pays from" follows.
-- Each wallet keeps its own subscriptions: switching loses nothing, and a
-  plan comes back with the wallet that pays it. Past five wallets, the list
-  scrolls on its own.
-- **Connect another wallet** shows the installed wallets, signs a free message
-  with the one picked, links it to the account and pays from it.
-
-Nothing is ever disconnected from a wallet, and the other wallets stay linked.
+## Manage
 
 ```tsx
-const { user, wallets, loadWallets, selectWallet } = useMesub();
+import { ManageSubscriptions } from '@mesub/react';
 
-useEffect(() => {
-    if (user) loadWallets().catch(() => undefined);
-}, [user, loadWallets]);
-
-wallets?.map((linked) => (
-    <button key={linked.address} onClick={() => selectWallet(linked.address)}>
-        {linked.label ?? linked.address} {linked.plans.join(', ')}
-    </button>
-));
+<ManageSubscriptions onChanged={(subscription) => refresh(subscription)} />;
 ```
 
-- `wallets` is null until `loadWallets()` first answers: nothing is read before.
-- `selectWallet(address)` gets a new access token for that wallet, and the
-  cookie follows. It rejects with a 404 `MesubClientError` for a wallet the
-  account does not hold.
+The signed-in customer's subscriptions, from `GET /subscriptions`: each with
+its plan, its status, its next charge or the end of its access, the wallet that
+pays it, and the one thing it allows now.
 
-The row is `[data-mesub-account]` (with `[data-mesub-account-wallet]` and
-`[data-mesub-change]`), the menu `[data-mesub-wallet-menu]`, each wallet a
-`[data-mesub-linked]` button, `aria-current` on the paying one.
+| The subscription is                           | It allows  |
+| --------------------------------------------- | ---------- |
+| running (`active`, `unpaid`, `stopped`)       | **Cancel** |
+| `cancelled`, with access still running        | **Resume** |
+| over (`ended`, or cancelled and past its end) | **Close**  |
+
+Each opens a dialog that says what it does, then runs two steps: your server
+builds a transaction (`POST /subscriptions/:id/cancel`, `/resume` or `/close`),
+the wallet **signs and sends it itself** (`solana:signAndSendTransaction`), and
+its signature goes to the matching `/confirm`. The list is read again after.
+
+Only the wallet that pays a subscription can sign for it. One already
+connected to your site is found without a prompt; otherwise the customer picks
+it. Closing returns the deposit to that wallet.
+
+For a list of your own, `useSubscriptions` gives the same:
+
+```tsx
+import { useSubscriptions } from '@mesub/react';
+
+function Mine() {
+    const { state, subscriptions, error, reload, manage } = useSubscriptions();
+
+    if (state === 'signed-out') return <a href="/login">Sign in</a>;
+    return subscriptions.map((held) => (
+        <button key={held.id} disabled={!held.action} onClick={() => void manage(held.id)}>
+            {held.plan}: {held.status}, {held.action ?? 'nothing to do'}
+        </button>
+    ));
+}
+```
+
+- `state` is `loading`, `ready`, `signed-out` or `error` (with `error`, the
+  server's message).
+- `subscriptions` are newest first, each with `action`: `cancel`, `resume`,
+  `close` or null. Checkouts nobody signed are left out.
+- `manage(id)` opens the dialog for that action and resolves when it closes:
+  the subscription as it is now, or null if nothing changed.
+- Every list reads again when a subscription is made or changed through the
+  widget; `reload()` does it on demand.
+
+Fields are as `@mesub/node` serves them: snake case, dates as ISO strings.
+
+## The states to know
+
+Each one has its own screen, and says whether anything moved: "Nothing was
+charged." (or "Nothing changed.") only when nothing can have landed.
+
+- **Nobody signed in on your site** (your routes answer 401): the dialog says
+  to sign in first and offers nothing to sign; the list says to sign in.
+- **No wallet installed**: links to Phantom and Solflare, and Reload.
+- **A wallet that cannot sign a message, or a transaction without sending
+  it**: left out of the list, and named with what it lacks.
+- **The wallet refuses** to connect, to sign the terms or to sign the
+  transaction: nothing is submitted. Try again asks your server anew and shows
+  the review again.
+- **The terms expired** (`expires_at` passed, before or between the two
+  signatures): your server is asked again and the review comes back with fresh
+  terms. Stale terms are never signed nor submitted.
+- **The wrong wallet** for a subscription being managed: it says which account
+  the wallet is on and which one pays. Nothing is built or signed.
+- **Nothing landed** (`reason` on submit or on a confirm): Mesub's reason, as
+  written.
+- **Mesub refuses** (409: already subscribed, not enough to pay the first
+  period, plan closed...): its message, as written. A 403 `wallet_mismatch`
+  asks for another wallet, a 429 says how long to wait.
+- **The network fails or times out**: 15 seconds on reads and builds, with Try
+  again. Submit and the confirms wait 90 seconds for the chain; past that, or
+  on a 5xx, the outcome is unknown: "Payment may be pending" and Check again,
+  which sends the same request and never a second payment.
+- **Double clicks** open one dialog, prepare one subscription and ask the
+  wallet once.
+
+## Theming
+
+`@mesub/react/styles.css` styles the widget only, through its `data-mesub-*`
+attributes (no class names), and reads your `--mesub-*` custom properties
+without ever setting them: set `--mesub-accent`, `--mesub-bg`, `--mesub-text`,
+`--mesub-font` or `--mesub-radius` on `:root` to brand it. Dark mode is
+`data-mesub-theme="dark"` on the widget or an ancestor, `"auto"` follows the
+system, and `<MesubProvider theme="dark">` sets it on the widget for you. Under
+480px the dialog is a bottom sheet, and motion follows
+`prefers-reduced-motion`. Leave the stylesheet out to style the attributes
+yourself.
+
+The dialog is a native `<dialog>`; `data-mesub-step` says where it is: `plan`,
+`wallet`, `review`, `approve`, `confirming`, `subscribed` when subscribing, and
+`confirm`, `wallet`, `approve`, `confirming`, `done` when managing. The list is
+`[data-mesub-subscriptions]`, with `data-mesub-state`, one
+`[data-mesub-subscription]` per row, `[data-mesub-status]` and
+`[data-mesub-action]`. The screens the v5 design handoff drew are checked
+against it in `test/markup.spec.tsx`.
 
 ## Development
 
@@ -243,7 +236,9 @@ pnpm build         # dist/, ESM and CJS, with declaration files
 pnpm check:exports # resolves through import and require, starts with 'use client'
 ```
 
-The pre-push hook runs all of it, as CI does.
+The pre-push hook runs all of it, as CI does. [`playground/`](./playground)
+runs the widget against a local back, with a merchant server that mounts the
+routes.
 
 ## License
 

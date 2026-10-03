@@ -96,7 +96,10 @@ describe('subscribing, from the click to Done', () => {
         expect(within(dialog).queryByText(/SOL/)).toBeNull();
         expect(within(dialog).queryByText('Due today')).toBeNull();
         expect(within(dialog).getByText('Wa11…1111')).toBeTruthy();
-        expect(within(dialog).getByText(TERMS, { normalizer: (text) => text })).toBeTruthy();
+        // The terms, line by line: 'Mesub terms', then 'Plan: pro' and 'Nonce: 42' as facts.
+        expect(within(dialog).getByText('Mesub terms')).toBeTruthy();
+        expect(within(dialog).getByText('Plan').nextElementSibling?.textContent).toBe('pro');
+        expect(within(dialog).getByText('Nonce').nextElementSibling?.textContent).toBe('42');
         expect(wallet.signMessage).not.toHaveBeenCalled();
         expect(wallet.signTransaction).not.toHaveBeenCalled();
         expect(bodies(fetch, 'POST /subscriptions')).toEqual([{ plan: 'pro', wallet: WALLET }]);

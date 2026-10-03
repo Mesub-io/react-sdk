@@ -4,7 +4,7 @@ import { signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { cadence, day, formatDate, shortAddress } from './format';
+import { cadence, day, formatDate, shortAddress, termsLines } from './format';
 import {
     Explorer,
     failureScreen,
@@ -601,9 +601,21 @@ function stageScreen(props: {
                     </p>
                     <details data-mesub-terms="">
                         <summary>The terms you sign</summary>
-                        <figure data-mesub-message="">
-                            <pre>{terms.message}</pre>
-                        </figure>
+                        {/* Every line of what the wallet signs, as a list: nothing dropped. */}
+                        <div data-mesub-message="">
+                            {termsLines(terms.message).map((line, index) =>
+                                line.label ? (
+                                    <div data-mesub-term="" key={index}>
+                                        <span>{line.label}</span>
+                                        <span>{line.value}</span>
+                                    </div>
+                                ) : (
+                                    <p data-mesub-term-note="" key={index}>
+                                        {line.value}
+                                    </p>
+                                ),
+                            )}
+                        </div>
                     </details>
                     <button
                         type="button"

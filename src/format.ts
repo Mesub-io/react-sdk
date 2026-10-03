@@ -45,3 +45,26 @@ export function explorerUrl(signature: string, chain: SolanaChain): string {
     const cluster = chain === 'solana:mainnet' ? '' : `?cluster=${chain.slice('solana:'.length)}`;
     return `https://explorer.solana.com/tx/${signature}${cluster}`;
 }
+
+/** One line of the terms the wallet signs: a fact with its name, or a plain sentence. */
+export interface TermsLine {
+    label: string | null;
+    value: string;
+}
+
+/**
+ * The terms message, line by line, for a list rather than a block of text.
+ * Nothing is dropped nor reworded: it is what the wallet is about to sign. The
+ * first line is its heading, and a line with no `Name: value` shape stays a
+ * sentence.
+ */
+export function termsLines(message: string): TermsLine[] {
+    return message
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line, index) => {
+            const named = index === 0 ? null : /^([A-Za-z][A-Za-z ]{0,30}): (.+)$/.exec(line);
+
+            return named ? { label: named[1]!, value: named[2]! } : { label: null, value: line };
+        });
+}

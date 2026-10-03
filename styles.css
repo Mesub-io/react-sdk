@@ -1843,6 +1843,44 @@
 [data-mesub-terms] [data-mesub-message] {
   margin-block-end: 14px;
 }
+/* the terms as a list: its name, then the fact, each on its own line of the grid */
+[data-mesub-terms] [data-mesub-message] {
+  gap: 0;
+  max-block-size: 220px;
+  overflow: auto;
+}
+[data-mesub-term] {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  padding-block: 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+[data-mesub-term] + [data-mesub-term],
+[data-mesub-term-note] + [data-mesub-term],
+[data-mesub-term] + [data-mesub-term-note] {
+  border-block-start: 1px solid var(--_border);
+}
+[data-mesub-term] > span:first-child {
+  color: var(--_muted);
+}
+[data-mesub-term] > span:last-child {
+  color: var(--_text);
+  overflow-wrap: anywhere;
+}
+/* a sentence of the terms, not a fact: no check mark, the text's own colour */
+[data-mesub-message] p[data-mesub-term-note] {
+  margin: 0;
+  padding: 8px 0;
+  color: var(--_text);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+[data-mesub-message] p[data-mesub-term-note]::before {
+  content: none;
+}
 [data-mesub-terms] [data-mesub-message] pre {
   max-block-size: 168px;
   overflow: auto;

@@ -30,7 +30,7 @@ export interface PaymentSaid {
 }
 
 const REASONS: Record<string, string> = {
-    'insufficient-balance': 'wallet was short',
+    'insufficient-balance': 'low balance',
     'approval-revoked': 'approval was removed',
 };
 
@@ -61,4 +61,14 @@ export function paidIn(
     if (!plan || !/^\d+$/.test(amount)) return null;
 
     return `${format(amount, plan.decimals)}${plan.symbol ? ` ${plan.symbol}` : ''}`;
+}
+
+/** `2 / 3`: which retry, out of how many the plan allows. Null when it is not one, or not said. */
+export function retryOf(of: {
+    retry_number?: number | null | undefined;
+    retries_allowed?: number | null | undefined;
+}): string | null {
+    const { retry_number: number, retries_allowed: allowed } = of;
+    if (!Number.isInteger(number) || !Number.isInteger(allowed)) return null;
+    return number! > 0 && allowed! > 0 ? `${number} / ${allowed}` : null;
 }

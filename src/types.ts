@@ -100,6 +100,9 @@ export interface MesubPayment {
     reason: string | null;
     // The transaction, once something was sent.
     signature: string | null;
+    // Which retry it was, out of how many the plan allowed. Absent or null when it was not one.
+    retry_number?: number | null;
+    retries_allowed?: number | null;
 }
 
 /** The one charge Mesub announces next, as the merchant's server serves it. */
@@ -110,6 +113,9 @@ export interface MesubUpcoming {
     // The plan's price as a person counts it; null when the server could not read the plan.
     amount: string | null;
     amount_display: string | null;
+    // On a retry: which one comes, out of how many. Absent or null when the server does not say.
+    retry_number?: number | null;
+    retries_allowed?: number | null;
 }
 
 /** What `GET /subscriptions/:id` answers: the subscription, what comes next, its latest charges. */

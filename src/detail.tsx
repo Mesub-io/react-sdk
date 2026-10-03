@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { useMesubInternal } from './context';
-import { paidIn, paymentSaid, pickSubscription } from './detail-logic';
+import { paidIn, paymentSaid, pickSubscription, retryOf } from './detail-logic';
 import { MesubDialog } from './dialog';
 import { cadence, day, explorerUrl, formatAmount, shortAddress, shortDay } from './format';
 import {
@@ -198,7 +198,12 @@ export function SubscriptionDialog({
                                             data-mesub-payment="upcoming"
                                         >
                                             <span>{shortDay(next.due_at)}</span>
-                                            <span>{UPCOMING[next.kind] ?? next.kind}</span>
+                                            <span>
+                                                {UPCOMING[next.kind] ?? next.kind}
+                                                {retryOf(next) ? (
+                                                    <small title="Retry">{retryOf(next)}</small>
+                                                ) : null}
+                                            </span>
                                             <span>
                                                 {next.amount_display
                                                     ? `${next.amount_display}${plan?.symbol ? ` ${plan.symbol}` : ''}`
@@ -222,7 +227,14 @@ export function SubscriptionDialog({
                                                 data-mesub-payment={said.tone}
                                             >
                                                 <span>{shortDay(payment.attempted_at)}</span>
-                                                <span>{said.label}</span>
+                                                <span>
+                                                    {said.label}
+                                                    {retryOf(payment) ? (
+                                                        <small title="Retry">
+                                                            {retryOf(payment)}
+                                                        </small>
+                                                    ) : null}
+                                                </span>
                                                 <span>
                                                     {payment.signature &&
                                                     payment.outcome === 'PAID' ? (

@@ -25,7 +25,7 @@ import {
     TX_BYTES,
     type Handler,
 } from './helpers';
-import { paidIn, paymentSaid, pickSubscription } from '../src/detail-logic';
+import { paidIn, paymentSaid, pickSubscription, retryOf } from '../src/detail-logic';
 import { noteOf } from '../src/subscriptions';
 import { registerWallet, type FakeWalletOptions } from './wallets';
 
@@ -835,7 +835,7 @@ describe('ManageButton', () => {
         expect(lines[1]!.getAttribute('data-mesub-payment')).toBe('good');
         // Only a paid one links to its transaction.
         expect(within(lines[1]!).getByRole('link').getAttribute('href')).toContain(SIGNATURE);
-        expect(within(lines[2]!).getByText('Missed, wallet was short')).toBeTruthy();
+        expect(within(lines[2]!).getByText('Missed, low balance')).toBeTruthy();
         expect(within(lines[2]!).queryByRole('link')).toBeNull();
         // An outcome this version does not know is shown as named, never as paid.
         expect(within(lines[3]!).getByText('refunded')).toBeTruthy();
@@ -1012,13 +1012,23 @@ describe('which subscription the window is about', () => {
 
 describe('how a charge reads', () => {
     it.each([
+        [{ retry_number: 2, retries_allowed: 3 }, '2 / 3'],
+        [{ retry_number: null, retries_allowed: 3 }, null],
+        [{ retry_number: 1, retries_allowed: 0 }, null],
+        [{ retry_number: 1, retries_allowed: null }, null],
+        [{}, null],
+    ])('counts the retry of %j as %j', (of, said) => {
+        expect(retryOf(of)).toBe(said);
+    });
+
+    it.each([
         [
             { outcome: 'PAID', reason: null },
             { label: 'Paid', tone: 'good' },
         ],
         [
             { outcome: 'REJECTED', reason: 'insufficient-balance' },
-            { label: 'Missed, wallet was short', tone: 'bad' },
+            { label: 'Missed, low balance', tone: 'bad' },
         ],
         [
             { outcome: 'REJECTED', reason: 'something-new' },

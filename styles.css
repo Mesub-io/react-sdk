@@ -2377,6 +2377,12 @@
   border-radius: 50%;
   background: var(--_muted);
 }
+/* which retry, 2 / 3: quieter than the word it follows */
+[data-mesub-payment] small {
+  color: var(--_muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
 [data-mesub-payment="good"] > span:nth-child(2)::before {
   background: var(--_success);
 }

@@ -2020,28 +2020,54 @@
   padding: 0;
   list-style: none;
 }
+/* One subscription, as a card: who it is, what it costs, its dates, what to
+   know, then the one thing it allows. Read top to bottom. */
 [data-mesub-subscription] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 2px 16px;
+  gap: 12px;
   padding: 16px;
   border: 1px solid var(--_border);
   border-radius: var(--_radius-lg);
   background: var(--_bg);
 }
 [data-mesub-subscription-head] {
-  grid-column: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   min-inline-size: 0;
 }
-[data-mesub-subscription-head] strong {
+[data-mesub-subscription] [data-mesub-logo] {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 10px;
+  background: var(--_sunk);
+  color: var(--_text-soft);
+  font-size: 15px;
+  font-weight: 600;
+  object-fit: cover;
+}
+[data-mesub-subscription-name] {
+  flex: 1;
+  display: grid;
+  min-inline-size: 0;
+}
+[data-mesub-subscription-name] strong {
   overflow: hidden;
   color: var(--_text);
   font-size: 15px;
+  line-height: 20px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-mesub-subscription-name] span {
+  overflow: hidden;
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2064,13 +2090,28 @@
   color: var(--_warning-text);
 }
 [data-mesub-subscription-price] {
-  grid-column: 1;
+  color: var(--_text-soft);
   font-variant-numeric: tabular-nums;
 }
+[data-mesub-subscription-price] strong {
+  color: var(--_text);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
 [data-mesub-subscription] [data-mesub-summary] {
-  grid-column: 1 / -1;
-  margin-block-start: 10px;
   border-block-end: 0;
+}
+[data-mesub-subscription] [data-mesub-row]:last-child {
+  padding-block-end: 0;
+}
+[data-mesub-dialog] [data-mesub-subscription-note],
+[data-mesub-subscription-note] {
+  text-align: start;
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 /* the one thing a subscription allows now, and Try again after a failed read */
@@ -2092,8 +2133,8 @@
   transition: border-color var(--_dur) ease-out, background-color var(--_dur) ease-out;
 }
 [data-mesub-action] {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  inline-size: 100%;
+  min-block-size: 40px;
 }
 [data-mesub-retry] {
   justify-self: start;
@@ -2146,3 +2187,52 @@
     border: 1px solid ButtonText;
   }
 }
+
+/* ============================================================ MANAGE BUTTON
+ * button[data-mesub-manage-button]: the Subscribe button's shape, in neutral
+ * colours, since it opens a list and charges nothing.
+ */
+[data-mesub-manage-button] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-block-size: 44px;
+  margin: 0;
+  padding: 0 20px;
+  border: 1px solid var(--_border);
+  border-radius: var(--_radius);
+  background: var(--_bg);
+  color: var(--_text);
+  font-family: var(--mesub-font, inherit);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition-property: background-color, border-color;
+  transition-duration: var(--_dur);
+  transition-timing-function: ease-out;
+}
+[data-mesub-manage-button]:hover:not(:disabled) {
+  background: var(--_sunk);
+}
+[data-mesub-manage-button]:focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: 2px;
+}
+[data-mesub-manage-button]:disabled {
+  color: var(--_muted);
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-mesub-manage-button] {
+    transition: none;
+  }
+}
+
+/* the list inside the dialog: the dialog is the frame, the list brings none */
+[data-mesub-dialog] [data-mesub-subscriptions][data-mesub-in-dialog] {
+  grid-column: 1 / -1;
+}
+

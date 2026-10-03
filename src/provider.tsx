@@ -9,6 +9,7 @@ import {
     type SubscribeRequest,
 } from './context';
 import { Manage } from './manage';
+import { SubscriptionsDialog } from './subscriptions';
 import type { MesubPlan, MesubSubscription } from './types';
 import type { SolanaChain } from './wallet';
 
@@ -51,6 +52,9 @@ export function MesubProvider({
     const [open, setOpen] = useState<Open | null>(null);
     const [revision, setRevision] = useState(0);
     const pending = useRef<Pending | null>(null);
+    // The list of subscriptions, up behind whatever one of its rows opens.
+    const [listed, setListed] = useState(false);
+    const openSubscriptions = useCallback(() => setListed(true), []);
 
     // Unmounted with a dialog up: whoever waits on it is answered.
     useEffect(
@@ -107,8 +111,18 @@ export function MesubProvider({
     }, []);
 
     const value = useMemo<MesubInternal>(
-        () => ({ api, chain, theme, manageUrl, plan, revision, subscribe, manage }),
-        [api, chain, theme, manageUrl, plan, revision, subscribe, manage],
+        () => ({
+            api,
+            chain,
+            theme,
+            manageUrl,
+            plan,
+            revision,
+            subscribe,
+            manage,
+            openSubscriptions,
+        }),
+        [api, chain, theme, manageUrl, plan, revision, subscribe, manage, openSubscriptions],
     );
 
     return (
@@ -125,6 +139,8 @@ export function MesubProvider({
                     onClose={close}
                 />
             ) : null}
+            {/* One native dialog at a time: the list steps aside while a row's action runs. */}
+            {listed && !open ? <SubscriptionsDialog onClose={() => setListed(false)} /> : null}
             {open?.kind === 'manage' ? (
                 <Manage
                     subscription={open.request.subscription}

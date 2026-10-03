@@ -124,6 +124,16 @@ when it did not go through. The hook also gives `subscription` and
 ## Manage
 
 ```tsx
+import { ManageButton } from '@mesub/react';
+
+<ManageButton />;
+```
+
+A button, like `SubscribeButton`: it opens the customer's subscriptions in a
+dialog. Put it in your account menu; pass children to word it your way. To
+show the same list in a page of yours instead:
+
+```tsx
 import { ManageSubscriptions } from '@mesub/react';
 
 <ManageSubscriptions onChanged={(subscription) => refresh(subscription)} />;

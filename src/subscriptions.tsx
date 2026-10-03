@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type HTMLAttributes } from 'react';
+import {
+    forwardRef,
+    useCallback,
+    useEffect,
+    useId,
+    useRef,
+    useState,
+    type ButtonHTMLAttributes,
+    type HTMLAttributes,
+} from 'react';
 import { signedOut } from './api';
 import { useMesubInternal } from './context';
+import { MesubDialog } from './dialog';
 import { MesubClientError } from './errors';
 import { cadence, day, shortAddress } from './format';
 import type { MesubAction, MesubPlan, MesubSubscription } from './types';
@@ -145,6 +155,24 @@ function fact(row: MesubHeldSubscription): { term: string; date: string } | null
     return null;
 }
 
+/** What to do or expect, in a sentence, when the status alone does not say. Null on a healthy one. */
+export function noteOf(row: MesubHeldSubscription): string | null {
+    if (row.paused) return 'Parked: nothing is charged while it is.';
+    if (row.status === 'unpaid') {
+        return row.next_retry_at
+            ? 'The last payment did not go through. Add funds to the wallet before the next try.'
+            : 'The last payment did not go through. Add funds to the wallet.';
+    }
+    if (row.status === 'cancelled') return 'Cancelled. Resume before the end to keep it.';
+    if (row.status === 'stopped') return 'Stopped after missed payments. Nothing more is charged.';
+    if (row.status === 'ended') {
+        return row.action === 'close'
+            ? 'Ended. Close it to get its deposit back.'
+            : 'Ended. Nothing more is charged.';
+    }
+    return null;
+}
+
 /** The plans named by the rows, read best effort: a slug stands in for one that cannot be read. */
 function usePlans(slugs: string[]): Record<string, MesubPlan> {
     const { plan } = useMesubInternal();
@@ -230,17 +258,33 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                 {subscriptions.map((row) => {
                     const plan = row.plan ? plans[row.plan] : undefined;
                     const dated = fact(row);
+                    const name = plan?.name ?? row.plan ?? 'Subscription';
+                    const since = day(row.confirmed_at);
+                    const note = noteOf(row);
                     return (
                         <li key={row.id} data-mesub-subscription={row.id}>
                             <div data-mesub-subscription-head="">
-                                <strong>{plan?.name ?? row.plan ?? 'Subscription'}</strong>
+                                {plan?.logo_url ? (
+                                    <img data-mesub-logo="" src={plan.logo_url} alt="" />
+                                ) : (
+                                    <span data-mesub-logo="" aria-hidden="true">
+                                        {name.slice(0, 1).toUpperCase()}
+                                    </span>
+                                )}
+                                <div data-mesub-subscription-name="">
+                                    <strong>{name}</strong>
+                                    {plan ? <span>by {plan.project_name}</span> : null}
+                                </div>
                                 <span data-mesub-status={row.paused ? 'paused' : row.status}>
-                                    {row.paused ? 'Paused' : (STATUS[row.status] ?? row.status)}
+                                    {row.paused ? 'Parked' : (STATUS[row.status] ?? row.status)}
                                 </span>
                             </div>
                             {plan ? (
                                 <p data-mesub-subscription-price="">
-                                    {plan.amount_display} {plan.symbol ?? shortAddress(plan.mint)}{' '}
+                                    <strong>
+                                        {plan.amount_display}{' '}
+                                        {plan.symbol ?? shortAddress(plan.mint)}
+                                    </strong>{' '}
                                     {cadence(plan.period_hours)}
                                 </p>
                             ) : null}
@@ -251,11 +295,18 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                                         <dd>{dated.date}</dd>
                                     </div>
                                 ) : null}
+                                {since ? (
+                                    <div data-mesub-row="">
+                                        <dt>Since</dt>
+                                        <dd>{since}</dd>
+                                    </div>
+                                ) : null}
                                 <div data-mesub-row="">
                                     <dt>Paid from</dt>
                                     <dd title={row.wallet}>{shortAddress(row.wallet)}</dd>
                                 </div>
                             </dl>
+                            {note ? <p data-mesub-subscription-note="">{note}</p> : null}
                             {row.action ? (
                                 <button
                                     type="button"
@@ -283,3 +334,58 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
         </div>
     );
 }
+
+/** The customer's subscriptions in the Mesub dialog: what the Manage button opens. */
+export function SubscriptionsDialog({ onClose }: { onClose(): void }) {
+    const titleId = useId();
+
+    return (
+        <MesubDialog
+            titleId={titleId}
+            onClose={onClose}
+            screen={{
+                step: 'subscriptions',
+                view: 'subscriptions',
+                body: (
+                    <>
+                        <h2 id={titleId}>Your subscriptions</h2>
+                        <ManageSubscriptions data-mesub-in-dialog="" />
+                        {/* "Done", not "Close": a row may offer to close a subscription. */}
+                        <button type="button" data-mesub-cancel="" onClick={onClose}>
+                            Done
+                        </button>
+                    </>
+                ),
+            }}
+        />
+    );
+}
+
+export type ManageButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
+
+/**
+ * Opens the customer's subscriptions in a dialog, each with what it allows
+ * now: cancel, resume or close. Put it wherever your account menu is.
+ */
+export const ManageButton = forwardRef<HTMLButtonElement, ManageButtonProps>(function ManageButton(
+    { children, onClick, ...rest },
+    ref,
+) {
+    const { openSubscriptions, theme } = useMesubInternal();
+
+    return (
+        <button
+            type="button"
+            {...rest}
+            ref={ref}
+            data-mesub-manage-button=""
+            data-mesub-theme={theme}
+            onClick={(event) => {
+                onClick?.(event);
+                if (!event.defaultPrevented) openSubscriptions();
+            }}
+        >
+            {children ?? 'Manage subscription'}
+        </button>
+    );
+});

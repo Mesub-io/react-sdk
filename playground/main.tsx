@@ -1,12 +1,7 @@
 import { StrictMode, useEffect, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import {
-    ManageSubscriptions,
-    MesubProvider,
-    SubscribeButton,
-    type MesubSubscription,
-} from '@mesub/react';
+import { ManageButton, MesubProvider, SubscribeButton, type MesubSubscription } from '@mesub/react';
 
 import '@mesub/react/styles.css';
 import './style.css';
@@ -72,8 +67,11 @@ function Page() {
 
             <section className="card">
                 <h2>My subscriptions</h2>
-                {/* Keyed on who is signed in: another customer reads their own list. */}
-                <ManageSubscriptions key={user?.id ?? 'nobody'} />
+                <p>
+                    <code>&lt;ManageButton /&gt;</code> opens them in a dialog, each with Cancel,
+                    Resume or Close.
+                </p>
+                <ManageButton />
             </section>
 
             <CallServer />

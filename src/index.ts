@@ -13,8 +13,10 @@ export {
     type UseSubscribeResult,
 } from './subscribe-button';
 export {
+    ManageButton,
     ManageSubscriptions,
     useSubscriptions,
+    type ManageButtonProps,
     type ManageSubscriptionsProps,
     type MesubHeldSubscription,
     type UseSubscriptionsResult,

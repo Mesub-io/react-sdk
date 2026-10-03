@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import {
+    ManageButton,
     ManageSubscriptions,
     MesubProvider,
     SubscribeButton,
@@ -24,6 +25,7 @@ import {
     TX_BYTES,
     type Handler,
 } from './helpers';
+import { noteOf } from '../src/subscriptions';
 import { registerWallet, type FakeWalletOptions } from './wallets';
 
 const built = () => json(201, { transaction: TX_BASE64, last_valid_block_height: '100' });
@@ -128,7 +130,13 @@ describe('the list', () => {
         const active = await row('sub_active');
         // The plan's name and price come from the plan, read once for them all.
         expect(await within(active).findByText('Pro')).toBeTruthy();
-        expect(within(active).getByText('2 USDC every 3 days')).toBeTruthy();
+        // The price stands out, its period follows; the merchant and when it began are said too.
+        expect(within(active).getByText('2 USDC')).toBeTruthy();
+        expect(active.querySelector('[data-mesub-subscription-price]')?.textContent).toBe(
+            '2 USDC every 3 days',
+        );
+        expect(within(active).getByText(`by ${plan.project_name}`)).toBeTruthy();
+        expect(within(active).getByText('Since')).toBeTruthy();
         expect(within(active).getByText('Active')).toBeTruthy();
         expect(within(active).getByText('Next charge')).toBeTruthy();
         expect(within(active).getByText('Wa11…1111')).toBeTruthy();
@@ -184,7 +192,10 @@ describe('the list', () => {
     it('marks a paused seat', async () => {
         setup({ held: [subscription({ paused: true })] });
 
-        expect(within(await row()).getByText('Paused')).toBeTruthy();
+        const parked = await row();
+
+        expect(within(parked).getByText('Parked')).toBeTruthy();
+        expect(within(parked).getByText('Parked: nothing is charged while it is.')).toBeTruthy();
     });
 
     it('says to sign in on the site on a 401, and lists nothing', async () => {
@@ -714,5 +725,97 @@ describe('useSubscriptions, for a list of your own', () => {
         fireEvent.click(screen.getByRole('button', { name: 'sub_1 active cancel' }));
         fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+});
+
+describe('ManageButton', () => {
+    function mount(children?: string) {
+        const fetch = server({
+            'GET /plans/pro': () => json(200, plan),
+            'GET /subscriptions': () => json(200, { subscriptions: [subscription()] }),
+            'POST /subscriptions/sub_1/cancel': built,
+        });
+        registerWallet({ connected: true });
+        render(
+            <MesubProvider endpoint={ENDPOINT} fetch={fetch}>
+                <ManageButton>{children}</ManageButton>
+            </MesubProvider>,
+        );
+        return fetch;
+    }
+
+    it('reads nothing until it is clicked, then lists the subscriptions in a dialog', async () => {
+        const fetch = mount();
+
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(fetch).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Manage subscription' }));
+
+        const dialog = await screen.findByRole('dialog');
+        expect(within(dialog).getByRole('heading', { name: 'Your subscriptions' })).toBeTruthy();
+        expect(await within(dialog).findByRole('button', { name: 'Cancel' })).toBeTruthy();
+    });
+
+    it('takes its own words', () => {
+        mount('Billing');
+
+        expect(screen.getByRole('button', { name: 'Billing' })).toBeTruthy();
+    });
+
+    it('steps aside for a row action, and comes back when that one is left', async () => {
+        mount();
+        fireEvent.click(screen.getByRole('button', { name: 'Manage subscription' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+        // One dialog at a time: the cancel's own.
+        await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
+        fireEvent.click(await screen.findByRole('button', { name: 'Keep it' }));
+
+        const back = await screen.findByRole('dialog');
+        expect(within(back).getByRole('heading', { name: 'Your subscriptions' })).toBeTruthy();
+    });
+
+    it('closes on Done, and opens again', async () => {
+        mount();
+        const button = screen.getByRole('button', { name: 'Manage subscription' });
+
+        fireEvent.click(button);
+        fireEvent.click(
+            within(await screen.findByRole('dialog')).getByRole('button', { name: 'Close' }),
+        );
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+        fireEvent.click(button);
+        expect(await screen.findByRole('dialog')).toBeTruthy();
+    });
+});
+
+describe('what a card says under its dates', () => {
+    const held = (
+        over: Partial<MesubSubscription>,
+        action: 'cancel' | 'resume' | 'close' | null,
+    ) => ({
+        ...subscription(over),
+        action,
+    });
+
+    it('says nothing on a healthy one', () => {
+        expect(noteOf(held({}, 'cancel'))).toBeNull();
+    });
+
+    it.each([
+        [{ status: 'unpaid', next_retry_at: '2026-10-05T00:00:00.000Z' }, /before the next try/],
+        [{ status: 'unpaid', next_retry_at: null }, /Add funds to the wallet\.$/],
+        [{ status: 'cancelled' }, /Resume before the end/],
+        [{ status: 'stopped' }, /Stopped after missed payments/],
+        [{ paused: true }, /Parked/],
+    ] as const)('explains %j', (over, text) => {
+        expect(noteOf(held(over as Partial<MesubSubscription>, null))).toMatch(text);
+    });
+
+    it('offers the deposit back on an ended one only when it can be closed', () => {
+        expect(noteOf(held({ status: 'ended' }, 'close'))).toMatch(/deposit back/);
+        expect(noteOf(held({ status: 'ended' }, null))).toBe('Ended. Nothing more is charged.');
     });
 });

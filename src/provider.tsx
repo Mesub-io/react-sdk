@@ -21,6 +21,9 @@ export interface MesubProviderProps {
     fetch?: FetchLike | undefined;
     // data-mesub-theme on the widget. Leave it out to inherit it from an ancestor.
     theme?: MesubTheme | undefined;
+    // Where "Cancel any time" leads once subscribed: your own page ("/account"), Mesub's by
+    // default, null for no button.
+    manageUrl?: string | null | undefined;
     children?: ReactNode;
 }
 
@@ -40,6 +43,7 @@ export function MesubProvider({
     chain = 'solana:devnet',
     fetch,
     theme,
+    manageUrl,
     children,
 }: MesubProviderProps) {
     const api = useMemo(() => createApi({ endpoint, fetch }), [endpoint, fetch]);
@@ -103,8 +107,8 @@ export function MesubProvider({
     }, []);
 
     const value = useMemo<MesubInternal>(
-        () => ({ api, chain, theme, plan, revision, subscribe, manage }),
-        [api, chain, theme, plan, revision, subscribe, manage],
+        () => ({ api, chain, theme, manageUrl, plan, revision, subscribe, manage }),
+        [api, chain, theme, manageUrl, plan, revision, subscribe, manage],
     );
 
     return (

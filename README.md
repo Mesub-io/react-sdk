@@ -49,12 +49,13 @@ export function App({ children }) {
 }
 ```
 
-| Prop       | What it is                                                                       |
-| ---------- | -------------------------------------------------------------------------------- |
-| `endpoint` | Where you mounted the routes. A path on your site, or a full URL.                |
-| `chain`    | The network the wallet signs for: `solana:devnet` (default) or `solana:mainnet`. |
-| `fetch`    | Your own `(url, init) => Promise<Response>`, to add headers or credentials.      |
-| `theme`    | `light`, `dark` or `auto`, set on the widget as `data-mesub-theme`.              |
+| Prop        | What it is                                                                                                                               |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `endpoint`  | Where you mounted the routes. A path on your site, or a full URL.                                                                        |
+| `chain`     | The network the wallet signs for: `solana:devnet` (default) or `solana:mainnet`.                                                         |
+| `fetch`     | Your own `(url, init) => Promise<Response>`, to add headers or credentials.                                                              |
+| `theme`     | `light`, `dark` or `auto`, set on the widget as `data-mesub-theme`.                                                                      |
+| `manageUrl` | Where "Cancel any time" leads once subscribed: your own page (`/account`, or a full URL). Mesub's page by default; `null` for no button. |
 
 Requests go with `credentials: 'include'`, so your session cookie travels. If
 your login is a bearer token instead, add it in `fetch`:

@@ -6,6 +6,7 @@ import {
     formatSol,
     shortAddress,
     jupiterUrl,
+    manageLink,
     termsCancelUrl,
     termsFacts,
     termsLines,
@@ -233,4 +234,35 @@ describe('termsCancelUrl', () => {
         }
         expect(termsCancelUrl('Mesub: terms')).toBeNull();
     });
+});
+
+describe('manageLink', () => {
+    const MESUB = 'https://mesub.io/subscriptions';
+
+    it("leads to Mesub's page by default, in a tab of its own", () => {
+        expect(manageLink(undefined, MESUB)).toEqual({ href: MESUB, external: true });
+    });
+
+    it("leads to the merchant's own page when they name one", () => {
+        expect(manageLink('/account/billing', MESUB)).toEqual({
+            href: '/account/billing',
+            external: false,
+        });
+        expect(manageLink('https://shop.example.com/account', MESUB)).toEqual({
+            href: 'https://shop.example.com/account',
+            external: true,
+        });
+    });
+
+    it('shows no button for null, nor when there is nowhere to send', () => {
+        expect(manageLink(null, MESUB)).toBeNull();
+        expect(manageLink(undefined, null)).toBeNull();
+    });
+
+    it.each(['javascript:alert(1)', '//evil.example', 'account', '', 'https://a.co b', 42])(
+        "falls back to Mesub's for %j, never a link to anything",
+        (yours) => {
+            expect(manageLink(yours as never, MESUB)).toEqual({ href: MESUB, external: true });
+        },
+    );
 });

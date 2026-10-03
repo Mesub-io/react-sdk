@@ -1937,7 +1937,8 @@
   text-decoration: none;
   transition: background-color var(--_dur) ease-out;
 }
-[data-mesub-dialog] a[data-mesub-manage]::after {
+/* the arrow only when it leaves the site */
+[data-mesub-dialog] a[data-mesub-manage][data-mesub-external]::after {
   content: "\2197";
   color: var(--_muted);
   font-size: 12px;

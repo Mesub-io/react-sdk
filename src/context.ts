@@ -26,6 +26,8 @@ export interface MesubInternal {
     chain: SolanaChain;
     // Set on the widget as data-mesub-theme; undefined leaves it to an ancestor.
     theme: MesubTheme | undefined;
+    // Where "Cancel any time" leads: the merchant's own page, null for no button, undefined for Mesub's.
+    manageUrl: string | null | undefined;
     // One read per slug, shared: a failed one is asked again next time.
     plan(slug: string): Promise<MesubPlan>;
     // Bumped when a subscription was made or changed: the lists read again.

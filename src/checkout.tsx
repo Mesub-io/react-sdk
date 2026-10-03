@@ -4,7 +4,15 @@ import { signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { cadence, day, formatDate, shortAddress, termsCancelUrl, termsFacts } from './format';
+import {
+    cadence,
+    day,
+    formatDate,
+    manageLink,
+    shortAddress,
+    termsCancelUrl,
+    termsFacts,
+} from './format';
 import {
     Explorer,
     failureScreen,
@@ -108,7 +116,7 @@ function notPrepared(error: unknown): Failure {
  * signatures, then Mesub sends. One dialog from the click to "Done".
  */
 export function Checkout({ plan: slug, onClose, onState, onSubscribed }: CheckoutProps) {
-    const { api, chain } = useMesubInternal();
+    const { api, chain, manageUrl } = useMesubInternal();
     const wallets = useWallets();
     const titleId = useId();
 
@@ -402,6 +410,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             view,
             plan: loaded.plan,
             chain,
+            manageUrl,
             titleId,
             checking,
             onContinue: toWallets,
@@ -469,6 +478,7 @@ function stageScreen(props: {
     view: Exclude<View, { name: 'wallet' } | { name: 'signed-out' }>;
     plan: MesubPlan;
     chain: SolanaChain;
+    manageUrl: string | null | undefined;
     titleId: string;
     checking: boolean;
     onContinue(): void;
@@ -692,6 +702,8 @@ function stageScreen(props: {
     }
 
     const nextCharge = day(view.subscription.next_charge_at);
+    const manage = manageLink(props.manageUrl, view.cancelUrl);
+
     return {
         step: 'subscribed',
         view: 'subscribed',
@@ -733,12 +745,13 @@ function stageScreen(props: {
                     Done
                 </button>
                 {/* Only once it runs: where it is stopped is of no use before. */}
-                {view.cancelUrl ? (
+                {manage ? (
                     <a
                         data-mesub-manage=""
-                        href={view.cancelUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        data-mesub-external={manage.external ? '' : undefined}
+                        href={manage.href}
+                        // The merchant's own page opens in place; Mesub's, in a tab of its own.
+                        {...(manage.external && { target: '_blank', rel: 'noopener noreferrer' })}
                     >
                         Cancel any time
                     </a>

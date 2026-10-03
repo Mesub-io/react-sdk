@@ -79,6 +79,31 @@ export function termsCancelUrl(message: string): string | null {
     return line && /^https?:\/\/\S+$/.test(line.value) ? line.value : null;
 }
 
+/** Where "Cancel any time" leads, and whether it leaves the site. */
+export interface ManageLink {
+    href: string;
+    external: boolean;
+}
+
+/**
+ * Where a subscriber goes to stop: your own page when you named one, a path
+ * on your site or a full address; Mesub's, as the terms give it, otherwise.
+ * `null` shows no button at all. An address that is neither falls back to
+ * Mesub's rather than become a link to anything.
+ */
+export function manageLink(
+    yours: string | null | undefined,
+    fromTerms: string | null,
+): ManageLink | null {
+    if (yours === null) return null;
+    if (typeof yours === 'string') {
+        if (/^\/(?!\/)\S*$/.test(yours)) return { href: yours, external: false };
+        if (/^https?:\/\/\S+$/.test(yours)) return { href: yours, external: true };
+    }
+
+    return fromTerms ? { href: fromTerms, external: true } : null;
+}
+
 /** Lines of the terms a person does not read: said elsewhere on the screen, or for machines. */
 const NOT_SHOWN = new Set([
     'Amount',

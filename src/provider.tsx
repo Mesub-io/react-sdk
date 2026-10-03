@@ -1,211 +1,156 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createApiClient, type FetchLike } from './api';
-import { SessionKeeper } from './keeper';
+import { createApi, type FetchLike } from './api';
+import { Checkout } from './checkout';
 import {
     MesubContext,
-    MesubInternalContext,
+    type ManageRequest,
     type MesubInternal,
-    type MesubState,
     type MesubTheme,
+    type SubscribeRequest,
 } from './context';
-import { MesubClientError, MesubSignInCancelledError } from './errors';
-import { hasWallet, sessionWallet } from './session';
-import { SignInModal } from './sign-in-modal';
-import type { MesubSession, MesubUser, WalletProof } from './types';
-import type { MesubWallet } from './wallets-api';
+import { Manage } from './manage';
+import { SubscriptionDialog } from './detail';
+import type { MesubPlan, MesubSubscription } from './types';
+import type { SolanaChain } from './wallet';
 
 export interface MesubProviderProps {
-    publishableKey: string;
-    // Defaults to https://api.mesub.io.
-    apiUrl?: string | undefined;
-    // For tests. Defaults to globalThis.fetch.
+    // Where your server mounts the routes of @mesub/node: "/api/mesub".
+    endpoint: string;
+    // The network the wallet signs for and sends on. solana:devnet by default.
+    chain?: SolanaChain | undefined;
+    // To add your own headers or credentials. By default, credentials: 'include'.
     fetch?: FetchLike | undefined;
     // data-mesub-theme on the widget. Leave it out to inherit it from an ancestor.
     theme?: MesubTheme | undefined;
+    // Where "Cancel any time" leads once subscribed: your own page ("/account"), Mesub's by
+    // default, null for no button.
+    manageUrl?: string | null | undefined;
     children?: ReactNode;
 }
 
-interface PendingSignIn {
-    promise: Promise<MesubUser>;
-    resolve(user: MesubUser): void;
-    reject(error: Error): void;
+type Open =
+    { kind: 'subscribe'; request: SubscribeRequest } | { kind: 'manage'; request: ManageRequest };
+
+interface Pending {
+    promise: Promise<MesubSubscription | null>;
+    resolve(result: MesubSubscription | null): void;
+    // What the dialog settled on, handed over when it closes.
+    result: MesubSubscription | null;
 }
 
-function isSignedIn(session: MesubSession | null): session is MesubSession {
-    return session !== null && hasWallet(session.user, session.accessToken);
-}
-
-/** Keeps the session alive, exposes it through `useMesub()`, and renders the sign-in. */
+/** Says where the merchant's routes are, and renders the one dialog the hooks open. */
 export function MesubProvider({
-    publishableKey,
-    apiUrl,
+    endpoint,
+    chain = 'solana:devnet',
     fetch,
     theme,
+    manageUrl,
     children,
 }: MesubProviderProps) {
-    const api = useMemo(
-        () => createApiClient({ publishableKey, apiUrl, fetch }),
-        [publishableKey, apiUrl, fetch],
-    );
+    const api = useMemo(() => createApi({ endpoint, fetch }), [endpoint, fetch]);
+    const plans = useMemo(() => new Map<string, Promise<MesubPlan>>(), [api]);
+    const [open, setOpen] = useState<Open | null>(null);
+    const [revision, setRevision] = useState(0);
+    const pending = useRef<Pending | null>(null);
+    // The subscription's own window, up behind whatever its action opens.
+    const [managed, setManaged] = useState<{ plan: string | undefined } | null>(null);
+    const openSubscription = useCallback((plan: string | undefined) => setManaged({ plan }), []);
 
-    const [session, setSessionState] = useState<MesubSession | null>(null);
-    const [signingIn, setSigningIn] = useState(false);
-    const [ready, setReady] = useState(false);
-    const pendingRef = useRef<PendingSignIn | null>(null);
-    // Kept with its account: another sign-in never shows the last one's wallets.
-    const [walletList, setWalletList] = useState<{ userId: string; wallets: MesubWallet[] } | null>(
-        null,
-    );
-    const loadingWallets = useRef<Promise<MesubWallet[]> | null>(null);
-    // Holds the session outside React, so two calls in one tick see each other.
-    const keeper = useMemo(
-        () => new SessionKeeper(api, publishableKey, setSessionState),
-        [api, publishableKey],
-    );
-
-    // Ready once the stored session, if any, is restored or refused.
-    useEffect(() => {
-        let live = true;
-        const stop = keeper.start();
-        setSessionState(keeper.session);
-        void keeper.restore().finally(() => {
-            if (live) setReady(true);
-        });
-        return () => {
-            live = false;
-            stop();
-        };
-    }, [keeper]);
-
-    const setSession = useCallback((next: MesubSession | null) => keeper.set(next), [keeper]);
-
-    const login = useCallback((): Promise<MesubUser> => {
-        const current = keeper.session;
-        if (isSignedIn(current)) return Promise.resolve(current.user);
-        if (pendingRef.current) return pendingRef.current.promise;
-
-        let resolve!: (user: MesubUser) => void;
-        let reject!: (error: Error) => void;
-        const promise = new Promise<MesubUser>((res, rej) => {
-            resolve = res;
-            reject = rej;
-        });
-        pendingRef.current = { promise, resolve, reject };
-        setSigningIn(true);
-        return promise;
-    }, [keeper]);
-
-    const completeSignIn = useCallback(
-        (next: MesubSession) => {
-            if (!isSignedIn(next)) {
-                throw new Error('completeSignIn() needs a session with a proved wallet');
-            }
-            setSession(next);
-            pendingRef.current?.resolve(next.user);
-            pendingRef.current = null;
-            setSigningIn(false);
+    // Unmounted with a dialog up: whoever waits on it is answered.
+    useEffect(
+        () => () => {
+            pending.current?.resolve(null);
+            pending.current = null;
         },
-        [setSession],
+        [],
     );
 
-    const cancelSignIn = useCallback(() => {
-        pendingRef.current?.reject(new MesubSignInCancelledError());
-        pendingRef.current = null;
-        setSigningIn(false);
+    const plan = useCallback(
+        (slug: string) => {
+            let read = plans.get(slug);
+            if (!read) {
+                read = api.plan(slug);
+                plans.set(slug, read);
+                read.catch(() => plans.delete(slug));
+            }
+            return read;
+        },
+        [api, plans],
+    );
+
+    // One dialog at a time: a second click gets the first one's answer.
+    const start = useCallback((next: Open) => {
+        if (pending.current) return pending.current.promise;
+        let resolve!: Pending['resolve'];
+        const promise = new Promise<MesubSubscription | null>((done) => {
+            resolve = done;
+        });
+        pending.current = { promise, resolve, result: null };
+        setOpen(next);
+        return promise;
     }, []);
 
-    const logout = useCallback(() => keeper.logout(), [keeper]);
-
-    const getAccessToken = useCallback(() => keeper.getAccessToken(), [keeper]);
-
-    const signedInToken = useCallback(async (): Promise<string> => {
-        const token = await keeper.getAccessToken();
-        if (!token) throw new MesubClientError('You are signed out. Sign in again.', 401);
-        return token;
-    }, [keeper]);
-
-    const loadWallets = useCallback((): Promise<MesubWallet[]> => {
-        loadingWallets.current ??= (async () => {
-            const token = await signedInToken();
-            const userId = keeper.session?.user.id;
-            const wallets = await api.wallets.list(token);
-            if (userId && keeper.session?.user.id === userId) setWalletList({ userId, wallets });
-            return wallets;
-        })().finally(() => {
-            loadingWallets.current = null;
-        });
-        return loadingWallets.current;
-    }, [api, keeper, signedInToken]);
-
-    const selectWallet = useCallback(
-        async (address: string): Promise<void> => {
-            const token = await signedInToken();
-            const proof = await api.wallets.select(token, address);
-            const next = await keeper.switchAccess(proof.user, proof.accessToken);
-            if (!next) return;
-            setWalletList((list) =>
-                list && list.userId === next.user.id
-                    ? {
-                          ...list,
-                          wallets: list.wallets.map((wallet) => ({
-                              ...wallet,
-                              selected: wallet.address === address,
-                          })),
-                      }
-                    : list,
-            );
-        },
-        [api, keeper, signedInToken],
+    const subscribe = useCallback(
+        (request: SubscribeRequest) => start({ kind: 'subscribe', request }),
+        [start],
+    );
+    const manage = useCallback(
+        (request: ManageRequest) => start({ kind: 'manage', request }),
+        [start],
     );
 
-    const adoptWallet = useCallback(
-        async (proof: WalletProof): Promise<void> => {
-            if (!(await keeper.switchAccess(proof.user, proof.accessToken))) return;
-            // Its label and plans come from the API: list them again, after any older read.
-            const older = loadingWallets.current?.catch(() => undefined);
-            void Promise.resolve(older)
-                .then(() => loadWallets())
-                .catch(() => undefined);
-        },
-        [keeper, loadWallets],
-    );
+    const settled = useCallback((subscription: MesubSubscription | null) => {
+        if (pending.current && subscription) pending.current.result = subscription;
+        setRevision((current) => current + 1);
+    }, []);
 
-    const state = useMemo<MesubState>(
-        () => ({
-            ready,
-            user: session?.user ?? null,
-            wallet: sessionWallet(session),
-            wallets: session && walletList?.userId === session.user.id ? walletList.wallets : null,
-            login,
-            logout,
-            getAccessToken,
-            loadWallets,
-            selectWallet,
-        }),
-        [ready, session, walletList, login, logout, getAccessToken, loadWallets, selectWallet],
-    );
+    const close = useCallback(() => {
+        pending.current?.resolve(pending.current.result);
+        pending.current = null;
+        setOpen(null);
+    }, []);
 
-    const internal = useMemo<MesubInternal>(
+    const value = useMemo<MesubInternal>(
         () => ({
             api,
-            session,
-            signingIn,
-            completeSignIn,
-            cancelSignIn,
-            setSession,
-            adoptWallet,
+            chain,
             theme,
+            manageUrl,
+            plan,
+            revision,
+            subscribe,
+            manage,
+            openSubscription,
         }),
-        [api, session, signingIn, completeSignIn, cancelSignIn, setSession, adoptWallet, theme],
+        [api, chain, theme, manageUrl, plan, revision, subscribe, manage, openSubscription],
     );
 
     return (
-        <MesubInternalContext.Provider value={internal}>
-            <MesubContext.Provider value={state}>
-                {children}
-                {/* Opens on login(): nothing for the merchant to place. */}
-                <SignInModal />
-            </MesubContext.Provider>
-        </MesubInternalContext.Provider>
+        <MesubContext.Provider value={value}>
+            {children}
+            {open?.kind === 'subscribe' ? (
+                <Checkout
+                    plan={open.request.plan}
+                    onState={open.request.onState}
+                    onSubscribed={(subscription, signature) => {
+                        settled(subscription);
+                        open.request.onSubscribed(subscription, signature);
+                    }}
+                    onClose={close}
+                />
+            ) : null}
+            {/* One native dialog at a time: it steps aside while its action runs. */}
+            {managed && !open ? (
+                <SubscriptionDialog plan={managed.plan} onClose={() => setManaged(null)} />
+            ) : null}
+            {open?.kind === 'manage' ? (
+                <Manage
+                    subscription={open.request.subscription}
+                    action={open.request.action}
+                    onChanged={settled}
+                    onClose={close}
+                />
+            ) : null}
+        </MesubContext.Provider>
     );
 }

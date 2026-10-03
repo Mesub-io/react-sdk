@@ -1,21 +1,25 @@
 /**
- * `@mesub/react`: `MesubProvider`, `useMesub`, the sign-in modal and the
- * Subscribe button.
+ * `@mesub/react`: the wallet part of subscribing, in the browser. It calls the
+ * routes `@mesub/node` mounts on your own server, never Mesub, and holds no key.
  */
 export { MesubProvider, type MesubProviderProps } from './provider';
-export { useMesub, type MesubState, type MesubTheme } from './context';
-export { MesubClientError, MesubSignInCancelledError } from './errors';
-export type { MesubUser } from './types';
+export type { MesubTheme, SubscribeState } from './context';
+export type { FetchLike } from './api';
 export {
     SubscribeButton,
     useSubscribe,
     type SubscribeButtonProps,
-    type SubscribeState,
     type UseSubscribeOptions,
     type UseSubscribeResult,
 } from './subscribe-button';
-export type { SolanaChain } from './send-transaction';
-export type { MesubSubscription, MesubSubscriptionStatus } from './subscribe-api';
-export type { MesubPlan } from './plan-api';
-export type { MesubWallet } from './wallets-api';
-export type { CheckoutStage } from './checkout';
+export {
+    ManageButton,
+    ManageSubscriptions,
+    useSubscriptions,
+    type ManageButtonProps,
+    type ManageSubscriptionsProps,
+    type MesubHeldSubscription,
+    type UseSubscriptionsResult,
+} from './subscriptions';
+export type { SolanaChain } from './wallet';
+export type { MesubAction, MesubPlan, MesubSubscription, MesubSubscriptionStatus } from './types';

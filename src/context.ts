@@ -1,56 +1,49 @@
 import { createContext, useContext } from 'react';
 import type { MesubApi } from './api';
-import type { MesubSession, MesubUser, WalletProof } from './types';
-import type { MesubWallet } from './wallets-api';
-
-/** What `useMesub()` returns. */
-export interface MesubState {
-    // True once the provider knows whether someone is signed in.
-    ready: boolean;
-    user: MesubUser | null;
-    // The wallet that pays on this site: the access token's.
-    wallet: string | null;
-    // The account's proved wallets, null until loadWallets() first answers.
-    wallets: MesubWallet[] | null;
-    login(): Promise<MesubUser>;
-    logout(): Promise<void>;
-    getAccessToken(): Promise<string | null>;
-    loadWallets(): Promise<MesubWallet[]>;
-    // Pays from another of the account's wallets on this site. Signs nothing.
-    selectWallet(address: string): Promise<void>;
-}
-
-/** For the sign-in modal and the session restore: not part of the public API. */
-export interface MesubInternal {
-    api: MesubApi;
-    session: MesubSession | null;
-    // A login() is waiting for the modal.
-    signingIn: boolean;
-    // Needs a proved wallet and an access token: resolves every pending login().
-    completeSignIn(session: MesubSession): void;
-    // Rejects every pending login() with MesubSignInCancelledError.
-    cancelSignIn(): void;
-    // Replaces and persists the session, without touching a sign-in in progress.
-    setSession(session: MesubSession | null): void;
-    // A wallet just linked: its access token, then the list again.
-    adoptWallet(proof: WalletProof): Promise<void>;
-    // Set on the dialog as data-mesub-theme; undefined leaves it to an ancestor.
-    theme: MesubTheme | undefined;
-}
+import type { MesubAction, MesubPlan, MesubSubscription } from './types';
+import type { SolanaChain } from './wallet';
 
 export type MesubTheme = 'light' | 'dark' | 'auto';
 
-export const MesubContext = createContext<MesubState | null>(null);
-export const MesubInternalContext = createContext<MesubInternal | null>(null);
+/** Where a subscribe stands: `open` is the dialog up with nothing being signed. */
+export type SubscribeState = 'idle' | 'open' | 'signing' | 'confirming' | 'subscribed';
 
-export function useMesub(): MesubState {
-    const value = useContext(MesubContext);
-    if (!value) throw new Error('useMesub() must be called inside <MesubProvider>');
-    return value;
+export interface SubscribeRequest {
+    plan: string;
+    onState(state: SubscribeState): void;
+    // `signature` is the transaction's id, when the wallet is its first signer.
+    onSubscribed(subscription: MesubSubscription, signature: string | null): void;
 }
 
+export interface ManageRequest {
+    subscription: MesubSubscription;
+    action: MesubAction;
+}
+
+/** What the provider hands to the hooks and the dialogs. Not part of the public API. */
+export interface MesubInternal {
+    api: MesubApi;
+    chain: SolanaChain;
+    // Set on the widget as data-mesub-theme; undefined leaves it to an ancestor.
+    theme: MesubTheme | undefined;
+    // Where "Cancel any time" leads: the merchant's own page, null for no button, undefined for Mesub's.
+    manageUrl: string | null | undefined;
+    // One read per slug, shared: a failed one is asked again next time.
+    plan(slug: string): Promise<MesubPlan>;
+    // Bumped when a subscription was made or changed: the lists read again.
+    revision: number;
+    // Opens the checkout. Resolves on close, with the subscription if it went through.
+    subscribe(request: SubscribeRequest): Promise<MesubSubscription | null>;
+    // Opens the cancel, resume or close dialog. Resolves on close.
+    manage(request: ManageRequest): Promise<MesubSubscription | null>;
+    // Opens the customer's subscription to that plan in a dialog: what the Manage button does.
+    openSubscription(plan: string | undefined): void;
+}
+
+export const MesubContext = createContext<MesubInternal | null>(null);
+
 export function useMesubInternal(): MesubInternal {
-    const value = useContext(MesubInternalContext);
-    if (!value) throw new Error('useMesubInternal() must be called inside <MesubProvider>');
+    const value = useContext(MesubContext);
+    if (!value) throw new Error('@mesub/react must be used inside <MesubProvider>');
     return value;
 }

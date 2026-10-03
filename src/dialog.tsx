@@ -2,9 +2,9 @@ import { Fragment, useEffect, useLayoutEffect, useRef, type ReactNode } from 're
 import { MesubMark } from './brand';
 import { useMesubInternal } from './context';
 
-// The first control of a screen: its field, its first choice, or its primary button.
+// The first control of a screen: its first choice, or its primary button.
 const FIRST_CONTROL =
-    'input, [data-mesub-wallets] button, [data-mesub-submit], [data-mesub-done], [data-mesub-install], [data-mesub-reload], [data-mesub-cancel]';
+    '[data-mesub-wallets] button:not(:disabled), [data-mesub-submit], [data-mesub-done], [data-mesub-install], [data-mesub-reload], [data-mesub-cancel]';
 
 export interface DialogScreen {
     // data-mesub-step: what the CSS keys the progress line and layout on.
@@ -33,7 +33,7 @@ export function MesubDialog({
     const dialog = useRef<HTMLDialogElement>(null);
 
     // Layout effect: runs before the focus effect below, so showModal() does
-    // not take the focus back from the first field.
+    // not take the focus back from the first control.
     useLayoutEffect(() => {
         const node = dialog.current;
         if (node && !node.open) {

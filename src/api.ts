@@ -1,123 +1,125 @@
 import { MesubClientError } from './errors';
-import { createPlansApi, type PlansApi } from './plan-api';
-import { createSubscriptionsApi, type SubscriptionsApi } from './subscribe-api';
-import type { ClientSession, WalletProof } from './types';
-import { createWalletsApi, type WalletsApi } from './wallets-api';
+import type {
+    MesubAction,
+    MesubPayment,
+    MesubPlan,
+    MesubSubscription,
+    MesubSubscriptionDetail,
+    MesubUpcoming,
+    PreparedSubscription,
+    Settled,
+    WalletTransaction,
+} from './types';
 
-export const DEFAULT_API_URL = 'https://api.mesub.io';
-// Every call gives up after this, so a hung request never holds the refresh lock.
+// Reads and builds answer at once.
 export const REQUEST_TIMEOUT_MS = 15_000;
+// Submit and the confirms wait for the chain: about a minute.
+export const CHAIN_TIMEOUT_MS = 90_000;
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
-export interface ApiClientOptions {
-    publishableKey: string;
-    apiUrl?: string | undefined;
+export interface ApiOptions {
+    // Where the merchant mounted the routes of @mesub/node: "/api/mesub".
+    endpoint: string;
     fetch?: FetchLike | undefined;
 }
 
-/** The client auth routes of the Mesub API. */
+/** The routes `@mesub/node` mounts on the merchant's server. Nothing here reaches Mesub. */
 export interface MesubApi {
-    sendCode(email: string): Promise<void>;
-    createSession(email: string, code: string): Promise<ClientSession>;
-    walletChallenge(sessionToken: string, address: string): Promise<{ message: string }>;
-    proveWallet(
-        sessionToken: string,
-        proof: { address: string; signature: string; label?: string },
-    ): Promise<WalletProof>;
-    refresh(refreshToken: string): Promise<ClientSession>;
-    logout(refreshToken: string): Promise<void>;
-    // The Subscribe button's routes, under /v1/client/subscriptions.
-    subscriptions: SubscriptionsApi;
-    // The checkout's summary, under /v1/client/plans.
-    plans: PlansApi;
-    // The account's wallets on this project, under /v1/client/auth.
-    wallets: WalletsApi;
+    plan(slug: string): Promise<MesubPlan>;
+    subscriptions(): Promise<MesubSubscription[]>;
+    // One of them with its latest charges.
+    subscription(id: string): Promise<MesubSubscriptionDetail>;
+    prepare(plan: string, wallet: string): Promise<PreparedSubscription>;
+    submit(id: string, signed: { transaction: string; terms_signature: string }): Promise<Settled>;
+    build(action: MesubAction, id: string): Promise<WalletTransaction>;
+    confirm(action: MesubAction, id: string, signature: string): Promise<Settled>;
 }
 
-/** A POST under `prefix`, JSON in and out, with the key and an optional bearer. */
-export type Post = <T>(path: string, body: unknown, bearer?: string) => Promise<T>;
+const isObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** A GET under `prefix`, with the key and an optional bearer. */
-export type Get = <T>(path: string, bearer?: string) => Promise<T>;
+/** The fewest charges a server lists when it lists them all: under it, the list is whole. */
+const LISTED_AT_MOST = 5;
 
-export function createApiClient(options: ApiClientOptions): MesubApi {
-    const post = createPost(options, '/v1/client/auth');
+/**
+ * What was paid since the subscription began. `paid` is the server's own
+ * total. A server that predates it only sums the charges it lists
+ * (`listed_paid`): that is the total only while the list is whole.
+ */
+function paidOf(answer: Record<string, unknown>): MesubSubscriptionDetail['paid'] {
+    const read = (value: unknown) =>
+        isObject(value) && typeof value.count === 'number'
+            ? { count: value.count, amount: typeof value.amount === 'string' ? value.amount : null }
+            : null;
+    const total = read(answer.paid);
+    if (total) return total;
 
-    return {
-        sendCode: (email) => post('/code', { email }),
-        createSession: (email, code) => post('/session', { email, code }),
-        walletChallenge: (sessionToken, address) =>
-            post('/wallet/challenge', { address }, sessionToken),
-        proveWallet: (sessionToken, proof) => post('/wallet', proof, sessionToken),
-        refresh: (refreshToken) => post('/refresh', { refreshToken }),
-        logout: (refreshToken) => post('/logout', { refreshToken }),
-        subscriptions: createSubscriptionsApi(createPost(options, '/v1/client/subscriptions')),
-        plans: createPlansApi(createGet(options, '/v1/client/plans')),
-        wallets: createWalletsApi(createGet(options, '/v1/client/auth'), post),
-    };
+    const whole = Array.isArray(answer.payments) && answer.payments.length < LISTED_AT_MOST;
+    return whole ? read(answer.listed_paid) : null;
 }
 
-function createGet(options: ApiClientOptions, prefix: string): Get {
-    const request = createRequest(options, prefix);
-    return (path, bearer) => request('GET', path, undefined, bearer);
-}
-
-function createPost(options: ApiClientOptions, prefix: string): Post {
-    const request = createRequest(options, prefix);
-    return (path, body, bearer) => request('POST', path, body, bearer);
-}
-
-function createRequest(options: ApiClientOptions, prefix: string) {
-    const base = `${(options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, '')}${prefix}`;
+export function createApi(options: ApiOptions): MesubApi {
+    const base = options.endpoint.replace(/\/+$/, '');
     // Read at call time, so a fetch stubbed after the client is built is still used.
     const doFetch: FetchLike = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
 
-    return async function request<T>(
+    async function request(
         method: 'GET' | 'POST',
         path: string,
         body: unknown,
-        bearer?: string,
-    ): Promise<T> {
-        const headers: Record<string, string> = { 'X-Mesub-Key': options.publishableKey };
-        // A GET carries no body, and a Content-Type would cost it a preflight for nothing.
+        timeout: number,
+    ): Promise<Record<string, unknown>> {
+        const headers: Record<string, string> = { Accept: 'application/json' };
+        // The routes refuse a POST that is not JSON, even one with nothing to say.
         if (method === 'POST') headers['Content-Type'] = 'application/json';
-        if (bearer) headers.Authorization = `Bearer ${bearer}`;
 
+        const late = `No answer within ${timeout / 1000} seconds.`;
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
         // Raced too, since a custom fetch may ignore the signal.
         const deadline = new Promise<never>((_, reject) => {
             timer = setTimeout(() => {
-                const abort = new DOMException(TIMEOUT_MESSAGE, 'TimeoutError');
-                reject(timedOut(abort));
-                controller.abort(abort);
-            }, REQUEST_TIMEOUT_MS);
+                reject(new MesubClientError(late, null, 'timeout'));
+                controller.abort();
+            }, timeout);
         });
 
-        async function send(): Promise<T> {
+        async function send(): Promise<Record<string, unknown>> {
             let response: Response;
             try {
                 response = await doFetch(`${base}${path}`, {
                     method,
                     headers,
-                    ...(method === 'POST' && { body: JSON.stringify(body) }),
-                    // The API never sets cookies on these routes.
-                    credentials: 'omit',
+                    ...(method === 'POST' && { body: JSON.stringify(body ?? {}) }),
+                    // The merchant's own session cookie says who is asking.
+                    credentials: 'include',
                     signal: controller.signal,
                 });
             } catch (error) {
-                if (controller.signal.aborted) throw timedOut(controller.signal.reason);
-                throw new MesubClientError('Could not reach the Mesub API', null, {
+                if (controller.signal.aborted) throw new MesubClientError(late, null, 'timeout');
+                throw new MesubClientError('Could not reach the server.', null, 'network', {
                     cause: error,
                 });
             }
 
-            if (!response.ok) {
-                throw new MesubClientError(await errorMessage(response), response.status);
+            let answer: unknown;
+            try {
+                answer = await response.json();
+            } catch {
+                answer = undefined;
             }
-            if (response.status === 204) return undefined as T;
-            return (await response.json()) as T;
+
+            if (!response.ok) throw refusal(response, answer);
+            if (!isObject(answer)) {
+                // A page instead of JSON: the routes are not mounted at `endpoint`.
+                throw new MesubClientError(
+                    `${base}${path} did not answer as the @mesub/node routes do.`,
+                    response.status,
+                    'bad_response',
+                );
+            }
+            return answer;
         }
 
         try {
@@ -126,23 +128,91 @@ function createRequest(options: ApiClientOptions, prefix: string) {
         } finally {
             clearTimeout(timer);
         }
+    }
+
+    const at = (id: string) => `/subscriptions/${encodeURIComponent(id)}`;
+
+    return {
+        plan: async (slug) =>
+            (await request(
+                'GET',
+                `/plans/${encodeURIComponent(slug)}`,
+                undefined,
+                REQUEST_TIMEOUT_MS,
+            )) as unknown as MesubPlan,
+        subscriptions: async () => {
+            const answer = await request('GET', '/subscriptions', undefined, REQUEST_TIMEOUT_MS);
+            return Array.isArray(answer.subscriptions)
+                ? (answer.subscriptions as MesubSubscription[])
+                : [];
+        },
+        subscription: async (id) => {
+            const answer = await request('GET', at(id), undefined, REQUEST_TIMEOUT_MS);
+            return {
+                subscription: answer.subscription as MesubSubscription,
+                upcoming: Array.isArray(answer.upcoming)
+                    ? (answer.upcoming as MesubUpcoming[])
+                    : [],
+                payments: Array.isArray(answer.payments)
+                    ? (answer.payments as MesubPayment[])
+                    : null,
+                paid: paidOf(answer),
+            };
+        },
+        prepare: async (plan, wallet) =>
+            (await request(
+                'POST',
+                '/subscriptions',
+                { plan, wallet },
+                REQUEST_TIMEOUT_MS,
+            )) as unknown as PreparedSubscription,
+        submit: async (id, signed) =>
+            (await request(
+                'POST',
+                `${at(id)}/submit`,
+                { transaction: signed.transaction, terms_signature: signed.terms_signature },
+                CHAIN_TIMEOUT_MS,
+            )) as unknown as Settled,
+        build: async (action, id) =>
+            (await request(
+                'POST',
+                `${at(id)}/${action}`,
+                {},
+                REQUEST_TIMEOUT_MS,
+            )) as unknown as WalletTransaction,
+        confirm: async (action, id, signature) =>
+            (await request(
+                'POST',
+                `${at(id)}/${action}/confirm`,
+                { signature },
+                CHAIN_TIMEOUT_MS,
+            )) as unknown as Settled,
     };
 }
 
-const TIMEOUT_MESSAGE = `Mesub did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds`;
+/** `{ error: { code, message } }`, as the routes refuse. */
+function refusal(response: Response, answer: unknown): MesubClientError {
+    const error = isObject(answer) && isObject(answer.error) ? answer.error : null;
+    const message =
+        typeof error?.message === 'string' && error.message !== ''
+            ? error.message
+            : `The server answered ${response.status}.`;
+    const seconds = Number(response.headers.get('Retry-After'));
 
-function timedOut(cause: unknown): MesubClientError {
-    return new MesubClientError(TIMEOUT_MESSAGE, null, { cause });
+    return new MesubClientError(
+        message,
+        response.status,
+        typeof error?.code === 'string' ? error.code : null,
+        { retryAfter: Number.isFinite(seconds) && seconds > 0 ? seconds : null },
+    );
 }
 
-// NestJS errors: `{ message: string | string[], error, statusCode }`.
-async function errorMessage(response: Response): Promise<string> {
-    try {
-        const body = (await response.json()) as { message?: unknown };
-        if (Array.isArray(body.message)) return body.message.join('; ');
-        if (typeof body.message === 'string') return body.message;
-    } catch {
-        // Not JSON: fall through.
-    }
-    return `Mesub API answered ${response.status}`;
+/** Nothing answered: the network failed or the wait ran out. */
+export function unreachable(error: unknown): boolean {
+    return error instanceof MesubClientError && error.status === null;
+}
+
+/** The merchant's server says nobody is signed in on its site. */
+export function signedOut(error: unknown): boolean {
+    return error instanceof MesubClientError && error.status === 401;
 }

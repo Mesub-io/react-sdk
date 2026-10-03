@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 /**
  * A fake Wallet Standard wallet, registered the way a real extension does it:
  * through the window events `@wallet-standard/app` listens to. No module mock,
- * so the modal's own `useWallets()` finds it.
+ * so the widget's own `useWallets()` finds it.
  */
 
 const ICON = 'data:image/svg+xml;base64,PHN2Zy8+';
@@ -26,6 +26,12 @@ export interface FakeWalletOptions {
     signature?: Uint8Array;
 }
 
+/** What the fake wallet hands back for a transaction it signed without sending. */
+export function signedBy(signature: Uint8Array, transaction: Uint8Array): Uint8Array {
+    // One signature slot, filled, then the message as it came.
+    return Uint8Array.from([1, ...signature, ...transaction]);
+}
+
 type Register = (wallet: object) => () => void;
 type RegisterCallback = (api: { register: Register }) => void;
 
@@ -37,6 +43,7 @@ export function registerWallet(options: FakeWalletOptions = {}) {
         'standard:connect',
         'standard:disconnect',
         'solana:signMessage',
+        'solana:signTransaction',
         'solana:signAndSendTransaction',
     ].filter((name) => !options.without?.includes(name));
     const account: FakeAccount = {
@@ -66,6 +73,14 @@ export function registerWallet(options: FakeWalletOptions = {}) {
         inputs.map((input) => ({ signedMessage: input.message, signature })),
     );
 
+    // Signs, and sends nothing: the bytes come back with the signature in front.
+    const signTransaction = vi.fn(
+        async (...inputs: { account: FakeAccount; chain: string; transaction: Uint8Array }[]) =>
+            inputs.map((input) => ({
+                signedTransaction: signedBy(signature, input.transaction),
+            })),
+    );
+
     const signAndSendTransaction = vi.fn(
         async (
             ...inputs: { account: FakeAccount; chain: string; transaction: Uint8Array }[]
@@ -76,6 +91,11 @@ export function registerWallet(options: FakeWalletOptions = {}) {
         'standard:connect': { version: '1.0.0', connect },
         'standard:disconnect': { version: '1.0.0', disconnect },
         'solana:signMessage': { version: '1.0.0', signMessage },
+        'solana:signTransaction': {
+            version: '1.0.0',
+            supportedTransactionVersions: ['legacy', 0],
+            signTransaction,
+        },
         'solana:signAndSendTransaction': {
             version: '1.0.0',
             supportedTransactionVersions: ['legacy', 0],
@@ -97,7 +117,16 @@ export function registerWallet(options: FakeWalletOptions = {}) {
         window.removeEventListener('wallet-standard:app-ready', onAppReady);
         unregister?.();
     });
-    return { wallet, account, signature, connect, disconnect, signMessage, signAndSendTransaction };
+    return {
+        wallet,
+        account,
+        signature,
+        connect,
+        disconnect,
+        signMessage,
+        signTransaction,
+        signAndSendTransaction,
+    };
 }
 
 /** Removes every wallet registered by the test. */

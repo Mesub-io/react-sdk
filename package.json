@@ -1,7 +1,7 @@
 {
   "name": "@mesub/react",
   "version": "0.0.0",
-  "description": "React SDK for Mesub: sign a subscriber in and subscribe them, from the merchant's own site.",
+  "description": "React widget for Mesub: the wallet part of subscribing, cancelling and resuming, on top of the routes @mesub/node mounts on your server.",
   "license": "MIT",
   "repository": {
     "type": "git",

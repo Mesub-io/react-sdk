@@ -582,15 +582,8 @@ function stageScreen(props: {
                             {view.notice}
                         </p>
                     ) : null}
+                    {/* Two facts only: the price is above, the costs fit in one line under. */}
                     <dl data-mesub-summary="">
-                        <div data-mesub-row="">
-                            <dt>Due today</dt>
-                            <dd>{price}</dd>
-                        </div>
-                        <div data-mesub-row="">
-                            <dt>Next charge</dt>
-                            <dd>{formatDate(nextCharge)}</dd>
-                        </div>
                         <div data-mesub-row="">
                             <dt>Pays from</dt>
                             <dd title={account.address}>
@@ -599,17 +592,16 @@ function stageScreen(props: {
                             </dd>
                         </div>
                         <div data-mesub-row="">
-                            <dt>Deposit, returned when closed</dt>
-                            <dd>{formatSol(costs.rent.total)}</dd>
-                        </div>
-                        <div data-mesub-row="">
-                            <dt>Network fee</dt>
-                            <dd>{formatSol(costs.fee.total)}</dd>
+                            <dt>Next charge</dt>
+                            <dd>{formatDate(nextCharge)}</dd>
                         </div>
                     </dl>
+                    <p data-mesub-costs="">
+                        Plus {formatSol(costs.total)} in network costs, of which{' '}
+                        {formatSol(costs.rent.total)} comes back when you close it.
+                    </p>
                     <p>
-                        Two approvals in {wallet.name}: the terms, then the payment. Later charges
-                        need no signature. Cancel anytime.
+                        Two approvals in {wallet.name}: the terms, then the payment. Cancel anytime.
                     </p>
                     <details data-mesub-terms="">
                         <summary>The terms you sign</summary>

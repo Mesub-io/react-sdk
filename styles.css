@@ -838,8 +838,16 @@
   line-height: 16px;
   font-weight: 500;
 }
+/* Every box property is set: a host page's own `pre` rule (a dark code block,
+   say) would otherwise show through and hide the text. */
 [data-mesub-message] pre {
   margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  word-break: normal;
   color: var(--_text);
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
@@ -1830,6 +1838,13 @@
 [data-mesub-description] {
   margin-block-start: -8px;
   color: var(--_muted);
+  text-align: center;
+}
+/* the costs in SOL, said once under the two facts */
+[data-mesub-costs] {
+  color: var(--_muted);
+  font-size: 12px;
+  line-height: 18px;
   text-align: center;
 }
 [data-mesub-terms] [data-mesub-message] {

@@ -1840,13 +1840,6 @@
   color: var(--_muted);
   text-align: center;
 }
-/* the costs in SOL, said once under the two facts */
-[data-mesub-costs] {
-  color: var(--_muted);
-  font-size: 12px;
-  line-height: 18px;
-  text-align: center;
-}
 [data-mesub-terms] [data-mesub-message] {
   margin-block-end: 14px;
 }

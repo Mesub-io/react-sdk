@@ -92,12 +92,8 @@ describe('subscribing, from the click to Done', () => {
         // The costs, before the wallet is asked to sign anything.
         await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
         expect(dialog.getAttribute('data-mesub-step')).toBe('review');
-        // One line: the whole cost, and the part that comes back.
-        expect(
-            within(dialog).getByText(
-                'Plus 0.00354928 SOL in network costs, of which 0.00353928 SOL comes back when you close it.',
-            ),
-        ).toBeTruthy();
+        // No SOL figures on the review: the wallet shows them.
+        expect(within(dialog).queryByText(/SOL/)).toBeNull();
         expect(within(dialog).queryByText('Due today')).toBeNull();
         expect(within(dialog).getByText('Wa11…1111')).toBeTruthy();
         expect(within(dialog).getByText(TERMS, { normalizer: (text) => text })).toBeTruthy();

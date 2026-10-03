@@ -4,7 +4,7 @@ import { signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { cadence, day, formatDate, formatSol, shortAddress } from './format';
+import { cadence, day, formatDate, shortAddress } from './format';
 import {
     Explorer,
     failureScreen,
@@ -563,7 +563,7 @@ function stageScreen(props: {
     }
 
     if (view.name === 'review') {
-        const { costs, terms } = view.prepared;
+        const { terms } = view.prepared;
         const nextCharge = new Date(Date.now() + plan.period_hours * 3_600_000);
         return {
             step: 'review',
@@ -582,7 +582,7 @@ function stageScreen(props: {
                             {view.notice}
                         </p>
                     ) : null}
-                    {/* Two facts only: the price is above, the costs fit in one line under. */}
+                    {/* Two facts only: the price is above, and the wallet shows the SOL it costs. */}
                     <dl data-mesub-summary="">
                         <div data-mesub-row="">
                             <dt>Pays from</dt>
@@ -596,10 +596,6 @@ function stageScreen(props: {
                             <dd>{formatDate(nextCharge)}</dd>
                         </div>
                     </dl>
-                    <p data-mesub-costs="">
-                        Plus {formatSol(costs.total)} in network costs, of which{' '}
-                        {formatSol(costs.rent.total)} comes back when you close it.
-                    </p>
                     <p>
                         Two approvals in {wallet.name}: the terms, then the payment. Cancel anytime.
                     </p>

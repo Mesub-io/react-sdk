@@ -532,6 +532,30 @@ describe("what the merchant's server answers", () => {
         expect(wallet.signMessage).not.toHaveBeenCalled();
     });
 
+    it('offers to try again when a return is refused while its period turns', async () => {
+        const { wallet } = setup({
+            overrides: {
+                'POST /subscriptions': () =>
+                    refusal(
+                        409,
+                        'comeback_period_rolling',
+                        "This subscription's billing period is turning. Ask again in 150 seconds.",
+                        { 'Retry-After': '150' },
+                    ),
+            },
+        });
+
+        const dialog = await toWallets();
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
+
+        expect(await within(dialog).findByRole('heading', { name: 'Almost there' })).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'Your billing period is turning over. Try again in 150 seconds.',
+        );
+        expect(within(dialog).getByRole('button', { name: 'Try again' })).toBeTruthy();
+        expect(wallet.signMessage).not.toHaveBeenCalled();
+    });
+
     it('asks for another wallet on a 403', async () => {
         setup({
             overrides: {

@@ -10,7 +10,7 @@ import {
 import { signedOut } from './api';
 import { useMesubInternal } from './context';
 import { MesubClientError } from './errors';
-import { cadence, day, shortAddress } from './format';
+import { cadence, day, moment, shortAddress } from './format';
 import type { MesubAction, MesubPlan, MesubSubscription } from './types';
 
 /** A subscription the customer holds, with what it allows now. */
@@ -142,7 +142,7 @@ const ACTION: Record<MesubAction, string> = { cancel: 'Cancel', resume: 'Resume'
 /** The one date that matters now: the next charge, the next try, or when access ends. */
 export function fact(row: MesubHeldSubscription): { term: string; date: string } | null {
     const pick = (term: string, iso: string | null) => {
-        const date = day(iso);
+        const date = moment(iso);
         return date ? { term, date } : null;
     };
     if (row.status === 'cancelled') {

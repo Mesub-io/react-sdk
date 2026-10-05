@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { useMesubInternal } from './context';
 import { paidIn, paymentSaid, pickSubscription, retryOf } from './detail-logic';
 import { MesubDialog } from './dialog';
-import { cadence, day, explorerUrl, formatAmount, shortAddress, shortDay } from './format';
+import { cadence, day, explorerUrl, formatAmount, shortAddress, shortMoment } from './format';
 import {
     fact,
     noteOf,
@@ -197,7 +197,7 @@ export function SubscriptionDialog({
                                             key={`next-${next.due_at}`}
                                             data-mesub-payment="upcoming"
                                         >
-                                            <span>{shortDay(next.due_at)}</span>
+                                            <span>{shortMoment(next.due_at)}</span>
                                             <span>
                                                 {UPCOMING[next.kind] ?? next.kind}
                                                 {retryOf(next) ? (
@@ -226,7 +226,7 @@ export function SubscriptionDialog({
                                                 key={`${payment.attempted_at}-${payment.signature ?? ''}`}
                                                 data-mesub-payment={said.tone}
                                             >
-                                                <span>{shortDay(payment.attempted_at)}</span>
+                                                <span>{shortMoment(payment.attempted_at)}</span>
                                                 <span>
                                                     {said.label}
                                                     {retryOf(payment) ? (

@@ -4,7 +4,7 @@ import { signedOut } from './api';
 import { useMesubInternal } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { day, shortAddress } from './format';
+import { moment, shortAddress } from './format';
 import {
     Explorer,
     failureScreen,
@@ -68,7 +68,7 @@ const messageOf = (error: unknown) =>
 
 /** What the action does, before anything is signed. */
 function consequence(action: MesubAction, subscription: MesubSubscription): string {
-    const until = day(subscription.access_until ?? subscription.current_period_end);
+    const until = moment(subscription.access_until ?? subscription.current_period_end);
     if (action === 'cancel') {
         return subscription.access && until
             ? `You keep access until ${until}. Nothing more is charged.`
@@ -84,14 +84,14 @@ function consequence(action: MesubAction, subscription: MesubSubscription): stri
 
 /** What it became, once Mesub confirmed. */
 function outcome(action: MesubAction, subscription: MesubSubscription): string {
-    const until = day(subscription.access_until ?? subscription.current_period_end);
+    const until = moment(subscription.access_until ?? subscription.current_period_end);
     if (action === 'cancel') {
         return subscription.access && until
             ? `You keep access until ${until}.`
             : 'Nothing more is charged.';
     }
     if (action === 'resume') {
-        const next = day(subscription.next_charge_at);
+        const next = moment(subscription.next_charge_at);
         return next ? `Next charge ${next}.` : 'It runs again.';
     }
     return 'Its deposit is back in your wallet.';

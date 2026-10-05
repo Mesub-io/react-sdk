@@ -8,7 +8,7 @@ import {
     type MouseEvent,
 } from 'react';
 import { useMesubInternal, type SubscribeState } from './context';
-import { day, explorerUrl } from './format';
+import { explorerUrl, moment } from './format';
 import type { MesubSubscription } from './types';
 
 export interface UseSubscribeOptions {
@@ -94,7 +94,7 @@ export const SubscribeButton = forwardRef<HTMLButtonElement, SubscribeButtonProp
         const { chain, theme } = useMesubInternal();
         const { state, subscription, signature, subscribe } = useSubscribe(plan, { onSubscribed });
         const busy = state === 'signing' || state === 'confirming';
-        const due = day(subscription?.next_charge_at);
+        const due = moment(subscription?.next_charge_at);
 
         function click(event: MouseEvent<HTMLButtonElement>) {
             if (busy) return;

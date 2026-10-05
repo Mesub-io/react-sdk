@@ -7,6 +7,9 @@ import {
     shortAddress,
     jupiterUrl,
     manageLink,
+    moment,
+    shortDay,
+    shortMoment,
     termsCancelUrl,
     termsFacts,
     termsLines,
@@ -265,4 +268,39 @@ describe('manageLink', () => {
             expect(manageLink(yours as never, MESUB)).toEqual({ href: MESUB, external: true });
         },
     );
+});
+
+describe('moment', () => {
+    const now = Date.parse('2026-10-05T12:00:00.000Z');
+    const hour = /\d{1,2}[:.h]\d{2}/;
+
+    it('adds the hour to a date within two days, ahead or behind', () => {
+        expect(moment('2026-10-05T15:00:00.000Z', now)).toMatch(hour);
+        expect(moment('2026-10-04T15:00:00.000Z', now)).toMatch(hour);
+        expect(shortMoment('2026-10-05T15:00:00.000Z', now)).toMatch(hour);
+    });
+
+    it('keeps the year beside the hour, and leaves it out of the short form', () => {
+        expect(moment('2026-10-05T15:00:00.000Z', now)).toMatch(/2026/);
+        expect(shortMoment('2026-10-05T15:00:00.000Z', now)).not.toMatch(/2026/);
+    });
+
+    it('names the time zone beside the hour', () => {
+        const zone = /(UTC|GMT|[A-Z]{2,5})([+-]\d{1,2}(:\d{2})?)?$/;
+        expect(moment('2026-10-05T15:00:00.000Z', now)).toMatch(zone);
+        expect(shortMoment('2026-10-05T15:00:00.000Z', now)).toMatch(zone);
+    });
+
+    it('writes a date further away as the day alone', () => {
+        expect(moment('2026-11-05T15:00:00.000Z', now)).toBe(day('2026-11-05T15:00:00.000Z'));
+        expect(shortMoment('2026-11-05T15:00:00.000Z', now)).toBe(
+            shortDay('2026-11-05T15:00:00.000Z'),
+        );
+        expect(moment('2026-10-07T12:00:00.000Z', now)).not.toMatch(hour);
+    });
+
+    it.each([null, undefined, '', 'soon'])('is null for %s', (value) => {
+        expect(moment(value, now)).toBeNull();
+        expect(shortMoment(value, now)).toBeNull();
+    });
 });

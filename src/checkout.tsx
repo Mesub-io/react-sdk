@@ -95,6 +95,17 @@ function notPrepared(error: unknown): Failure {
     if (status === 404) {
         return { ...base, title: 'Plan not found', message: messageOf(error), action: 'close' };
     }
+    // A return asked while its billing period turns: a wait, not a no.
+    if (error instanceof MesubClientError && error.code === 'comeback_period_rolling') {
+        return {
+            ...base,
+            title: 'Almost there',
+            message: error.retryAfter
+                ? `Your billing period is turning over. Try again in ${error.retryAfter} seconds.`
+                : messageOf(error),
+            action: 'retry',
+        };
+    }
     // Mesub's own refusal (already subscribed, plan closed): its words, as written.
     if (status === 409) {
         return { ...base, title: 'Cannot subscribe', message: messageOf(error), action: 'close' };

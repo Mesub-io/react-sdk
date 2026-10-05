@@ -93,7 +93,7 @@ export interface WalletTransaction {
 /** One charge Mesub tried, as the merchant's server hands it on. */
 export interface MesubPayment {
     attempted_at: string;
-    // PAID, REJECTED (the wallet was short), SKIPPED, BLOCKED: a newer one is handed on as is.
+    // paid, rejected (the wallet was short), skipped, blocked: a newer one is handed on as is.
     outcome: string;
     // The token's base units.
     amount: string;

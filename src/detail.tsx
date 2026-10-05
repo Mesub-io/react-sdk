@@ -237,7 +237,7 @@ export function SubscriptionDialog({
                                                 </span>
                                                 <span>
                                                     {payment.signature &&
-                                                    payment.outcome === 'PAID' ? (
+                                                    payment.outcome === 'paid' ? (
                                                         <a
                                                             href={explorerUrl(
                                                                 payment.signature,

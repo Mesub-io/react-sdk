@@ -800,14 +800,14 @@ describe('ManageButton', () => {
                 payments: [
                     {
                         attempted_at: iso(0),
-                        outcome: 'PAID',
+                        outcome: 'paid',
                         amount: '2000000',
                         reason: null,
                         signature: SIGNATURE,
                     },
                     {
                         attempted_at: iso(-3),
-                        outcome: 'REJECTED',
+                        outcome: 'rejected',
                         amount: '2000000',
                         reason: 'insufficient-balance',
                         signature: SIGNATURE,
@@ -846,7 +846,7 @@ describe('ManageButton', () => {
 
     const paid = (attempted_at: string) => ({
         attempted_at,
-        outcome: 'PAID',
+        outcome: 'paid',
         amount: '2000000',
         reason: null,
         signature: SIGNATURE,
@@ -1023,31 +1023,31 @@ describe('how a charge reads', () => {
 
     it.each([
         [
-            { outcome: 'PAID', reason: null },
+            { outcome: 'paid', reason: null },
             { label: 'Paid', tone: 'good' },
         ],
         [
-            { outcome: 'REJECTED', reason: 'insufficient-balance' },
+            { outcome: 'rejected', reason: 'insufficient-balance' },
             { label: 'Missed, low balance', tone: 'bad' },
         ],
         [
-            { outcome: 'REJECTED', reason: 'something-new' },
+            { outcome: 'rejected', reason: 'something-new' },
             { label: 'Missed', tone: 'bad' },
         ],
         [
-            { outcome: 'REJECTED', reason: null },
+            { outcome: 'rejected', reason: null },
             { label: 'Missed', tone: 'bad' },
         ],
         [
-            { outcome: 'SKIPPED', reason: null },
+            { outcome: 'skipped', reason: null },
             { label: 'Skipped', tone: 'none' },
         ],
         [
-            { outcome: 'BLOCKED', reason: 'terms-missing' },
+            { outcome: 'blocked', reason: 'terms-missing' },
             { label: 'Not charged', tone: 'none' },
         ],
         [
-            { outcome: 'CHARGED_BACK', reason: null },
+            { outcome: 'charged_back', reason: null },
             { label: 'charged back', tone: 'none' },
         ],
     ])('says %j as %j', (payment, said) => {

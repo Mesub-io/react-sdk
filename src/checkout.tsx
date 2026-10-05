@@ -4,15 +4,7 @@ import { signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import {
-    cadence,
-    moment,
-    formatDate,
-    manageLink,
-    shortAddress,
-    termsCancelUrl,
-    termsFacts,
-} from './format';
+import { cadence, moment, manageLink, shortAddress, termsCancelUrl, termsFacts } from './format';
 import {
     Explorer,
     failureScreen,
@@ -619,7 +611,7 @@ function stageScreen(props: {
                         </div>
                         <div data-mesub-row="">
                             <dt>Next charge</dt>
-                            <dd>{formatDate(nextCharge)}</dd>
+                            <dd>{moment(nextCharge.toISOString())}</dd>
                         </div>
                     </dl>
                     <details data-mesub-terms="">

@@ -780,9 +780,12 @@
   border-radius: 0;
   overflow: visible;
 }
-[data-mesub-wallets] > * + *,
-[data-mesub-wallets] > li + li > [data-mesub-wallet] {
+[data-mesub-wallets] > * + * {
   border-block-start: 0;
+}
+/* each row is its own box now: the divider of the joined list becomes its top edge */
+[data-mesub-wallets] > li + li > [data-mesub-wallet] {
+  border-block-start: 1px solid var(--_border);
 }
 [data-mesub-wallets] [data-mesub-wallet] {
   min-block-size: 60px;

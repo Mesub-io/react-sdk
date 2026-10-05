@@ -285,6 +285,12 @@ describe('moment', () => {
         expect(shortMoment('2026-10-05T15:00:00.000Z', now)).not.toMatch(/2026/);
     });
 
+    it('names the time zone beside the hour', () => {
+        const zone = /(UTC|GMT|[A-Z]{2,5})([+-]\d{1,2}(:\d{2})?)?$/;
+        expect(moment('2026-10-05T15:00:00.000Z', now)).toMatch(zone);
+        expect(shortMoment('2026-10-05T15:00:00.000Z', now)).toMatch(zone);
+    });
+
     it('writes a date further away as the day alone', () => {
         expect(moment('2026-11-05T15:00:00.000Z', now)).toBe(day('2026-11-05T15:00:00.000Z'));
         expect(shortMoment('2026-11-05T15:00:00.000Z', now)).toBe(

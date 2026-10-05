@@ -58,15 +58,21 @@ function written(
     if (Number.isNaN(date.getTime())) return null;
     if (Math.abs(date.getTime() - now) >= CLOSE_MS) return date.toLocaleDateString(undefined, far);
 
-    return date.toLocaleString(undefined, { ...far, hour: 'numeric', minute: '2-digit' });
+    return date.toLocaleString(undefined, {
+        ...far,
+        hour: 'numeric',
+        minute: '2-digit',
+        // The subscriber's own zone, named: an hour alone could be anyone's.
+        timeZoneName: 'short',
+    });
 }
 
-/** A charge or an end as `day` writes it, with its hour when it is close: `Oct 5, 2026, 3:00 PM`. */
+/** A charge or an end as `day` writes it, with its hour when it is close: `Oct 5, 2026, 3:00 PM GMT+2`. */
 export function moment(iso: string | null | undefined, now = Date.now()): string | null {
     return written(iso, { month: 'short', day: 'numeric', year: 'numeric' }, now);
 }
 
-/** `shortDay` with the hour when it is close: `Oct 5, 3:00 PM`. */
+/** `shortDay` with the hour when it is close: `Oct 5, 3:00 PM GMT+2`. */
 export function shortMoment(iso: string | null | undefined, now = Date.now()): string | null {
     return written(iso, { month: 'short', day: 'numeric' }, now);
 }

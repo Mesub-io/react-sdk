@@ -39,13 +39,13 @@ export function paymentSaid(payment: Pick<MesubPayment, 'outcome' | 'reason'>): 
     const why = payment.reason ? REASONS[payment.reason] : undefined;
 
     switch (payment.outcome) {
-        case 'PAID':
+        case 'paid':
             return { label: 'Paid', tone: 'good' };
-        case 'REJECTED':
+        case 'rejected':
             return { label: why ? `Missed, ${why}` : 'Missed', tone: 'bad' };
-        case 'SKIPPED':
+        case 'skipped':
             return { label: 'Skipped', tone: 'none' };
-        case 'BLOCKED':
+        case 'blocked':
             return { label: 'Not charged', tone: 'none' };
         default:
             return { label: payment.outcome.toLowerCase().replace(/_/g, ' '), tone: 'none' };

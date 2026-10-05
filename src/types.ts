@@ -43,6 +43,9 @@ export interface MesubSubscription {
     status: MesubSubscriptionStatus;
     paused: boolean;
     end_reason: string | null;
+    // Why a payment is late, on an `unpaid` one: insufficient_balance, approval_revoked,
+    // authority_closed, or null. A newer one is read as null.
+    late_reason: string | null;
     // Whether it grants access now.
     access: boolean;
     payment_status: 'paid' | 'late' | 'none';

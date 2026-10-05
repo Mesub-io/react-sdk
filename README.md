@@ -14,10 +14,11 @@ part in the browser: picking one, connecting it, signing in the right order.
 - It is **not a wallet connector** for your site. It asks a wallet for an
   account when it needs a signature, and never disconnects one.
 
-> **Status: in progress, not published.** It needs the widget routes of
-> Mesub-io/node-sdk#86. See the
-> [board](https://github.com/orgs/Mesub-io/projects/5) and the
-> [issues](https://github.com/Mesub-io/react-sdk/issues).
+**[Read the docs](https://docs.mesub.io/docs/react)** for the walkthrough.
+
+> **Status: early, 0.x, not on npm yet.** The API may still change between
+> minor versions. See the [board](https://github.com/orgs/Mesub-io/projects/5)
+> for what is next.
 
 ## Requirements
 
@@ -52,7 +53,6 @@ export function App({ children }) {
 | Prop        | What it is                                                                                                                               |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `endpoint`  | Where you mounted the routes. A path on your site, or a full URL.                                                                        |
-| `chain`     | The network the wallet signs for: `solana:devnet` (default) or `solana:mainnet`.                                                         |
 | `fetch`     | Your own `(url, init) => Promise<Response>`, to add headers or credentials.                                                              |
 | `theme`     | `light`, `dark` or `auto`, set on the widget as `data-mesub-theme`.                                                                      |
 | `manageUrl` | Where "Cancel any time" leads once subscribed: your own page (`/account`, or a full URL). Mesub's page by default; `null` for no button. |
@@ -240,8 +240,7 @@ The dialog is a native `<dialog>`; `data-mesub-step` says where it is: `plan`,
 `confirm`, `wallet`, `approve`, `confirming`, `done` when managing. The list is
 `[data-mesub-subscriptions]`, with `data-mesub-state`, one
 `[data-mesub-subscription]` per row, `[data-mesub-status]` and
-`[data-mesub-action]`. The screens the v5 design handoff drew are checked
-against it in `test/markup.spec.tsx`.
+`[data-mesub-action]`.
 
 ## Development
 

@@ -6,7 +6,7 @@ import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
 import {
     cadence,
-    day,
+    moment,
     formatDate,
     manageLink,
     shortAddress,
@@ -712,7 +712,7 @@ function stageScreen(props: {
         };
     }
 
-    const nextCharge = day(view.subscription.next_charge_at);
+    const nextCharge = moment(view.subscription.next_charge_at);
     const manage = manageLink(props.manageUrl, view.cancelUrl);
 
     return {

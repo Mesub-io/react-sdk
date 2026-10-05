@@ -1080,6 +1080,20 @@ describe('what a card says under its dates', () => {
     it.each([
         [{ status: 'unpaid', next_retry_at: '2026-10-05T00:00:00.000Z' }, /before the next try/],
         [{ status: 'unpaid', next_retry_at: null }, /Add funds to the wallet\.$/],
+        [{ status: 'unpaid', late_reason: 'insufficient_balance' }, /Add funds to the wallet/],
+        // One this version does not know: read as no reason.
+        [{ status: 'unpaid', late_reason: 'account_frozen' }, /Add funds to the wallet/],
+        [
+            {
+                status: 'unpaid',
+                late_reason: 'approval_revoked',
+                next_retry_at: '2026-10-05T00:00:00.000Z',
+            },
+            /no longer lets Mesub charge it: adding funds will not fix it\.$/,
+        ],
+        [{ status: 'unpaid', late_reason: 'authority_closed' }, /can no longer be charged\.$/],
+        // Only a late one has a reason to tell.
+        [{ status: 'stopped', late_reason: 'approval_revoked' }, /^Stopped after missed payments/],
         [{ status: 'cancelled' }, /Resume before the end/],
         [{ status: 'stopped' }, /Stopped after missed payments/],
         [{ paused: true }, /Parked/],

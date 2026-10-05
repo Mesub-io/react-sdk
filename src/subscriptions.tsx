@@ -157,6 +157,13 @@ export function fact(row: MesubHeldSubscription): { term: string; date: string }
 export function noteOf(row: MesubHeldSubscription): string | null {
     if (row.paused) return 'Parked: nothing is charged while it is.';
     if (row.status === 'unpaid') {
+        // Adding funds only fixes a low balance: said for that, and when Mesub names no reason.
+        if (row.late_reason === 'approval_revoked') {
+            return 'The last payment did not go through. This wallet no longer lets Mesub charge it: adding funds will not fix it.';
+        }
+        if (row.late_reason === 'authority_closed') {
+            return 'The last payment did not go through. This wallet closed its authorisation: it can no longer be charged.';
+        }
         return row.next_retry_at
             ? 'The last payment did not go through. Add funds to the wallet before the next try.'
             : 'The last payment did not go through. Add funds to the wallet.';

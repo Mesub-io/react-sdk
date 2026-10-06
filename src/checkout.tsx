@@ -493,6 +493,8 @@ function stageScreen(props: {
     const { view, plan, chain, titleId } = props;
     const price = `${plan.amount_display} ${plan.symbol ?? shortAddress(plan.mint)}`;
     const every = cadence(plan.period_hours);
+    // A plan with an end date stops charging there: said before anything is signed.
+    const ends = moment(plan.ends_at);
     const merchant = (
         <Merchant
             name={plan.project_name}
@@ -549,6 +551,7 @@ function stageScreen(props: {
                         <strong>{price}</strong>
                         <span>{every}</span>
                     </p>
+                    {ends ? <p data-mesub-ends="">Ends on {ends}</p> : null}
                     {plan.description ? <p data-mesub-description="">{plan.description}</p> : null}
                     <button type="button" data-mesub-submit="" onClick={props.onContinue}>
                         Continue with a wallet
@@ -583,6 +586,8 @@ function stageScreen(props: {
     if (view.name === 'review') {
         const { terms } = view.prepared;
         const nextCharge = new Date(Date.now() + plan.period_hours * 3_600_000);
+        // No charge comes after the plan's end: the row would promise one.
+        const chargedAgain = !plan.ends_at || nextCharge < new Date(plan.ends_at);
         return {
             step: 'review',
             view: 'review',
@@ -609,10 +614,18 @@ function stageScreen(props: {
                                 {shortAddress(account.address)}
                             </dd>
                         </div>
-                        <div data-mesub-row="">
-                            <dt>Next charge</dt>
-                            <dd>{moment(nextCharge.toISOString())}</dd>
-                        </div>
+                        {chargedAgain ? (
+                            <div data-mesub-row="">
+                                <dt>Next charge</dt>
+                                <dd>{moment(nextCharge.toISOString())}</dd>
+                            </div>
+                        ) : null}
+                        {ends ? (
+                            <div data-mesub-row="">
+                                <dt>Plan ends</dt>
+                                <dd>{ends}</dd>
+                            </div>
+                        ) : null}
                     </dl>
                     <details data-mesub-terms="">
                         <summary>The terms you sign</summary>

@@ -1843,6 +1843,13 @@
   color: var(--_muted);
   text-align: center;
 }
+/* the plan's end date, under its price: part of what is bought */
+[data-mesub-ends] {
+  margin-block-start: -8px;
+  color: var(--_text-soft);
+  font-size: 13px;
+  text-align: center;
+}
 [data-mesub-terms] [data-mesub-message] {
   margin-block-end: 14px;
 }

@@ -2,7 +2,15 @@ import { useEffect, useId, useState } from 'react';
 import { useMesubInternal } from './context';
 import { paidIn, paymentSaid, pickSubscription, retryOf } from './detail-logic';
 import { MesubDialog } from './dialog';
-import { cadence, day, explorerUrl, formatAmount, shortAddress, shortMoment } from './format';
+import {
+    cadence,
+    day,
+    explorerUrl,
+    formatAmount,
+    moment,
+    shortAddress,
+    shortMoment,
+} from './format';
 import {
     fact,
     noteOf,
@@ -182,6 +190,12 @@ export function SubscriptionDialog({
                         <div data-mesub-row="">
                             <dt>Total paid</dt>
                             <dd>{total}</dd>
+                        </div>
+                    ) : null}
+                    {moment(plan?.ends_at) ? (
+                        <div data-mesub-row="">
+                            <dt>Plan ends</dt>
+                            <dd>{moment(plan?.ends_at)}</dd>
                         </div>
                     ) : null}
                     <div data-mesub-row="">

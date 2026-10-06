@@ -158,6 +158,40 @@ describe('subscribing, from the click to Done', () => {
         );
     });
 
+    it("says the plan's end date before anything is signed", async () => {
+        const ends = new Date(Date.now() + 200 * 24 * 3_600_000).toISOString();
+        setup({ overrides: { 'GET /plans/pro': () => json(200, { ...plan, ends_at: ends }) } });
+
+        fireEvent.click(button());
+        const dialog = await screen.findByRole('dialog');
+        expect(await within(dialog).findByText(/^Ends on /)).toBeTruthy();
+
+        fireEvent.click(
+            await within(dialog).findByRole('button', { name: 'Continue with a wallet' }),
+        );
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
+        await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
+        expect(within(dialog).getByText('Plan ends')).toBeTruthy();
+        // The plan outlives the next period: that charge is still announced.
+        expect(within(dialog).getByText('Next charge')).toBeTruthy();
+    });
+
+    it('announces no next charge when the plan ends before it', async () => {
+        // A period is 72 hours: the plan ends in 24.
+        const ends = new Date(Date.now() + 24 * 3_600_000).toISOString();
+        setup({ overrides: { 'GET /plans/pro': () => json(200, { ...plan, ends_at: ends }) } });
+
+        fireEvent.click(button());
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.click(
+            await within(dialog).findByRole('button', { name: 'Continue with a wallet' }),
+        );
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
+        await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
+        expect(within(dialog).getByText('Plan ends')).toBeTruthy();
+        expect(within(dialog).queryByText('Next charge')).toBeNull();
+    });
+
     it("signs for the provider's chain", async () => {
         const { wallet } = setup({ chain: 'solana:mainnet' });
 

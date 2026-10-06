@@ -82,7 +82,8 @@ import { SubscribeButton } from '@mesub/react';
 `plan` is the plan's slug, as set in the Mesub dashboard. The click opens one
 dialog, from the plan to the receipt:
 
-1. **The plan**: its name, price and period, from `GET /plans/:slug`.
+1. **The plan**: its name, price and period, from `GET /plans/:slug`, and its end
+   date when it has one.
 2. **A wallet**: the installed wallets that can sign
    ([Wallet Standard](https://github.com/wallet-standard/wallet-standard), so
    Phantom, Solflare and the others). The one picked is asked for its account.

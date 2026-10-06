@@ -2341,18 +2341,37 @@
 }
 [data-mesub-payments] ul {
   display: grid;
+  /* One set of columns for every row: the date takes the width of the longest one. */
+  grid-template-columns: max-content minmax(0, 1fr) auto;
+  grid-auto-rows: max-content;
+  column-gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
-  /* A long history scrolls here, the action under it staying in reach. */
-  max-block-size: 216px;
-  overflow: auto;
+}
+/* the rest of the history, asked for: a quiet line, never a second button */
+[data-mesub-dialog] [data-mesub-more] {
+  justify-self: start;
+  min-block-size: 32px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--_muted);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+[data-mesub-dialog] [data-mesub-more]:hover {
+  color: var(--_text);
 }
 [data-mesub-payment] {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 12px;
   min-block-size: 36px;
   font-size: 13px;
   line-height: 18px;
@@ -2363,6 +2382,8 @@
 }
 [data-mesub-payment] > span:first-child {
   color: var(--_muted);
+  /* A date with its hour and time zone stays on one line. */
+  white-space: nowrap;
 }
 /* the word, with a dot of its tone before it */
 [data-mesub-payment] > span:nth-child(2) {

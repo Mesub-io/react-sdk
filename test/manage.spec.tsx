@@ -844,6 +844,27 @@ describe('ManageButton', () => {
         expect(within(dialog).getAllByText('Next charge')).toHaveLength(1);
     });
 
+    it('lists five past payments, and the rest on request', async () => {
+        const payments = Array.from({ length: 18 }, (_, index) => ({
+            attempted_at: iso(-index),
+            outcome: 'paid',
+            amount: '2000000',
+            reason: null,
+            signature: `${SIGNATURE}${index}`,
+        }));
+
+        mount({ detail: { subscription: subscription(), upcoming: [], payments } });
+        const dialog = await open();
+
+        await waitFor(() => expect(within(dialog).getAllByRole('listitem')).toHaveLength(5));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+        expect(within(dialog).getAllByRole('listitem')).toHaveLength(15);
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+        expect(within(dialog).getAllByRole('listitem')).toHaveLength(18);
+        // Nothing left to ask for.
+        expect(within(dialog).queryByRole('button', { name: 'Show more' })).toBeNull();
+    });
+
     const paid = (attempted_at: string) => ({
         attempted_at,
         outcome: 'paid',

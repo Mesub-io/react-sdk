@@ -149,7 +149,10 @@ export function fact(row: MesubHeldSubscription): { term: string; date: string }
         return pick('Access until', row.access_until ?? row.current_period_end);
     }
     if (row.status === 'unpaid') return pick('Next try', row.next_retry_at);
-    if (row.status === 'active') return pick('Next charge', row.next_charge_at);
+    if (row.status === 'active') {
+        // No charge to come, in the last period of a plan that ends: what is left is its access.
+        return pick('Next charge', row.next_charge_at) ?? pick('Access until', row.access_until);
+    }
     return null;
 }
 

@@ -83,7 +83,8 @@ import { SubscribeButton } from '@mesub/react';
 dialog, from the plan to the receipt:
 
 1. **The plan**: its name, price and period, from `GET /plans/:slug`, and its end
-   date when it has one.
+   date when it has one. A plan that ends before a second charge can run is
+   priced `once`, with the date its access runs to.
 2. **A wallet**: the installed wallets that can sign
    ([Wallet Standard](https://github.com/wallet-standard/wallet-standard), so
    Phantom, Solflare and the others). The one picked is asked for its account.
@@ -91,6 +92,9 @@ dialog, from the plan to the receipt:
    (`POST /subscriptions`), and the dialog shows what it costs before the wallet
    is asked anything: the price, the next charge, the paying wallet, the deposit
    returned when the subscription is closed, the network fee, and the terms.
+   From here to the receipt, the terms decide whether it is a single charge
+   (`Amount: 2 USDC, a single charge`): no next charge is shown then, only the
+   end of the access.
 4. **Two approvals**: the wallet signs the terms, a message
    (`solana:signMessage`), then the transaction, without sending it
    (`solana:signTransaction`).
@@ -149,7 +153,8 @@ import { ManageSubscriptions } from '@mesub/react';
 
 The signed-in customer's subscriptions, from `GET /subscriptions`: each with
 its plan, its status, its next charge or the end of its access, the wallet that
-pays it, and the one thing it allows now.
+pays it, and the one thing it allows now. A subscription in the last period of
+a plan that ends has no next charge: it shows the end of its access instead.
 
 | The subscription is                           | It allows  |
 | --------------------------------------------- | ---------- |

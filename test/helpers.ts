@@ -72,6 +72,30 @@ export function prepared(expiresInMs = 600_000): PreparedSubscription {
     };
 }
 
+/** The terms Mesub writes for a plan that ends: charged every period, or once (`single`). */
+export function endingTerms(single: boolean): string {
+    return [
+        'Mesub: the terms of the subscription you are about to sign.',
+        ...(single
+            ? [
+                  'Amount: 2 USDC, a single charge',
+                  'Single charge: 2 USDC now, in full, in the transaction you sign next',
+                  'Access: until the plan ends on 2026-12-01, even if the period paid for is not over',
+                  'No further charge: the plan ends on 2026-12-01',
+              ]
+            : [
+                  'Amount: 2 USDC every 3 days',
+                  'First charge: 2 USDC now, in the transaction you sign next',
+                  'Then: 2 USDC every 3 days, until you cancel, or the plan ends on 2026-12-01',
+                  'Last charge: 2 USDC, in full, for the last period that starts before the plan ends',
+                  'Access: stops when the plan ends on 2026-12-01, even if the last period paid for is not over',
+              ]),
+        'Subscription: Pro, from Fraise',
+        'Token: USDC, mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+        'Nonce: 42',
+    ].join('\n');
+}
+
 export function json(
     status: number,
     body?: unknown,

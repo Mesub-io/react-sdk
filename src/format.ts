@@ -120,6 +120,40 @@ export function termsCancelUrl(message: string): string | null {
     return line && /^https?:\/\/\S+$/.test(line.value) ? line.value : null;
 }
 
+/**
+ * Whether the terms say the first charge is the only one, as Mesub writes it:
+ * `Amount: 2 USDC, a single charge`. Null when they name no amount at all.
+ */
+export function termsSingleCharge(message: string): boolean | null {
+    const lines = termsLines(message);
+    const amount = lines.find((each) => each.label === 'Amount');
+    if (amount) return amount.value.endsWith(', a single charge');
+
+    return lines.some((each) => each.label === 'Single charge') ? true : null;
+}
+
+/** Mesub runs no charge this close to a plan's end: the margin its clock keeps against the chain's. */
+const END_MARGIN_MS = 120_000;
+
+/** Whether a plan ending at `endsAt` rules out a charge due at `dueMs`. Never on a plan with no end. */
+export function noChargeAt(dueMs: number, endsAt: string | null | undefined): boolean {
+    const end = endsAt ? Date.parse(endsAt) : NaN;
+
+    return !Number.isNaN(end) && dueMs + END_MARGIN_MS > end;
+}
+
+/**
+ * Whether subscribing now leaves one charge only: the period paid starts when
+ * the transaction lands, the margin before now at the earliest, and no charge
+ * runs at its end once the plan's is that close.
+ */
+export function chargedOnce(
+    plan: { period_hours: number; ends_at: string | null },
+    now = Date.now(),
+): boolean {
+    return noChargeAt(now - END_MARGIN_MS + plan.period_hours * 3_600_000, plan.ends_at);
+}
+
 /** Where "Cancel any time" leads, and whether it leaves the site. */
 export interface ManageLink {
     href: string;
@@ -147,6 +181,7 @@ export function manageLink(
 
 /** Lines of the terms a person does not read: said elsewhere on the screen, or for machines. */
 const NOT_SHOWN = new Set([
+    // Also on a single charge: its own line says it, in full.
     'Amount',
     'Plan',
     'Plan details',
@@ -176,8 +211,9 @@ export function jupiterUrl(mint: string): string {
 }
 
 /**
- * The terms as a short list a person reads: the first charge, what follows,
- * which subscription and in which token. The price, the wallet and the
+ * The terms as a short list a person reads: the first charge, what follows
+ * or that nothing does, when access stops on a plan that ends, which
+ * subscription and in which token. The price, the wallet and the
  * lines meant for machines (the plan's address, the nonce, the expiry) are
  * left out, and addresses are shortened: the wallet shows the full text when
  * it asks to sign.

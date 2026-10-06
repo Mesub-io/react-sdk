@@ -2348,9 +2348,24 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  /* A long history scrolls here, the action under it staying in reach. */
-  max-block-size: 216px;
-  overflow: auto;
+}
+/* the rest of the history, asked for: a quiet line, never a second button */
+[data-mesub-dialog] [data-mesub-more] {
+  justify-self: start;
+  min-block-size: 32px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--_muted);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+[data-mesub-dialog] [data-mesub-more]:hover {
+  color: var(--_text);
 }
 [data-mesub-payment] {
   display: grid;

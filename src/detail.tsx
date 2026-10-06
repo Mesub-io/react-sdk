@@ -67,6 +67,10 @@ function useDetail(row: MesubHeldSubscription | null): MesubSubscriptionDetail |
  * it stands, what comes next, what was charged, and the one thing it allows.
  * One subscription, never a list: what the Manage button opens.
  */
+/** Past payments listed at first, and how many more each request adds. */
+const PAST_SHOWN = 5;
+const PAST_STEP = 10;
+
 export function SubscriptionDialog({
     plan: slug,
     onClose,
@@ -74,6 +78,8 @@ export function SubscriptionDialog({
     plan: string | undefined;
     onClose(): void;
 }) {
+    // How many past payments are listed: a few, then more on request, never a list that scrolls.
+    const [shown, setShown] = useState(PAST_SHOWN);
     const titleId = useId();
     const { chain } = useMesubInternal();
     const { state, subscriptions, error, reload, manage } = useSubscriptions();
@@ -218,7 +224,7 @@ export function SubscriptionDialog({
                             <section aria-label="Past payments">
                                 <h3>Past</h3>
                                 <ul>
-                                    {past.map((payment) => {
+                                    {past.slice(0, shown).map((payment) => {
                                         const said = paymentSaid(payment);
                                         const amount = paidIn(payment.amount, plan, formatAmount);
                                         return (
@@ -257,6 +263,15 @@ export function SubscriptionDialog({
                                         );
                                     })}
                                 </ul>
+                                {past.length > shown ? (
+                                    <button
+                                        type="button"
+                                        data-mesub-more=""
+                                        onClick={() => setShown(shown + PAST_STEP)}
+                                    >
+                                        Show more
+                                    </button>
+                                ) : null}
                             </section>
                         ) : null}
                     </details>

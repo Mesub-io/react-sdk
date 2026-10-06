@@ -8,11 +8,13 @@ import {
     jupiterUrl,
     manageLink,
     moment,
+    noChargeAt,
     shortDay,
     shortMoment,
     termsCancelUrl,
     termsFacts,
     termsLines,
+    termsSingleCharge,
 } from '../src/format';
 
 describe('formatAmount', () => {
@@ -219,6 +221,109 @@ describe('termsFacts', () => {
             { label: 'Grace', value: '3 days' },
         ]);
         expect(termsFacts('')).toEqual([]);
+    });
+});
+
+/** The terms of a plan with an end, as Mesub writes them: charged again, or once. */
+const TAIL = [
+    'Paid to: 69NhtEhTjxGq1pGRgwZjqVoGyr5nNY7w7By6vTh1E7WB',
+    'Subscription: Pro, from Acme',
+    'Token: USDC, mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+    'Cancel any time: https://mesub.io/subscriptions',
+    'Signing this message moves nothing by itself.',
+    'Nonce: 9f2c1e7ab04d',
+];
+const ENDING = [
+    'Mesub: the terms of the subscription you are about to sign.',
+    'Amount: 2 USDC every 3 days',
+    'First charge: 2 USDC now, in the transaction you sign next',
+    'Then: 2 USDC every 3 days, until you cancel, or the plan ends on 2026-12-01',
+    'Last charge: 2 USDC, in full, for the last period that starts before the plan ends',
+    'Access: stops when the plan ends on 2026-12-01, even if the last period paid for is not over',
+    ...TAIL,
+].join('\n');
+const SINGLE = [
+    'Mesub: the terms of the subscription you are about to sign.',
+    'Amount: 2 USDC, a single charge',
+    'Single charge: 2 USDC now, in full, in the transaction you sign next',
+    'Access: until the plan ends on 2026-12-01, even if the period paid for is not over',
+    'No further charge: the plan ends on 2026-12-01',
+    ...TAIL,
+].join('\n');
+
+describe('the terms of a plan with an end', () => {
+    it('lists the last charge and the end of access after what follows', () => {
+        expect(termsFacts(ENDING).map((fact) => [fact.label, fact.value])).toEqual([
+            ['First charge', '2 USDC now'],
+            ['Then', '2 USDC every 3 days, until you cancel, or the plan ends on 2026-12-01'],
+            [
+                'Last charge',
+                '2 USDC, in full, for the last period that starts before the plan ends',
+            ],
+            [
+                'Access',
+                'stops when the plan ends on 2026-12-01, even if the last period paid for is not over',
+            ],
+            ['Subscription', 'Pro, from Acme'],
+            ['Token', 'USDC'],
+        ]);
+    });
+
+    it('says a single charge once: its own line, not the amount', () => {
+        const facts = termsFacts(SINGLE);
+
+        expect(facts.map((fact) => [fact.label, fact.value])).toEqual([
+            ['Single charge', '2 USDC now, in full'],
+            [
+                'Access',
+                'until the plan ends on 2026-12-01, even if the period paid for is not over',
+            ],
+            ['No further charge', 'the plan ends on 2026-12-01'],
+            ['Subscription', 'Pro, from Acme'],
+            ['Token', 'USDC'],
+        ]);
+        // What was cut is kept whole, for the tooltip.
+        expect(facts[0]?.full).toBe('2 USDC now, in full, in the transaction you sign next');
+    });
+});
+
+describe('termsSingleCharge', () => {
+    it('reads it off the amount the wallet signs', () => {
+        expect(termsSingleCharge(SINGLE)).toBe(true);
+        expect(termsSingleCharge(ENDING)).toBe(false);
+        expect(termsSingleCharge('Mesub: terms\nAmount: 2 USDC every 3 days')).toBe(false);
+    });
+
+    it('takes the single charge line when the amount is not there', () => {
+        expect(termsSingleCharge('Mesub: terms\nSingle charge: 2 USDC now, in full')).toBe(true);
+    });
+
+    it('answers null for terms that name no amount: the plan decides then', () => {
+        expect(termsSingleCharge('Mesub terms\nPlan: pro\nNonce: 42')).toBeNull();
+        expect(termsSingleCharge('')).toBeNull();
+        // A name is free text: it cannot make a charge single.
+        expect(termsSingleCharge('Mesub: terms\nSubscription: a single charge, from Acme')).toBe(
+            null,
+        );
+    });
+});
+
+describe('noChargeAt', () => {
+    const END = '2026-12-01T00:00:00.000Z';
+    const end = Date.parse(END);
+
+    it('rules out a charge due within two minutes of the end, or past it', () => {
+        expect(noChargeAt(end - 120_000, END)).toBe(false);
+        expect(noChargeAt(end - 119_999, END)).toBe(true);
+        expect(noChargeAt(end, END)).toBe(true);
+        expect(noChargeAt(end + 86_400_000, END)).toBe(true);
+        expect(noChargeAt(end - 86_400_000, END)).toBe(false);
+    });
+
+    it('rules out nothing on a plan with no end, or one it cannot read', () => {
+        expect(noChargeAt(end, null)).toBe(false);
+        expect(noChargeAt(end, undefined)).toBe(false);
+        expect(noChargeAt(end, 'soon')).toBe(false);
     });
 });
 

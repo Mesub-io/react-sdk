@@ -5,6 +5,7 @@ import {
     base58,
     base64,
     bodies,
+    endingTerms,
     ENDPOINT,
     json,
     made,
@@ -188,7 +189,9 @@ describe('subscribing, from the click to Done', () => {
         );
         fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
         await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
-        expect(within(dialog).getByText('Plan ends')).toBeTruthy();
+        // The end of the plan is the end of the access: said as that.
+        expect(within(dialog).getByText('Access until')).toBeTruthy();
+        expect(within(dialog).queryByText('Plan ends')).toBeNull();
         expect(within(dialog).queryByText('Next charge')).toBeNull();
     });
 
@@ -251,6 +254,226 @@ describe('subscribing, from the click to Done', () => {
         // The wallet answers once the dialog is gone: nothing is signed further, nothing sent.
         await act(async () => release());
         expect(wallet.signTransaction).not.toHaveBeenCalled();
+    });
+});
+
+describe('a plan that ends before a second charge', () => {
+    const HOUR = 3_600_000;
+    const from = (ms: number) => new Date(Date.now() + ms).toISOString();
+    // A period is 72 hours.
+    const SOON = 24 * HOUR;
+    const LATER = 200 * 24 * HOUR;
+
+    /** The plan ending `endsIn` from now, and the terms Mesub wrote for it. */
+    function ending(endsIn: number, single: boolean | null) {
+        const ends = from(endsIn);
+        const mounted = setup({
+            overrides: {
+                'GET /plans/pro': () => json(200, { ...plan, ends_at: ends }),
+                ...(single !== null && {
+                    'POST /subscriptions': () =>
+                        json(201, {
+                            ...prepared(),
+                            terms: { ...prepared().terms, message: endingTerms(single) },
+                        }),
+                }),
+                'POST /subscriptions/sub_1/submit': () =>
+                    json(201, {
+                        subscription: subscription(
+                            // The server announces no charge either, and access stops with the plan.
+                            single ? { next_charge_at: null, access_until: ends } : {},
+                        ),
+                    }),
+            },
+        });
+        return { ...mounted, ends };
+    }
+
+    const cadenceOf = (dialog: HTMLElement) =>
+        dialog.querySelector('[data-mesub-price] span')?.textContent;
+
+    it('prices the plan once, and says how long the access runs', async () => {
+        ending(SOON, null);
+
+        fireEvent.click(button());
+        const dialog = await screen.findByRole('dialog');
+        await within(dialog).findByRole('heading', { name: 'Pro' });
+
+        expect(cadenceOf(dialog)).toBe('once');
+        expect(within(dialog).queryByText(/^every /)).toBeNull();
+        expect(dialog.querySelector('[data-mesub-ends]')?.textContent).toMatch(
+            /^Access until .+, when the plan ends\. Nothing more is charged\.$/,
+        );
+    });
+
+    it.each([
+        ['a minute past one period', 72 * HOUR + 60_000, 'every 3 days'],
+        ['a minute short of one period', 72 * HOUR - 60_000, 'once'],
+    ])('reads the plan alone before the terms exist: ending %s', async (_, endsIn, said) => {
+        ending(endsIn, null);
+
+        fireEvent.click(button());
+        const dialog = await screen.findByRole('dialog');
+        await within(dialog).findByRole('heading', { name: 'Pro' });
+
+        expect(cadenceOf(dialog)).toBe(said);
+    });
+
+    it('reviews it as one charge: no next one, access until the end, and no cancelling', async () => {
+        ending(SOON, true);
+        const dialog = await toReview();
+
+        expect(cadenceOf(dialog)).toBe('once');
+        expect(within(dialog).queryByText('Next charge')).toBeNull();
+        expect(within(dialog).queryByText('Plan ends')).toBeNull();
+        expect(within(dialog).getByText('Access until')).toBeTruthy();
+        expect(dialog.querySelector('[data-mesub-footnote]')?.textContent).toBe(
+            'Two approvals in Fake Wallet: the terms, then the payment. Nothing more is charged.',
+        );
+    });
+
+    it('reviews a plan that outlives the next period as before', async () => {
+        ending(LATER, false);
+        const dialog = await toReview();
+
+        expect(cadenceOf(dialog)).toBe('every 3 days');
+        expect(within(dialog).getByText('Next charge')).toBeTruthy();
+        expect(within(dialog).getByText('Plan ends')).toBeTruthy();
+        expect(dialog.querySelector('[data-mesub-footnote]')?.textContent).toBe(
+            'Two approvals in Fake Wallet: the terms, then the payment. Cancel anytime.',
+        );
+    });
+
+    it('lists the long lines of the terms as rows, the single charge said once', async () => {
+        ending(SOON, true);
+        const dialog = await toReview();
+
+        const terms = dialog.querySelector<HTMLElement>('[data-mesub-terms]')!;
+        const rows = [...terms.querySelectorAll('[data-mesub-row]')].map((each) => [
+            each.querySelector('dt')?.textContent,
+            each.querySelector('dd')?.textContent,
+        ]);
+        expect(rows).toEqual([
+            ['Single charge', '2 USDC now, in full'],
+            [
+                'Access',
+                'until the plan ends on 2026-12-01, even if the period paid for is not over',
+            ],
+            ['No further charge', 'the plan ends on 2026-12-01'],
+            ['Subscription', 'Pro, from Fraise'],
+            ['Token', 'USDC'],
+        ]);
+    });
+
+    it('lists the last charge and the end of access of a plan charged again', async () => {
+        ending(LATER, false);
+        const dialog = await toReview();
+
+        const terms = dialog.querySelector<HTMLElement>('[data-mesub-terms]')!;
+        expect(within(terms).getByText('Last charge').nextElementSibling?.textContent).toBe(
+            '2 USDC, in full, for the last period that starts before the plan ends',
+        );
+        expect(within(terms).getByText('Access').nextElementSibling?.textContent).toBe(
+            'stops when the plan ends on 2026-12-01, even if the last period paid for is not over',
+        );
+    });
+
+    it.each([
+        [true, SOON, 'Step 2 of 2: 2 USDC now, a single charge.'],
+        [false, LATER, 'Step 2 of 2: 2 USDC now, then 2 USDC every 3 days.'],
+    ])('words the second approval (single: %s)', async (single, endsIn, said) => {
+        const { wallet } = ending(endsIn, single);
+        wallet.signTransaction.mockImplementationOnce(() => new Promise(() => undefined));
+        const dialog = await toReview();
+
+        sign();
+        expect(
+            await within(dialog).findByRole('heading', {
+                name: 'Approve the payment in Fake Wallet',
+            }),
+        ).toBeTruthy();
+        expect(within(dialog).getByText(/^Step 2 of 2/).textContent).toBe(said);
+    });
+
+    it('writes the receipt of one charge: no next one, and when the access ends', async () => {
+        ending(SOON, true);
+        const dialog = await toReview();
+
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(within(dialog).getByText('Pro, 2 USDC once')).toBeTruthy();
+        expect(within(dialog).queryByText(/every/)).toBeNull();
+        expect(within(dialog).queryByText('Next charge')).toBeNull();
+        expect(within(dialog).getByText('Access until')).toBeTruthy();
+    });
+
+    it('writes the receipt of a plan charged again as before', async () => {
+        ending(LATER, false);
+        const dialog = await toReview();
+
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(within(dialog).getByText('Pro, 2 USDC every 3 days')).toBeTruthy();
+        expect(within(dialog).getByText('Next charge')).toBeTruthy();
+        expect(within(dialog).queryByText('Access until')).toBeNull();
+    });
+
+    it('goes by the terms once they exist, when the plan read otherwise', async () => {
+        // A minute past one period when the plan was read: single by the time Mesub wrote the terms.
+        const { wallet } = ending(72 * HOUR + 60_000, true);
+        // The wallet holds the transaction until told: the second approval stays up.
+        let approve = () => {};
+        wallet.signTransaction.mockImplementationOnce(
+            (...inputs) =>
+                new Promise((resolve) => {
+                    approve = () =>
+                        resolve(
+                            inputs.map((input) => ({
+                                signedTransaction: signedBy(wallet.signature, input.transaction),
+                            })),
+                        );
+                }),
+        );
+
+        fireEvent.click(button());
+        const dialog = await screen.findByRole('dialog');
+        await within(dialog).findByRole('heading', { name: 'Pro' });
+        expect(cadenceOf(dialog)).toBe('every 3 days');
+
+        click('Continue with a wallet');
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
+        await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
+        expect(cadenceOf(dialog)).toBe('once');
+        expect(within(dialog).queryByText('Next charge')).toBeNull();
+
+        sign();
+        expect((await within(dialog).findByText(/^Step 2 of 2/)).textContent).toBe(
+            'Step 2 of 2: 2 USDC now, a single charge.',
+        );
+        approve();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+        expect(within(dialog).getByText('Pro, 2 USDC once')).toBeTruthy();
+        expect(within(dialog).queryByText('Next charge')).toBeNull();
+    });
+
+    it('goes by the terms the other way too, and dates no charge past the end', async () => {
+        // Read as single from the plan, while the terms signed say it is charged again.
+        ending(SOON, false);
+
+        fireEvent.click(button());
+        const dialog = await screen.findByRole('dialog');
+        await within(dialog).findByRole('heading', { name: 'Pro' });
+        expect(cadenceOf(dialog)).toBe('once');
+
+        click('Continue with a wallet');
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
+        await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
+        expect(cadenceOf(dialog)).toBe('every 3 days');
+        expect(within(dialog).getByText('Plan ends')).toBeTruthy();
+        // One period from now falls after the end: not a date to print.
+        expect(within(dialog).queryByText('Next charge')).toBeNull();
     });
 });
 

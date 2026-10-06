@@ -182,6 +182,16 @@ describe('the list', () => {
         expect(within(await row()).getByRole('button', { name: 'Close' })).toBeTruthy();
     });
 
+    it('says when access ends on one in its last period, and announces no charge', async () => {
+        const ends = new Date(Date.now() + 86_400_000).toISOString();
+        setup({ held: [subscription({ next_charge_at: null, access_until: ends })] });
+
+        const last = await row();
+
+        expect(within(last).getByText('Access until')).toBeTruthy();
+        expect(within(last).queryByText('Next charge')).toBeNull();
+    });
+
     it('falls back on the slug when the plan cannot be read', async () => {
         setup({
             overrides: { 'GET /plans/pro': () => refusal(404, 'plan_not_found', 'No such plan.') },
@@ -370,6 +380,52 @@ describe('cancel, resume, close: the wallet signs and sends, the server confirms
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(wallet.connect).not.toHaveBeenCalled();
         expect(made(fetch)).toEqual(['GET /subscriptions', 'GET /plans/pro']);
+    });
+
+    it('promises no charge when resuming on a plan that ends before the next one', async () => {
+        const ends = new Date(Date.now() + 86_400_000).toISOString();
+        const held = subscription({ ...cancelled, access_until: ends });
+        setup({
+            held: [held],
+            overrides: {
+                'GET /plans/pro': () => json(200, { ...plan, ends_at: ends }),
+                // Resumed in its last period: active again, and still nothing to charge.
+                'POST /subscriptions/sub_1/resume/confirm': () =>
+                    json(201, { subscription: { ...held, status: 'active' } }),
+            },
+        });
+
+        fireEvent.click(within(await row()).getByRole('button', { name: 'Resume' }));
+        const dialog = await screen.findByRole('dialog');
+
+        expect(
+            await within(dialog).findByText(
+                /^It runs again until .+, when the plan ends\. Nothing more is charged\.$/,
+            ),
+        ).toBeTruthy();
+        expect(within(dialog).queryByText(/Charges start again/)).toBeNull();
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Resume subscription' }));
+        await within(dialog).findByRole('heading', { name: 'Subscription resumed' });
+        expect(within(dialog).getByText(/^You keep access until .+\.$/)).toBeTruthy();
+        expect(within(dialog).queryByText(/Next charge/)).toBeNull();
+    });
+
+    it('still says when charges start again on a plan that outlives the period', async () => {
+        const ends = new Date(Date.now() + 86_400_000).toISOString();
+        setup({
+            held: [subscription({ ...cancelled, access_until: ends })],
+            overrides: {
+                'GET /plans/pro': () => json(200, { ...plan, ends_at: '2999-12-01T00:00:00.000Z' }),
+            },
+        });
+
+        fireEvent.click(within(await row()).getByRole('button', { name: 'Resume' }));
+        const dialog = await screen.findByRole('dialog');
+
+        expect(
+            await within(dialog).findByText(/^Charges start again on .+, as before\.$/),
+        ).toBeTruthy();
     });
 
     it('builds and sends once on a double click', async () => {
@@ -946,6 +1002,17 @@ describe('ManageButton', () => {
         expect(within(dialog).queryByText('Payments')).toBeNull();
         // The next charge is still said, as a fact.
         expect(within(dialog).getByText('Next charge')).toBeTruthy();
+    });
+
+    it('says when access ends on one in its last period, and lists no charge to come', async () => {
+        const ends = iso(1);
+        const last = subscription({ next_charge_at: null, access_until: ends });
+        mount({ held: [last], detail: { subscription: last, upcoming: [], payments: [] } });
+        const dialog = await open();
+
+        expect(await within(dialog).findByText('Access until')).toBeTruthy();
+        expect(within(dialog).queryByText('Next charge')).toBeNull();
+        expect(within(dialog).queryByText('Incoming')).toBeNull();
     });
 
     it('stands without them when the server could not read them', async () => {

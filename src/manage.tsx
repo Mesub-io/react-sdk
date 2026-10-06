@@ -4,7 +4,7 @@ import { signedOut } from './api';
 import { useMesubInternal } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { moment, shortAddress } from './format';
+import { moment, noChargeAt, shortAddress } from './format';
 import {
     Explorer,
     failureScreen,
@@ -67,14 +67,23 @@ const messageOf = (error: unknown) =>
     error instanceof MesubClientError ? error.message : 'Something went wrong.';
 
 /** What the action does, before anything is signed. */
-function consequence(action: MesubAction, subscription: MesubSubscription): string {
-    const until = moment(subscription.access_until ?? subscription.current_period_end);
+function consequence(
+    action: MesubAction,
+    subscription: MesubSubscription,
+    planEndsAt: string | null,
+): string {
+    const end = subscription.access_until ?? subscription.current_period_end;
+    const until = moment(end);
     if (action === 'cancel') {
         return subscription.access && until
             ? `You keep access until ${until}. Nothing more is charged.`
             : 'It stops now. Nothing more is charged.';
     }
     if (action === 'resume') {
+        // The plan ends before a charge can run: resuming brings none back.
+        if (end && until && noChargeAt(Date.parse(end), planEndsAt)) {
+            return `It runs again until ${until}, when the plan ends. Nothing more is charged.`;
+        }
         return until
             ? `Charges start again on ${until}, as before.`
             : 'Charges start again, as before.';
@@ -92,7 +101,8 @@ function outcome(action: MesubAction, subscription: MesubSubscription): string {
     }
     if (action === 'resume') {
         const next = moment(subscription.next_charge_at);
-        return next ? `Next charge ${next}.` : 'It runs again.';
+        if (next) return `Next charge ${next}.`;
+        return subscription.access && until ? `You keep access until ${until}.` : 'It runs again.';
     }
     return 'Its deposit is back in your wallet.';
 }
@@ -112,6 +122,8 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
     const [checking, setChecking] = useState(false);
     // The plan's name, when it can be read: its slug stands in until then.
     const [planName, setPlanName] = useState(subscription.plan ?? 'this subscription');
+    // Its end date, which decides whether resuming brings a charge back.
+    const [planEndsAt, setPlanEndsAt] = useState<string | null>(null);
 
     const alive = useRef(true);
     const attempt = useRef(0);
@@ -134,7 +146,11 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
         alive.current = true;
         if (subscription.plan) {
             readPlan(subscription.plan).then(
-                (served) => alive.current && setPlanName(served.name),
+                (served) => {
+                    if (!alive.current) return;
+                    setPlanName(served.name);
+                    setPlanEndsAt(served.ends_at);
+                },
                 () => undefined,
             );
         }
@@ -396,7 +412,7 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
                     <h2 id={titleId}>
                         {words.ask} {planName}?
                     </h2>
-                    <p>{consequence(action, subscription)}</p>
+                    <p>{consequence(action, subscription, planEndsAt)}</p>
                     <dl data-mesub-summary="">
                         <div data-mesub-row="">
                             <dt>Signed by</dt>

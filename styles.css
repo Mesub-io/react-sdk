@@ -1878,8 +1878,11 @@
   border-radius: 0;
   background: transparent;
 }
+/* A term can be a sentence: its name sits above it and both start at the same
+   edge, so a long one wraps under its own first word at any width, and no
+   column is there for it to spill out of. */
 [data-mesub-terms] [data-mesub-row] {
-  align-items: flex-start;
+  display: block;
   min-block-size: 0;
   padding-block: 6px;
   font-size: 12px;
@@ -1889,13 +1892,14 @@
   border-block-start: 0;
 }
 [data-mesub-terms] [data-mesub-row] dt {
-  flex: none;
   color: var(--_muted);
 }
 [data-mesub-terms] [data-mesub-row] dd {
   display: block;
   color: var(--_text-soft);
+  font-size: 13px;
   font-weight: 400;
+  text-align: start;
   overflow-wrap: anywhere;
 }
 /* the token, as a small button that opens where it is traded */
@@ -1904,7 +1908,8 @@
   align-items: center;
   gap: 4px;
   min-block-size: 26px;
-  margin-block: -4px;
+  /* under its name, not beside it: clear of the line above */
+  margin-block: 3px 0;
   padding: 0 10px;
   border: 1px solid var(--_border);
   border-radius: 999px;

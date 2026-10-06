@@ -4,7 +4,16 @@ import { signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { cadence, moment, manageLink, shortAddress, termsCancelUrl, termsFacts } from './format';
+import {
+    cadence,
+    chargedOnce,
+    moment,
+    manageLink,
+    shortAddress,
+    termsCancelUrl,
+    termsFacts,
+    termsSingleCharge,
+} from './format';
 import {
     Explorer,
     failureScreen,
@@ -43,7 +52,7 @@ type View =
     | { name: 'wallet'; pick: WalletView }
     | { name: 'preparing'; signer: Signer }
     | { name: 'review'; signer: Signer; prepared: PreparedSubscription; notice: string | null }
-    | { name: 'signing'; signer: Signer; what: 'terms' | 'transaction' }
+    | { name: 'signing'; signer: Signer; what: 'terms' | 'transaction'; single: boolean }
     | { name: 'submitting'; signer: Signer; signature: string | null }
     | {
           name: 'subscribed';
@@ -51,6 +60,7 @@ type View =
           subscription: MesubSubscription;
           signature: string | null;
           cancelUrl: string | null;
+          single: boolean;
       }
     | { name: 'failed'; failure: Failure; signer: Signer | null; signature: string | null }
     | { name: 'signed-out' };
@@ -69,6 +79,15 @@ const STATES: Partial<Record<View['name'], SubscribeState>> = {
 function expired(prepared: PreparedSubscription): boolean {
     const until = Date.parse(prepared.terms.expires_at);
     return !Number.isNaN(until) && until - Date.now() < 5_000;
+}
+
+/**
+ * Whether this is one charge and no more. What the subscriber signs says it
+ * once it exists; before, and for terms that name no amount, the plan's end
+ * against its period does.
+ */
+function singleCharge(plan: MesubPlan, terms?: string): boolean {
+    return (terms === undefined ? null : termsSingleCharge(terms)) ?? chargedOnce(plan);
 }
 
 const messageOf = (error: unknown) =>
@@ -141,6 +160,8 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         signature: string | null;
         // Where the terms said it can be stopped, for the done screen.
         cancelUrl: string | null;
+        // Whether the terms signed were for one charge: the receipt says the same.
+        single: boolean;
     } | null>(null);
     const latest = useRef({ onState, onSubscribed });
     latest.current = { onState, onSubscribed };
@@ -217,9 +238,10 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         await prepare({ wallet, account });
     }
 
-    async function sign(signer: Signer, prepared: PreparedSubscription) {
+    async function sign(signer: Signer, prepared: PreparedSubscription, plan: MesubPlan) {
         // A second click finds the review gone: nothing is prepared or signed twice.
         if (shown.current.name !== 'review' || shown.current.prepared !== prepared) return;
+        const single = singleCharge(plan, prepared.terms.message);
         const current = begin();
         const notSigned = (title: string, error: unknown) =>
             fail(
@@ -242,7 +264,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             return;
         }
 
-        setView({ name: 'signing', signer, what: 'terms' });
+        setView({ name: 'signing', signer, what: 'terms', single });
         let termsSignature;
         try {
             termsSignature = await signText(signer, prepared.terms.message);
@@ -257,7 +279,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             return;
         }
 
-        setView({ name: 'signing', signer, what: 'transaction' });
+        setView({ name: 'signing', signer, what: 'transaction', single });
         let signed;
         try {
             // Signed, not sent: Mesub co-signs and sends it.
@@ -274,6 +296,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             signer,
             signature: signed.signature,
             cancelUrl: termsCancelUrl(prepared.terms.message),
+            single,
         };
         await submit();
     }
@@ -282,7 +305,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
     async function submit() {
         const handed = sent.current;
         if (!handed) return;
-        const { id, signed, signer, signature, cancelUrl } = handed;
+        const { id, signed, signer, signature, cancelUrl, single } = handed;
         const current = begin();
         setView({ name: 'submitting', signer, signature });
         try {
@@ -311,6 +334,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
                     subscription: settled.subscription,
                     signature,
                     cancelUrl,
+                    single,
                 });
             }
         } catch (error) {
@@ -417,7 +441,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             titleId,
             checking,
             onContinue: toWallets,
-            onSign: (signer, prepared) => void sign(signer, prepared),
+            onSign: (signer, prepared) => void sign(signer, prepared, loaded.plan),
             onAct: act,
             onWallets: toWallets,
             onClose,
@@ -492,9 +516,16 @@ function stageScreen(props: {
 }): DialogScreen {
     const { view, plan, chain, titleId } = props;
     const price = `${plan.amount_display} ${plan.symbol ?? shortAddress(plan.mint)}`;
-    const every = cadence(plan.period_hours);
     // A plan with an end date stops charging there: said before anything is signed.
     const ends = moment(plan.ends_at);
+    // The terms once they are on screen or signed, the plan before.
+    const single =
+        view.name === 'review'
+            ? singleCharge(plan, view.prepared.terms.message)
+            : view.name === 'signing' || view.name === 'subscribed'
+              ? view.single
+              : singleCharge(plan);
+    const every = single ? 'once' : cadence(plan.period_hours);
     const merchant = (
         <Merchant
             name={plan.project_name}
@@ -551,7 +582,13 @@ function stageScreen(props: {
                         <strong>{price}</strong>
                         <span>{every}</span>
                     </p>
-                    {ends ? <p data-mesub-ends="">Ends on {ends}</p> : null}
+                    {ends ? (
+                        <p data-mesub-ends="">
+                            {single
+                                ? `Access until ${ends}, when the plan ends. Nothing more is charged.`
+                                : `Ends on ${ends}`}
+                        </p>
+                    ) : null}
                     {plan.description ? <p data-mesub-description="">{plan.description}</p> : null}
                     <button type="button" data-mesub-submit="" onClick={props.onContinue}>
                         Continue with a wallet
@@ -586,8 +623,8 @@ function stageScreen(props: {
     if (view.name === 'review') {
         const { terms } = view.prepared;
         const nextCharge = new Date(Date.now() + plan.period_hours * 3_600_000);
-        // No charge comes after the plan's end: the row would promise one.
-        const chargedAgain = !plan.ends_at || nextCharge < new Date(plan.ends_at);
+        // Nor a date past the plan's end, whatever the terms say: the row would promise a charge.
+        const chargedAgain = !single && !chargedOnce(plan);
         return {
             step: 'review',
             view: 'review',
@@ -622,7 +659,8 @@ function stageScreen(props: {
                         ) : null}
                         {ends ? (
                             <div data-mesub-row="">
-                                <dt>Plan ends</dt>
+                                {/* One charge: the plan's end is where the access bought stops. */}
+                                <dt>{single ? 'Access until' : 'Plan ends'}</dt>
                                 <dd>{ends}</dd>
                             </div>
                         ) : null}
@@ -654,7 +692,8 @@ function stageScreen(props: {
                     </details>
                     {/* Last before the button: what clicking it starts. */}
                     <p data-mesub-footnote="">
-                        Two approvals in {wallet.name}: the terms, then the payment. Cancel anytime.
+                        Two approvals in {wallet.name}: the terms, then the payment.{' '}
+                        {single ? 'Nothing more is charged.' : 'Cancel anytime.'}
                     </p>
                     <button
                         type="button"
@@ -686,7 +725,9 @@ function stageScreen(props: {
                     <p>
                         {terms
                             ? 'Step 1 of 2: a message, it moves nothing.'
-                            : `Step 2 of 2: ${price} now, then ${price} ${every}.`}
+                            : single
+                              ? `Step 2 of 2: ${price} now, a single charge.`
+                              : `Step 2 of 2: ${price} now, then ${price} ${every}.`}
                     </p>
                     <button type="button" data-mesub-cancel="" onClick={props.onClose}>
                         Cancel
@@ -717,7 +758,9 @@ function stageScreen(props: {
         };
     }
 
-    const nextCharge = moment(view.subscription.next_charge_at);
+    // Signed as one charge: no next one is announced, whatever came back.
+    const nextCharge = view.single ? null : moment(view.subscription.next_charge_at);
+    const accessUntil = view.single ? (moment(view.subscription.access_until) ?? ends) : null;
     const manage = manageLink(props.manageUrl, view.cancelUrl);
 
     return {
@@ -739,6 +782,12 @@ function stageScreen(props: {
                         <div data-mesub-row="">
                             <dt>Next charge</dt>
                             <dd>{nextCharge}</dd>
+                        </div>
+                    ) : null}
+                    {accessUntil ? (
+                        <div data-mesub-row="">
+                            <dt>Access until</dt>
+                            <dd>{accessUntil}</dd>
                         </div>
                     ) : null}
                     <div data-mesub-row="">

@@ -19,6 +19,7 @@ export {
     type ManageButtonProps,
     type ManageSubscriptionsProps,
     type MesubHeldSubscription,
+    type PayNowResult,
     type UseSubscriptionsResult,
 } from './subscriptions';
 export type { SolanaChain } from './wallet';

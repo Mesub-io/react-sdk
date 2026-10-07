@@ -167,6 +167,14 @@ builds a transaction (`POST /subscriptions/:id/cancel`, `/resume` or `/close`),
 the wallet **signs and sends it itself** (`solana:signAndSendTransaction`), and
 its signature goes to the matching `/confirm`. The list is read again after.
 
+A late one (`unpaid`) also shows **Pay now** when paying can succeed: the
+customer pays the missed period at once, with nothing to sign, through
+`POST /subscriptions/:id/retry` of the routes (`subscriptions.retry` of
+`@mesub/node`). Not on a paused one, on a wallet that no longer approves it,
+nor past its date to pay by. What came of it is said under the button: the
+payment on its way, or why not (a short wallet spends no retry). On Free,
+where Mesub does not try again on its own, the card shows that date to pay by.
+
 Only the wallet that pays a subscription can sign for it. One already
 connected to your site is found without a prompt; otherwise the customer picks
 it. Closing returns the deposit to that wallet.
@@ -191,7 +199,10 @@ function Mine() {
 - `state` is `loading`, `ready`, `signed-out` or `error` (with `error`, the
   server's message).
 - `subscriptions` are newest first, each with `action`: `cancel`, `resume`,
-  `close` or null. Checkouts nobody signed are left out.
+  `close` or null, and `payable`: whether **Pay now** can succeed. Checkouts
+  nobody signed are left out.
+- `payNow(id)` pays that late payment now and resolves `{ ok, message }`, the
+  words to show; it never throws.
 - `manage(id)` opens the dialog for that action and resolves when it closes:
   the subscription as it is now, or null if nothing changed.
 - Every list reads again when a subscription is made or changed through the

@@ -1152,6 +1152,130 @@ describe('how a charge reads', () => {
     });
 });
 
+// Mesub-io/backend#354: the customer pays a late payment, with nothing to sign.
+describe('paying a late payment now', () => {
+    const late = (over: Partial<MesubSubscription> = {}) =>
+        subscription({
+            status: 'unpaid',
+            payment_status: 'late',
+            access: false,
+            late_reason: 'insufficient_balance',
+            next_charge_at: null,
+            next_retry_at: '2099-10-05T00:00:00.000Z',
+            ...over,
+        });
+
+    it('pays it, and says the payment is on its way', async () => {
+        const asked: string[] = [];
+        setup({
+            held: [late()],
+            overrides: {
+                'POST /subscriptions/sub_1/retry': () => {
+                    asked.push('retry');
+                    return json(202, { subscription: late() });
+                },
+            },
+        });
+
+        fireEvent.click(within(await row()).getByRole('button', { name: 'Pay now' }));
+
+        expect((await screen.findByRole('status')).textContent).toBe(
+            'Payment sent. It shows here once the network confirms it.',
+        );
+        expect(asked).toEqual(['retry']);
+    });
+
+    it.each([
+        [
+            'insufficient_balance',
+            'You need 9.99 USDC to pay the missed period, and this wallet holds 1 USDC.',
+            {},
+            'You need 9.99 USDC to pay the missed period, and this wallet holds 1 USDC. Add funds, then pay again: no retry was spent.',
+        ],
+        [
+            'retry_too_soon',
+            'Try again in 7 minutes.',
+            { 'Retry-After': '400' },
+            'You can pay again in 7 minutes.',
+        ],
+        [
+            'retries_spent',
+            'This subscription has no retries left.',
+            {},
+            'No retries are left for this period.',
+        ],
+        ['pull_running', 'A pull is running.', {}, 'A pull is running.'],
+    ])('says why on %s', async (code, message, headers, said) => {
+        setup({
+            held: [late()],
+            overrides: {
+                'POST /subscriptions/sub_1/retry': () => refusal(409, code, message, headers),
+            },
+        });
+
+        fireEvent.click(within(await row()).getByRole('button', { name: 'Pay now' }));
+
+        expect((await screen.findByRole('alert')).textContent).toBe(said);
+    });
+
+    it.each([
+        ['a wallet that no longer approves it', { late_reason: 'approval_revoked' }],
+        ['an authority closed for good', { late_reason: 'authority_closed' }],
+        ['a paused seat', { paused: true }],
+        [
+            'a Free one past its date to pay by',
+            { next_retry_at: null, retry_deadline: '2020-01-01T00:00:00.000Z' },
+        ],
+        [
+            'a running one',
+            { status: 'active' as const, payment_status: 'paid' as const, access: true },
+        ],
+    ])('is not offered on %s', async (_, over) => {
+        setup({ held: [late(over)] });
+
+        expect(within(await row()).queryByRole('button', { name: 'Pay now' })).toBeNull();
+    });
+
+    it('dates a Free one by when to pay', async () => {
+        setup({
+            held: [late({ next_retry_at: null, retry_deadline: '2099-10-05T00:00:00.000Z' })],
+        });
+
+        expect(within(await row()).getByText('Pay by')).toBeTruthy();
+        expect(within(await row()).getByRole('button', { name: 'Pay now' })).toBeTruthy();
+    });
+
+    it('is the hook too, for a page of your own', async () => {
+        const seen: Array<{ ok: boolean; message: string }> = [];
+        function Mine() {
+            const { state, payNow } = useSubscriptions();
+            return state === 'ready' ? (
+                <button
+                    type="button"
+                    onClick={() => void payNow('sub_1').then((said) => seen.push(said))}
+                >
+                    Mine
+                </button>
+            ) : null;
+        }
+        const fetch = server({
+            'GET /subscriptions': () => json(200, { subscriptions: [late()] }),
+            'POST /subscriptions/sub_1/retry': () => refusal(409, 'retries_spent', 'No.'),
+        });
+        render(
+            <MesubProvider endpoint={ENDPOINT} fetch={fetch}>
+                <Mine />
+            </MesubProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Mine' }));
+
+        await waitFor(() =>
+            expect(seen).toEqual([{ ok: false, message: 'No retries are left for this period.' }]),
+        );
+    });
+});
+
 describe('what a card says under its dates', () => {
     const held = (
         over: Partial<MesubSubscription>,
@@ -1159,6 +1283,7 @@ describe('what a card says under its dates', () => {
     ) => ({
         ...subscription(over),
         action,
+        payable: false,
     });
 
     it('says nothing on a healthy one', () => {
@@ -1166,8 +1291,16 @@ describe('what a card says under its dates', () => {
     });
 
     it.each([
-        [{ status: 'unpaid', next_retry_at: '2026-10-05T00:00:00.000Z' }, /before the next try/],
-        [{ status: 'unpaid', next_retry_at: null }, /Add funds to the wallet\.$/],
+        [
+            { status: 'unpaid', next_retry_at: '2026-10-05T00:00:00.000Z' },
+            /then pay now, with nothing to sign; otherwise Mesub tries again at the next try\.$/,
+        ],
+        [{ status: 'unpaid', next_retry_at: null }, /Add funds to the wallet, then pay now\.$/],
+        // Free (Mesub-io/backend#343): no try of Mesub's, a date to pay by.
+        [
+            { status: 'unpaid', next_retry_at: null, retry_deadline: '2026-10-05T00:00:00.000Z' },
+            /access is off\. Add funds to the wallet, then pay now, with nothing to sign, before the date to pay by\.$/,
+        ],
         [{ status: 'unpaid', late_reason: 'insufficient_balance' }, /Add funds to the wallet/],
         // One this version does not know: read as no reason.
         [{ status: 'unpaid', late_reason: 'account_frozen' }, /Add funds to the wallet/],

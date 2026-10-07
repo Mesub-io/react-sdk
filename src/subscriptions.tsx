@@ -17,6 +17,15 @@ import type { MesubAction, MesubPlan, MesubSubscription } from './types';
 export interface MesubHeldSubscription extends MesubSubscription {
     // Cancel a running one, resume a cancellation still running, close one that is over.
     action: MesubAction | null;
+    // A late payment the customer can pay now (Mesub-io/backend#354), see `payNow`.
+    payable: boolean;
+}
+
+/** What a "Pay now" came to, in the words the widget shows. */
+export interface PayNowResult {
+    // Sent: the outcome comes with the pull, and the list reads again.
+    ok: boolean;
+    message: string;
 }
 
 /** What `useSubscriptions()` returns. */
@@ -28,6 +37,8 @@ export interface UseSubscriptionsResult {
     // The server's message, in the error state.
     error: string | null;
     reload(): Promise<void>;
+    // Pays that late payment now: nothing to sign. Never throws: a refusal is its `message`.
+    payNow(id: string): Promise<PayNowResult>;
     // Opens the dialog for what that subscription allows. Resolves when it closes: the
     // subscription as it is now, or null if nothing changed.
     manage(id: string): Promise<MesubSubscription | null>;
@@ -49,6 +60,43 @@ function actionOf(subscription: MesubSubscription, now: number): MesubAction | n
         return closed ? null : 'close';
     }
     return null;
+}
+
+/**
+ * Whether paying a late payment now can succeed (Mesub-io/backend#354): late,
+ * not paused, still approved by the wallet, and before `retry_deadline` when
+ * there is one. Mesub refuses the rest anyway; the button is not offered.
+ */
+export function payableOf(row: MesubSubscription, now: number): boolean {
+    if (row.status !== 'unpaid' || row.paused) return false;
+    if (row.late_reason === 'approval_revoked' || row.late_reason === 'authority_closed') {
+        return false;
+    }
+    const deadline = Date.parse(row.retry_deadline ?? '');
+    return Number.isNaN(deadline) || deadline > now;
+}
+
+export const PAY_NOW_SENT = 'Payment sent. It shows here once the network confirms it.';
+
+/** Why paying now was refused, as the canonical table words it; Mesub's own message otherwise. */
+export function payNowRefusal(failure: unknown): string {
+    if (!(failure instanceof MesubClientError)) return 'Something went wrong.';
+    switch (failure.code) {
+        case 'insufficient_balance':
+            return `${failure.message} Add funds, then pay again: no retry was spent.`;
+        case 'retry_too_soon': {
+            const minutes = failure.retryAfter === null ? null : Math.ceil(failure.retryAfter / 60);
+            return minutes === null
+                ? failure.message
+                : `You can pay again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+        }
+        case 'retries_spent':
+            return 'No retries are left for this period.';
+        case 'retry_deadline_passed':
+            return 'It is too late to pay this period: the subscription stops at its end.';
+        default:
+            return failure.message;
+    }
 }
 
 /** The signed-in customer's subscriptions, read from the merchant's server, and what each allows. */
@@ -112,7 +160,11 @@ export function useSubscriptions(): UseSubscriptionsResult {
         return () => clearTimeout(timer);
     }, [rows, now]);
 
-    const subscriptions = rows.map((row) => ({ ...row, action: actionOf(row, now) }));
+    const subscriptions = rows.map((row) => ({
+        ...row,
+        action: actionOf(row, now),
+        payable: payableOf(row, now),
+    }));
 
     const latest = useRef(subscriptions);
     latest.current = subscriptions;
@@ -120,13 +172,27 @@ export function useSubscriptions(): UseSubscriptionsResult {
         async (id: string): Promise<MesubSubscription | null> => {
             const held = latest.current.find((row) => row.id === id);
             if (!held?.action) return null;
-            const { action, ...subscription } = held;
+            const { action, payable: _, ...subscription } = held;
             return open({ subscription, action });
         },
         [open],
     );
 
-    return { state, subscriptions, error, reload, manage };
+    const payNow = useCallback(
+        async (id: string): Promise<PayNowResult> => {
+            try {
+                await api.payNow(id);
+            } catch (failure) {
+                return { ok: false, message: payNowRefusal(failure) };
+            }
+            // Still late until the pull lands: read again for what it says now.
+            void reload();
+            return { ok: true, message: PAY_NOW_SENT };
+        },
+        [api, reload],
+    );
+
+    return { state, subscriptions, error, reload, payNow, manage };
 }
 
 export const STATUS: Record<string, string> = {
@@ -148,7 +214,10 @@ export function fact(row: MesubHeldSubscription): { term: string; date: string }
     if (row.status === 'cancelled') {
         return pick('Access until', row.access_until ?? row.current_period_end);
     }
-    if (row.status === 'unpaid') return pick('Next try', row.next_retry_at);
+    // On Free no try of Mesub's comes: what is left is the date to pay by.
+    if (row.status === 'unpaid') {
+        return pick('Next try', row.next_retry_at) ?? pick('Pay by', row.retry_deadline);
+    }
     if (row.status === 'active') {
         // No charge to come, in the last period of a plan that ends: what is left is its access.
         return pick('Next charge', row.next_charge_at) ?? pick('Access until', row.access_until);
@@ -167,9 +236,12 @@ export function noteOf(row: MesubHeldSubscription): string | null {
         if (row.late_reason === 'authority_closed') {
             return 'The last payment did not go through. This wallet closed its authorisation: it can no longer be charged.';
         }
-        return row.next_retry_at
-            ? 'The last payment did not go through. Add funds to the wallet before the next try.'
-            : 'The last payment did not go through. Add funds to the wallet.';
+        if (row.next_retry_at) {
+            return 'The last payment did not go through. Add funds to the wallet, then pay now, with nothing to sign; otherwise Mesub tries again at the next try.';
+        }
+        return row.retry_deadline
+            ? 'The last payment did not go through, so access is off. Add funds to the wallet, then pay now, with nothing to sign, before the date to pay by.'
+            : 'The last payment did not go through. Add funds to the wallet, then pay now.';
     }
     if (row.status === 'cancelled') return 'Cancelled. Resume before the end to keep it.';
     if (row.status === 'stopped') return 'Stopped after missed payments. Nothing more is charged.';
@@ -203,6 +275,43 @@ function usePlans(slugs: string[]): Record<string, MesubPlan> {
     return plans;
 }
 
+/** "Pay now", and what came of it, read out where it was clicked. */
+export function PayNow({ pay }: { pay(): Promise<PayNowResult> }) {
+    const [busy, setBusy] = useState(false);
+    const [said, setSaid] = useState<PayNowResult | null>(null);
+
+    async function click() {
+        setBusy(true);
+        try {
+            setSaid(await pay());
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    return (
+        <div data-mesub-pay-now="">
+            <button
+                type="button"
+                data-mesub-action="pay-now"
+                disabled={busy}
+                aria-busy={busy || undefined}
+                onClick={() => void click()}
+            >
+                Pay now
+            </button>
+            {said ? (
+                <p
+                    role={said.ok ? 'status' : 'alert'}
+                    data-mesub-pay-now-said={said.ok ? 'sent' : 'refused'}
+                >
+                    {said.message}
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
 export interface ManageSubscriptionsProps extends HTMLAttributes<HTMLDivElement> {
     // Called when one was cancelled, resumed or closed.
     onChanged?: ((subscription: MesubSubscription) => void) | undefined;
@@ -214,7 +323,7 @@ export interface ManageSubscriptionsProps extends HTMLAttributes<HTMLDivElement>
  */
 export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsProps) {
     const { theme } = useMesubInternal();
-    const { state, subscriptions, error, reload, manage } = useSubscriptions();
+    const { state, subscriptions, error, reload, payNow, manage } = useSubscriptions();
     const plans = usePlans(subscriptions.flatMap((row) => (row.plan ? [row.plan] : [])));
     const [retrying, setRetrying] = useState(false);
 
@@ -315,6 +424,7 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                                 </div>
                             </dl>
                             {note ? <p data-mesub-subscription-note="">{note}</p> : null}
+                            {row.payable ? <PayNow pay={() => payNow(row.id)} /> : null}
                             {row.action ? (
                                 <button
                                     type="button"

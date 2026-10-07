@@ -14,6 +14,7 @@ import {
 import {
     fact,
     noteOf,
+    PayNow,
     STATUS,
     useSubscriptions,
     type MesubHeldSubscription,
@@ -90,7 +91,7 @@ export function SubscriptionDialog({
     const [shown, setShown] = useState(PAST_SHOWN);
     const titleId = useId();
     const { chain } = useMesubInternal();
-    const { state, subscriptions, error, reload, manage } = useSubscriptions();
+    const { state, subscriptions, error, reload, payNow, manage } = useSubscriptions();
     const row = (pickSubscription(subscriptions, slug) as MesubHeldSubscription | null) ?? null;
     const plan = usePlan(row?.plan);
     const detail = useDetail(row);
@@ -291,6 +292,7 @@ export function SubscriptionDialog({
                     </details>
                 ) : null}
 
+                {row.payable ? <PayNow pay={() => payNow(row.id)} /> : null}
                 {row.action ? (
                     <button
                         type="button"

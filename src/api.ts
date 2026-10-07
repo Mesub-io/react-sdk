@@ -34,6 +34,8 @@ export interface MesubApi {
     submit(id: string, signed: { transaction: string; terms_signature: string }): Promise<Settled>;
     build(action: MesubAction, id: string): Promise<WalletTransaction>;
     confirm(action: MesubAction, id: string, signature: string): Promise<Settled>;
+    // Pays a late payment now (Mesub-io/backend#354): nothing to sign, the outcome comes with the pull.
+    payNow(id: string): Promise<MesubSubscription>;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -180,6 +182,10 @@ export function createApi(options: ApiOptions): MesubApi {
                 {},
                 REQUEST_TIMEOUT_MS,
             )) as unknown as WalletTransaction,
+        payNow: async (id) => {
+            const answer = await request('POST', `${at(id)}/retry`, {}, REQUEST_TIMEOUT_MS);
+            return answer.subscription as MesubSubscription;
+        },
         confirm: async (action, id, signature) =>
             (await request(
                 'POST',

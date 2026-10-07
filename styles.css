@@ -1992,7 +1992,8 @@
  * <ManageSubscriptions />, in the page, not in a dialog:
  *   div[data-mesub-subscriptions][data-mesub-state] > ul[data-mesub-subscription-list]
  *   > li[data-mesub-subscription] > div[data-mesub-subscription-head] (strong + span[data-mesub-status])
- *   + p[data-mesub-subscription-price] + dl[data-mesub-summary] + button[data-mesub-action];
+ *   + p[data-mesub-subscription-price] + dl[data-mesub-summary]
+ *   + div[data-mesub-pay-now] (button + p[data-mesub-pay-now-said]) on a late one + button[data-mesub-action];
  *   p[data-mesub-empty] when there is nothing to list, button[data-mesub-retry] after an error.
  */
 
@@ -2155,6 +2156,33 @@
   justify-self: start;
 }
 [data-mesub-action="cancel"] {
+  color: var(--_danger-text);
+}
+
+/* Pay now on a late one (Mesub-io/backend#354): the way out, so the accent; what came of it under it */
+[data-mesub-pay-now] {
+  display: grid;
+  gap: 6px;
+}
+[data-mesub-pay-now] [data-mesub-action="pay-now"] {
+  border-color: var(--_accent);
+  background: var(--_accent);
+  color: var(--_on-accent);
+}
+[data-mesub-pay-now] [data-mesub-action="pay-now"]:hover:not(:disabled) {
+  border-color: var(--_accent-hover);
+  background: var(--_accent-hover);
+}
+[data-mesub-pay-now] [data-mesub-action="pay-now"]:active:not(:disabled) {
+  background: var(--_accent-active);
+}
+[data-mesub-pay-now-said] {
+  text-align: start;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--_success-text);
+}
+[data-mesub-pay-now-said="refused"] {
   color: var(--_danger-text);
 }
 :is([data-mesub-action], [data-mesub-retry]):hover:not(:disabled) {

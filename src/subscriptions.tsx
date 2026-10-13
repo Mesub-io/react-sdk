@@ -10,7 +10,8 @@ import {
 import { signedOut } from './api';
 import { useMesubInternal } from './context';
 import { MesubClientError } from './errors';
-import { cadence, day, moment, shortAddress } from './format';
+import { cadence, day, moment, priceOf, shortAddress } from './format';
+import { TokenLogo } from './screens';
 import type { MesubAction, MesubPlan, MesubSubscription } from './types';
 
 /** A subscription the customer holds, with what it allows now. */
@@ -407,8 +408,8 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                             {plan ? (
                                 <p data-mesub-subscription-price="">
                                     <strong>
-                                        {plan.amount_display}{' '}
-                                        {plan.symbol ?? shortAddress(plan.mint)}
+                                        <TokenLogo plan={plan} />
+                                        {priceOf(plan)}
                                     </strong>{' '}
                                     {cadence(plan.period_hours)}
                                 </p>

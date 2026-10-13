@@ -1,3 +1,4 @@
+import { grouped, tokenOf } from './format';
 import type { MesubPayment, MesubPlan, MesubSubscription } from './types';
 
 /** Statuses of a subscription worth opening first: something is still running or owed. */
@@ -55,12 +56,22 @@ export function paymentSaid(payment: Pick<MesubPayment, 'outcome' | 'reason'>): 
 /** An amount in the plan's token, or null when the plan could not be read: never a guess. */
 export function paidIn(
     amount: string,
-    plan: Pick<MesubPlan, 'decimals' | 'symbol'> | undefined,
+    plan: (Pick<MesubPlan, 'decimals' | 'symbol'> & Partial<Pick<MesubPlan, 'token'>>) | undefined,
     format: (amount: string, decimals: number) => string,
 ): string | null {
     if (!plan || !/^\d+$/.test(amount)) return null;
 
-    return `${format(amount, plan.decimals)}${plan.symbol ? ` ${plan.symbol}` : ''}`;
+    return `${grouped(format(amount, plan.decimals))}${symbolOf(plan)}`;
+}
+
+/** ` Bonk` after an amount in a list, or nothing: a short mint has no room there. */
+export function symbolOf(
+    plan: (Pick<MesubPlan, 'symbol'> & Partial<Pick<MesubPlan, 'token'>>) | undefined,
+): string {
+    if (!plan) return '';
+    const token = tokenOf({ mint: '', ...plan });
+
+    return token.named ? ` ${token.unit}` : '';
 }
 
 /** `2 / 3`: which retry, out of how many the plan allows. Null when it is not one, or not said. */

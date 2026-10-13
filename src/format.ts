@@ -1,3 +1,4 @@
+import type { MesubPlan } from './types';
 import type { SolanaChain } from './wallet';
 
 /** `2000000` at 6 decimals is `2`, `2500000` is `2.5`: exact, no float. */
@@ -7,6 +8,119 @@ export function formatAmount(amount: string, decimals: number): string {
     const whole = (units / scale).toString();
     const fraction = (units % scale).toString().padStart(decimals, '0').replace(/0+$/, '');
     return fraction ? `${whole}.${fraction}` : whole;
+}
+
+/** `30000` is `30,000`, `1234.5` is `1,234.5`: one grouping, whatever the browser's locale. */
+export function grouped(display: string): string {
+    const [whole = '', fraction] = display.split('.');
+    if (!/^\d+$/.test(whole)) return display;
+    const spaced = whole.replace(/\B(?=(\d{3})+$)/g, ',');
+    return fraction === undefined ? spaced : `${spaced}.${fraction}`;
+}
+
+/** Decimal dollars as `$0.10` or `$1,234.50`; under a cent, `less than $0.01`. Null when unreadable. */
+export function formatUsd(value: string | null | undefined): string | null {
+    if (typeof value !== 'string' || !/^\d+(\.\d+)?$/.test(value)) return null;
+    const dollars = Number(value);
+    if (!Number.isFinite(dollars) || dollars >= 1e15) return null;
+    if (dollars < 0.01) return 'less than $0.01';
+    return `$${grouped(dollars.toFixed(2))}`;
+}
+
+/** An estimate says so: `about $0.10`. */
+export function aboutUsd(value: string | null | undefined): string | null {
+    const usd = formatUsd(value);
+    if (!usd) return null;
+    return usd.startsWith('less') ? usd : `about ${usd}`;
+}
+
+const SYMBOL_MAX = 12;
+const NAME_MAX = 32;
+/** The stablecoins Mesub vouches for: an unverified token never reads as one. */
+const VOUCHED = new Set(['USDC', 'USDT', 'PYUSD']);
+
+/** A token's own text, untrusted: no control or invisible character, one line, cut short. */
+function clean(text: unknown, max: number): string | null {
+    if (typeof text !== 'string') return null;
+    const plain = text
+        .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!plain) return null;
+    const letters = Array.from(plain);
+    return letters.length > max ? `${letters.slice(0, max).join('')}…` : plain;
+}
+
+/** How a plan's token reads on screen. */
+export interface TokenText {
+    // The symbol, or the short mint when it has none.
+    unit: string;
+    // Whether `unit` is a symbol.
+    named: boolean;
+    name: string | null;
+    // An https image of a verified token, else null.
+    logo: string | null;
+    // Said by Mesub, not guessed: false against a server that predates `token`.
+    unverified: boolean;
+    // Its amount is its dollar value: no estimate beside it.
+    vouched: boolean;
+    shortMint: string;
+}
+
+type Priced = Pick<MesubPlan, 'symbol' | 'mint' | 'token'>;
+
+function httpsUrl(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    try {
+        return new URL(value).protocol === 'https:' ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+/** The token of a plan: `token.symbol`, else the vouched `symbol`, else the short mint. */
+export function tokenOf(plan: Priced): TokenText {
+    const token = typeof plan.token === 'object' && plan.token !== null ? plan.token : null;
+    const vouched = typeof plan.symbol === 'string' && plan.symbol !== '';
+    const verified = vouched || token?.verified === true;
+    const unverified = token !== null && !verified;
+    const shortMint = shortAddress(plan.mint);
+
+    let symbol =
+        clean(token?.symbol, SYMBOL_MAX) ?? (vouched ? clean(plan.symbol, SYMBOL_MAX) : null);
+    let name = clean(token?.name, NAME_MAX);
+    // Mesub already drops these: said again here, the widget trusts no unverified text.
+    if (unverified && symbol && VOUCHED.has(symbol.toUpperCase())) symbol = null;
+    if (unverified && name && VOUCHED.has(name.toUpperCase())) name = null;
+
+    return {
+        unit: symbol ?? shortMint,
+        named: symbol !== null,
+        name,
+        logo: verified ? httpsUrl(token?.logo_url) : null,
+        unverified,
+        vouched,
+        shortMint,
+    };
+}
+
+/** The one way an amount is written: `30,000 Bonk`, `1 USDC`, `30,000 DezX…B263`. */
+export function priceOf(plan: Priced & Pick<MesubPlan, 'amount_display'>): string {
+    return `${grouped(plan.amount_display)} ${tokenOf(plan).unit}`;
+}
+
+/** The plan's dollar value as an estimate, or null: never beside a vouched stablecoin. */
+export function planUsd(plan: Priced & Pick<MesubPlan, 'amount_usd'>): string | null {
+    return tokenOf(plan).vouched ? null : aboutUsd(plan.amount_usd);
+}
+
+/** The one line an unverified token gets, with the mint to check it against. Null otherwise. */
+export function unverifiedNote(plan: Priced): string | null {
+    const token = tokenOf(plan);
+    if (!token.unverified) return null;
+    return token.name
+        ? `Unverified token: ${token.name}, mint ${token.shortMint}`
+        : `Unverified token, mint ${token.shortMint}`;
 }
 
 const NAMED: Record<number, string> = { 24: 'day', 168: 'week', 720: 'month', 8760: 'year' };
@@ -203,7 +317,26 @@ export interface TermsFact {
     full?: string;
     /** Where the value leads, when it is worth a click: the token's page on Jupiter. */
     href?: string;
+    /** A short line under the value: "Unverified token". */
+    note?: string;
 }
+
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The plan's amount where a term states it (`30000 tokens`, `2 USDC`), as the screen writes it. */
+function repriced(value: string, plan: TermsPlan): string {
+    const units = ['tokens', ...(plan.symbol ? [escaped(plan.symbol)] : [])].join('|');
+    const said = new RegExp(
+        `(^|[^\\d.,])${escaped(plan.amount_display)} (?:${units})(?![\\w.])`,
+        'g',
+    );
+    // A token with no symbol stays "tokens": its mint is on the Token line.
+    const price = tokenOf(plan).named ? priceOf(plan) : `${grouped(plan.amount_display)} tokens`;
+
+    return value.replace(said, (_, before: string) => `${before}${price}`);
+}
+
+type TermsPlan = Pick<MesubPlan, 'symbol' | 'mint' | 'token' | 'amount_display'>;
 
 /** The token's page on Jupiter, where it is bought or swapped. */
 export function jupiterUrl(mint: string): string {
@@ -216,9 +349,13 @@ export function jupiterUrl(mint: string): string {
  * subscription and in which token. The price, the wallet and the
  * lines meant for machines (the plan's address, the nonce, the expiry) are
  * left out, and addresses are shortened: the wallet shows the full text when
- * it asks to sign.
+ * it asks to sign. With the plan, amounts and the token read as on the rest
+ * of the screen; `full` stays the line as signed.
  */
-export function termsFacts(message: string): TermsFact[] {
+export function termsFacts(message: string, plan?: TermsPlan): TermsFact[] {
+    const token = plan ? tokenOf(plan) : null;
+    const note = token?.unverified ? { note: 'Unverified token' } : {};
+
     return termsLines(message)
         .filter((line): line is { label: string; value: string } => line.label !== null)
         .filter((line) => !NOT_SHOWN.has(line.label))
@@ -226,17 +363,26 @@ export function termsFacts(message: string): TermsFact[] {
             // "USDC, mint 4zMM..." is the token's name; a mint alone stays, shortened.
             const named = /^(.+), mint ([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(value);
             if (named) {
-                return { label, value: named[1]!, full: value, href: jupiterUrl(named[2]!) };
+                return {
+                    label,
+                    value: named[1]!,
+                    full: value,
+                    href: jupiterUrl(named[2]!),
+                    ...(label === 'Token' && note),
+                };
             }
 
             const address = ADDRESS.exec(value)?.[0];
             if (address) {
+                const short = value.replace(address, shortAddress(address));
+                // The plan's own mint, unnamed in the terms: Mesub's symbol beside it.
+                const known = label === 'Token' && token?.named && address === plan?.mint;
                 return {
                     label,
-                    value: value.replace(address, shortAddress(address)),
+                    value: known ? `${token.unit}, ${short}` : short,
                     full: value,
                     // A mint with no name is still a token to get.
-                    ...(label === 'Token' && { href: jupiterUrl(address) }),
+                    ...(label === 'Token' && { href: jupiterUrl(address), ...note }),
                 };
             }
 
@@ -245,6 +391,8 @@ export function termsFacts(message: string): TermsFact[] {
                 .replace(/, in the transaction you sign next$/, '')
                 .replace(/^https?:\/\//, '');
 
-            return trimmed === value ? { label, value } : { label, value: trimmed, full: value };
+            const shown = plan ? repriced(trimmed, plan) : trimmed;
+
+            return shown === value ? { label, value } : { label, value: shown, full: value };
         });
 }

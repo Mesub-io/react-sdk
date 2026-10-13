@@ -1,16 +1,21 @@
 import { useEffect, useId, useState } from 'react';
 import { useMesubInternal } from './context';
-import { paidIn, paymentSaid, pickSubscription, retryOf } from './detail-logic';
+import { paidIn, paymentSaid, pickSubscription, retryOf, symbolOf } from './detail-logic';
 import { MesubDialog } from './dialog';
 import {
     cadence,
     day,
     explorerUrl,
     formatAmount,
+    formatUsd,
+    grouped,
     moment,
+    priceOf,
     shortAddress,
     shortMoment,
+    tokenOf,
 } from './format';
+import { TokenLogo } from './screens';
 import {
     fact,
     noteOf,
@@ -166,7 +171,8 @@ export function SubscriptionDialog({
                 {plan ? (
                     <p data-mesub-rate="">
                         <strong>
-                            {plan.amount_display} {plan.symbol ?? shortAddress(plan.mint)}
+                            <TokenLogo plan={plan} />
+                            {priceOf(plan)}
                         </strong>{' '}
                         {cadence(plan.period_hours)}
                     </p>
@@ -227,7 +233,7 @@ export function SubscriptionDialog({
                                             </span>
                                             <span>
                                                 {next.amount_display
-                                                    ? `${next.amount_display}${plan?.symbol ? ` ${plan.symbol}` : ''}`
+                                                    ? `${grouped(next.amount_display)}${symbolOf(plan)}`
                                                     : ''}
                                             </span>
                                         </li>
@@ -242,6 +248,11 @@ export function SubscriptionDialog({
                                     {past.slice(0, shown).map((payment) => {
                                         const said = paymentSaid(payment);
                                         const amount = paidIn(payment.amount, plan, formatAmount);
+                                        // The price at the charge: not for a stablecoin, whose amount says it.
+                                        const usd =
+                                            plan && amount && !tokenOf(plan).vouched
+                                                ? formatUsd(payment.amount_usd)
+                                                : null;
                                         return (
                                             <li
                                                 key={`${payment.attempted_at}-${payment.signature ?? ''}`}
@@ -273,6 +284,7 @@ export function SubscriptionDialog({
                                                     ) : (
                                                         amount
                                                     )}
+                                                    {usd ? <small>{usd}</small> : null}
                                                 </span>
                                             </li>
                                         );

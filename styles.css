@@ -1807,6 +1807,51 @@
     min-block-size: 56px;
   }
 }
+/* ------------------------------------------------------------- the token
+ * img[data-mesub-token-logo] before an amount; small[data-mesub-usd] and
+ * small[data-mesub-unverified] under the checkout's price.
+ */
+
+/* a fixed box under the line's own height: loaded, failed or absent, nothing moves */
+[data-mesub-token-logo] {
+  display: inline-block;
+  inline-size: 20px;
+  block-size: 20px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: middle;
+}
+[data-mesub-price] [data-mesub-token-logo] {
+  inline-size: 28px;
+  block-size: 28px;
+  margin-inline-end: 8px;
+}
+[data-mesub-rate] [data-mesub-token-logo] {
+  inline-size: 16px;
+  block-size: 16px;
+}
+[data-mesub-price] strong {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+[data-mesub-price] small {
+  color: var(--_muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+}
+[data-mesub-terms] [data-mesub-row] dd small {
+  display: block;
+}
+/* the dollars at the charge, under the amount: within the row's own height */
+[data-mesub-payment] > span:last-child small {
+  display: block;
+  line-height: 16px;
+  font-weight: 400;
+}
+
 
 @media (max-width: 479.98px) {
   [data-mesub-dialog] { padding: 24px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }

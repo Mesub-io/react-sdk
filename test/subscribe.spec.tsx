@@ -5,8 +5,10 @@ import {
     base58,
     base64,
     bodies,
+    checkout,
     endingTerms,
     ENDPOINT,
+    FRESH,
     json,
     made,
     never,
@@ -38,7 +40,7 @@ function setup({
     // False: no wallet installed.
     wallet?: FakeWalletOptions | false;
 } = {}) {
-    const fetch = server({ ...routes, ...overrides });
+    const fetch = server(checkout({ ...routes, ...overrides }));
     const onSubscribed = vi.fn();
     const wallet = walletOptions === false ? null : registerWallet(walletOptions);
     render(
@@ -132,6 +134,7 @@ describe('subscribing, from the click to Done', () => {
         expect(made(fetch)).toEqual([
             'GET /plans/pro',
             'POST /subscriptions',
+            FRESH,
             'POST /subscriptions/sub_1/submit',
         ]);
         expect(bodies(fetch, 'POST /subscriptions/sub_1/submit')).toEqual([
@@ -969,7 +972,7 @@ describe('submit', () => {
         setup({
             overrides: {
                 'POST /subscriptions/sub_1/submit': () =>
-                    refusal(409, 'transaction_expired', 'That transaction expired. Start again.'),
+                    refusal(409, 'transaction_refused', 'The network refused that transaction.'),
             },
         });
 
@@ -980,7 +983,7 @@ describe('submit', () => {
             await within(dialog).findByRole('heading', { name: 'Could not subscribe' }),
         ).toBeTruthy();
         expect(within(dialog).getByRole('alert').textContent).toBe(
-            'That transaction expired. Start again.',
+            'The network refused that transaction.',
         );
         expect(within(dialog).getByText('Nothing was charged.')).toBeTruthy();
         expect(within(dialog).getByRole('button', { name: 'Try again' })).toBeTruthy();
@@ -1070,6 +1073,354 @@ describe('submit', () => {
     });
 });
 
+describe('a fresh transaction, once the terms are signed', () => {
+    const SUBMIT = 'POST /subscriptions/sub_1/submit';
+    const OTHER_TX = Uint8Array.from([9, 9, 9]);
+    const THIRD_TX = Uint8Array.from([8, 8, 8]);
+    const OTHER_TERMS = 'Mesub terms\nPlan: pro\nNonce: 43';
+    const EXPIRED =
+        'The transaction expired before it was sent. Nothing was charged: approve this one.';
+    const expiredAtSubmit = () =>
+        refusal(409, 'transaction_expired', 'The transaction expired before it was sent.');
+
+    /** What the route answers: that transaction, and the terms signed unless others are named. */
+    const built = (transaction: Uint8Array, terms = TERMS) =>
+        json(201, {
+            ...prepared(),
+            transaction: base64(transaction),
+            terms: { ...prepared().terms, message: terms },
+        });
+
+    /** Answers each call with the next response, the last one from then on. */
+    function inTurn(...answers: (() => Response)[]): Handler {
+        let call = 0;
+        return () => answers[Math.min(call++, answers.length - 1)]!();
+    }
+
+    const transactionsSigned = (wallet: ReturnType<typeof registerWallet>) =>
+        wallet.signTransaction.mock.calls.map(([input]) => input!.transaction);
+
+    it('asks for it after the terms, with no body, and has that one signed', async () => {
+        const { fetch, wallet } = setup({ overrides: { [FRESH]: () => built(OTHER_TX) } });
+
+        const dialog = await toReview();
+        // Not while the terms are read: its 150 blocks would run out there.
+        expect(made(fetch)).not.toContain(FRESH);
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(bodies(fetch, FRESH)).toEqual([{}]);
+        const asked = fetch.mock.invocationCallOrder[made(fetch).indexOf(FRESH)]!;
+        expect(wallet.signMessage.mock.invocationCallOrder[0]).toBeLessThan(asked);
+        expect(asked).toBeLessThan(wallet.signTransaction.mock.invocationCallOrder[0]!);
+        // The one built first is never signed.
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX]);
+        expect(bodies(fetch, SUBMIT)).toEqual([
+            {
+                transaction: base64(signedBy(wallet.signature, OTHER_TX)),
+                terms_signature: base58(wallet.signature),
+            },
+        ]);
+    });
+
+    it('says the payment is being prepared while the server builds it', async () => {
+        const { wallet } = setup({ overrides: { [FRESH]: never } });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Preparing the payment' }),
+        ).toBeTruthy();
+        expect(dialog.getAttribute('data-mesub-step')).toBe('approve');
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(wallet.signTransaction).not.toHaveBeenCalled();
+    });
+
+    it('shows new terms when it names some, and has them signed before anything is paid', async () => {
+        const { fetch, wallet } = setup({
+            overrides: {
+                [FRESH]: inTurn(
+                    () => built(OTHER_TX, OTHER_TERMS),
+                    () => built(THIRD_TX, OTHER_TERMS),
+                ),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByText(
+                'The terms had expired. These are fresh: check them again.',
+            ),
+        ).toBeTruthy();
+        expect(dialog.getAttribute('data-mesub-step')).toBe('review');
+        // The signature held is over other terms: nothing is paid with it.
+        expect(wallet.signTransaction).not.toHaveBeenCalled();
+        expect(made(fetch)).not.toContain(SUBMIT);
+
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(
+            wallet.signMessage.mock.calls.map(([input]) =>
+                new TextDecoder().decode(input!.message),
+            ),
+        ).toEqual([TERMS, OTHER_TERMS]);
+        expect(transactionsSigned(wallet)).toEqual([THIRD_TX]);
+        // The same subscription throughout.
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(1);
+    });
+
+    it.each([
+        ['404', () => refusal(404, 'not_found', 'Nothing here.')],
+        ['404 that is no JSON', () => new Response('Not Found', { status: 404 })],
+        ['405', () => refusal(405, 'method_not_allowed', 'GET or POST.')],
+    ])('signs the transaction it holds when an older server answers %s', async (_, answer) => {
+        const { fetch, wallet } = setup({ overrides: { [FRESH]: answer } });
+
+        const dialog = await toReview();
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(within(dialog).queryByRole('alert')).toBeNull();
+        expect(transactionsSigned(wallet)).toEqual([TX_BYTES]);
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(1);
+    });
+
+    it("shows Mesub's refusal to build one, and asks the wallet for nothing more", async () => {
+        const { fetch, wallet } = setup({
+            overrides: {
+                [FRESH]: () =>
+                    refusal(409, 'plan_sunset', 'This plan no longer takes subscribers.'),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Cannot subscribe' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'This plan no longer takes subscribers.',
+        );
+        expect(within(dialog).getByText('Nothing was charged.')).toBeTruthy();
+        expect(wallet.signTransaction).not.toHaveBeenCalled();
+        expect(made(fetch)).not.toContain(SUBMIT);
+    });
+
+    it('offers another checkout when the subscription is gone, never the transaction it holds', async () => {
+        const { fetch, wallet } = setup({
+            overrides: {
+                [FRESH]: () => refusal(404, 'subscription_not_found', 'No such subscription.'),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Could not subscribe' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe('No such subscription.');
+        expect(within(dialog).getByRole('button', { name: 'Try again' })).toBeTruthy();
+        expect(wallet.signTransaction).not.toHaveBeenCalled();
+        expect(made(fetch)).not.toContain(SUBMIT);
+    });
+
+    it('says to sign in when the session ended meanwhile', async () => {
+        const { wallet } = setup({
+            overrides: { [FRESH]: () => refusal(401, 'unauthenticated', 'Sign in first.') },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(await within(dialog).findByRole('heading', { name: 'Sign in first' })).toBeTruthy();
+        expect(wallet.signTransaction).not.toHaveBeenCalled();
+    });
+
+    it('replaces a transaction that expired at submit, and keeps the terms signed', async () => {
+        const { fetch, wallet, onSubscribed } = setup({
+            overrides: {
+                [FRESH]: inTurn(
+                    () => built(OTHER_TX),
+                    () => built(THIRD_TX),
+                ),
+                [SUBMIT]: inTurn(expiredAtSubmit, () =>
+                    json(201, { subscription: subscription() }),
+                ),
+            },
+        });
+        // The second approval waits, so that what the dialog says then can be read.
+        let approve!: () => void;
+        wallet.signTransaction
+            .mockImplementationOnce(async () => [
+                { signedTransaction: signedBy(wallet.signature, OTHER_TX) },
+            ])
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        approve = () =>
+                            resolve([{ signedTransaction: signedBy(wallet.signature, THIRD_TX) }]);
+                    }),
+            );
+
+        const dialog = await toReview();
+        sign();
+
+        // Back at the signing step, saying why, and that nothing moved.
+        expect(await within(dialog).findByText(EXPIRED)).toBeTruthy();
+        expect(
+            within(dialog).getByRole('heading', { name: 'Approve the payment in Fake Wallet' }),
+        ).toBeTruthy();
+        expect(dialog.getAttribute('data-mesub-step')).toBe('approve');
+        expect(within(dialog).queryByRole('alert')).toBeNull();
+
+        await act(async () => approve());
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        // The terms once, the transaction twice: the second one is the new one.
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX, THIRD_TX]);
+        expect(bodies(fetch, SUBMIT)).toEqual([
+            {
+                transaction: base64(signedBy(wallet.signature, OTHER_TX)),
+                terms_signature: base58(wallet.signature),
+            },
+            {
+                transaction: base64(signedBy(wallet.signature, THIRD_TX)),
+                terms_signature: base58(wallet.signature),
+            },
+        ]);
+        // Never a new subscription for it.
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+        expect(bodies(fetch, FRESH)).toHaveLength(2);
+        expect(onSubscribed).toHaveBeenCalledTimes(1);
+    });
+
+    it('has the terms signed again too when the new transaction names others', async () => {
+        const { fetch, wallet } = setup({
+            overrides: {
+                [FRESH]: inTurn(
+                    () => built(OTHER_TX),
+                    () => built(THIRD_TX, OTHER_TERMS),
+                ),
+                [SUBMIT]: inTurn(expiredAtSubmit, () =>
+                    json(201, { subscription: subscription() }),
+                ),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByText(
+                'The transaction expired before it was sent, and its terms with it. Nothing was charged: check these.',
+            ),
+        ).toBeTruthy();
+        expect(dialog.getAttribute('data-mesub-step')).toBe('review');
+        expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
+
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(
+            wallet.signMessage.mock.calls.map(([input]) =>
+                new TextDecoder().decode(input!.message),
+            ),
+        ).toEqual([TERMS, OTHER_TERMS]);
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX, THIRD_TX]);
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(2);
+    });
+
+    it('stops at the second expiry in a row, and says so', async () => {
+        const { fetch, wallet, onSubscribed } = setup({ overrides: { [SUBMIT]: expiredAtSubmit } });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Transaction expired' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'The transaction expired again before it could be sent. Try again in a moment.',
+        );
+        expect(within(dialog).getByText('Nothing was charged.')).toBeTruthy();
+        // Two tries and no third: one transaction after the terms, one after the first expiry.
+        expect(bodies(fetch, SUBMIT)).toHaveLength(2);
+        expect(bodies(fetch, FRESH)).toHaveLength(2);
+        expect(wallet.signTransaction).toHaveBeenCalledTimes(2);
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+        expect(onSubscribed).not.toHaveBeenCalled();
+
+        // Asked for by hand, the count starts over: one expiry is replaced again.
+        click('Try again');
+        await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
+        sign();
+        await within(dialog).findByRole('heading', { name: 'Transaction expired' });
+        expect(bodies(fetch, SUBMIT)).toHaveLength(4);
+    });
+
+    it('stops at the first expiry on an older server, which builds none', async () => {
+        const { fetch, wallet } = setup({
+            overrides: {
+                [FRESH]: () => refusal(404, 'not_found', 'Nothing here.'),
+                [SUBMIT]: expiredAtSubmit,
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Transaction expired' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'The transaction expired before it could be sent.',
+        );
+        expect(within(dialog).getByText('Nothing was charged.')).toBeTruthy();
+        expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(1);
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+    });
+
+    it('replaces one that expired while its outcome was unknown, on Check again', async () => {
+        const { fetch, wallet } = setup({
+            overrides: {
+                [FRESH]: inTurn(
+                    () => built(OTHER_TX),
+                    () => built(THIRD_TX),
+                ),
+                [SUBMIT]: inTurn(
+                    () => refusal(502, 'unavailable', 'Mesub did not answer.'),
+                    expiredAtSubmit,
+                    () => json(201, { subscription: subscription() }),
+                ),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+        await within(dialog).findByRole('heading', { name: 'Still confirming' });
+
+        click('Check again');
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX, THIRD_TX]);
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+    });
+});
+
 describe('useSubscribe, for a button of your own', () => {
     function Own() {
         const { state, subscription: held, subscribe } = useSubscribe('pro');
@@ -1092,7 +1443,7 @@ describe('useSubscribe, for a button of your own', () => {
     }
 
     function own(overrides: Record<string, Handler> = {}) {
-        const fetch = server({ ...routes, ...overrides });
+        const fetch = server(checkout({ ...routes, ...overrides }));
         const wallet = registerWallet();
         render(
             <MesubProvider endpoint={ENDPOINT} fetch={fetch}>
@@ -1142,7 +1493,7 @@ describe('useSubscribe, for a button of your own', () => {
 
 describe('the button', () => {
     it('takes a label, button props and a ref, and an onClick that can stop it', async () => {
-        const fetch = server(routes);
+        const fetch = server(checkout(routes));
         const ref = { current: null as HTMLButtonElement | null };
         render(
             <MesubProvider endpoint={ENDPOINT} fetch={fetch} theme="dark">
@@ -1170,7 +1521,7 @@ describe('the button', () => {
 
     it('puts the theme on the dialog', async () => {
         render(
-            <MesubProvider endpoint={ENDPOINT} fetch={server(routes)} theme="dark">
+            <MesubProvider endpoint={ENDPOINT} fetch={server(checkout(routes))} theme="dark">
                 <SubscribeButton plan="pro" />
             </MesubProvider>,
         );

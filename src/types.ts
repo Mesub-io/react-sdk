@@ -37,6 +37,14 @@ export type MesubSubscriptionStatus =
     | 'expired'
     | 'superseded';
 
+/** Why charges are held back: the merchant's own setup by name, `mesub` for any cause of Mesub's. */
+export type MesubBlockedReason =
+    | 'puller_not_allowed'
+    | 'receiver_not_allowed'
+    | 'receiver_account_missing'
+    | 'mint_gone'
+    | 'mesub';
+
 /** A subscription of the signed-in customer, as `GET /subscriptions` lists it. */
 export interface MesubSubscription {
     id: string;
@@ -49,6 +57,10 @@ export interface MesubSubscription {
     // Whether it grants access now.
     access: boolean;
     payment_status: 'paid' | 'late' | 'none';
+    // Since when its charges are held back for a reason that is not the subscriber's
+    // (Mesub-io/backend#426), and whose it is. Both absent from an older server.
+    blocked_since?: string | null;
+    blocked_reason?: MesubBlockedReason | null;
     // The plan's slug.
     plan: string | null;
     // The wallet that pays it, and the only one that can cancel, resume or close it.
@@ -71,7 +83,10 @@ export interface MesubCosts {
     total: string;
 }
 
-/** What `POST /subscriptions` answers: the terms, then the transaction, to sign. */
+/**
+ * What `POST /subscriptions` answers: the terms, then the transaction, to sign.
+ * `POST /subscriptions/:id/transaction` answers the same, with a fresh transaction.
+ */
 export interface PreparedSubscription {
     subscription: { id: string; status: MesubSubscriptionStatus };
     // Base64, signed by nobody.

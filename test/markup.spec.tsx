@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MesubProvider, SubscribeButton } from '../src';
 import {
+    checkout,
     ENDPOINT,
     json,
     never,
@@ -59,7 +60,7 @@ const routes: Record<string, Handler> = {
 
 function open(overrides: Record<string, Handler> = {}) {
     render(
-        <MesubProvider endpoint={ENDPOINT} fetch={server({ ...routes, ...overrides })}>
+        <MesubProvider endpoint={ENDPOINT} fetch={server(checkout({ ...routes, ...overrides }))}>
             <SubscribeButton plan="pro" />
         </MesubProvider>,
     );

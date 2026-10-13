@@ -97,9 +97,16 @@ dialog, from the plan to the receipt:
    end of the access.
 4. **Two approvals**: the wallet signs the terms, a message
    (`solana:signMessage`), then the transaction, without sending it
-   (`solana:signTransaction`).
+   (`solana:signTransaction`). A transaction lives about half a minute, so a
+   fresh one is asked for once the terms are signed
+   (`POST /subscriptions/:id/transaction`), and that one is signed. If it names
+   new terms, they are shown and signed again. A server whose `@mesub/node`
+   predates the route answers 404: the transaction of the review is signed.
 5. **Confirming**: both go to `POST /subscriptions/:id/submit`. Mesub co-signs
    and sends the transaction, and `onSubscribed` fires once it landed.
+   A transaction that expired before it was sent (`transaction_expired`) is
+   replaced once, for the same subscription, and signed again; a second expiry
+   in a row stops with "Nothing was charged."
 
 The button is a `<button>` with `data-mesub-subscribe` and `data-mesub-state`
 (`idle`, `open`, `signing`, `confirming` or `subscribed`). `children` is its
@@ -174,6 +181,11 @@ customer pays the missed period at once, with nothing to sign, through
 nor past its date to pay by. What came of it is said under the button: the
 payment on its way, or why not (a short wallet spends no retry). On Free,
 where Mesub does not try again on its own, the card shows that date to pay by.
+
+One whose charges are held back for a cause that is not the customer's
+(`blocked_since`) says so in one line: payments are on hold, nothing is asked
+of them, and until when their access runs. The cause is never named to them,
+and **Pay now** is not offered meanwhile.
 
 Only the wallet that pays a subscription can sign for it. One already
 connected to your site is found without a prompt; otherwise the customer picks

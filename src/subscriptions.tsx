@@ -68,7 +68,8 @@ function actionOf(subscription: MesubSubscription, now: number): MesubAction | n
  * there is one. Mesub refuses the rest anyway; the button is not offered.
  */
 export function payableOf(row: MesubSubscription, now: number): boolean {
-    if (row.status !== 'unpaid' || row.paused) return false;
+    // Held back for a cause that is not theirs: paying now would meet the same block.
+    if (row.status !== 'unpaid' || row.paused || row.blocked_since) return false;
     if (row.late_reason === 'approval_revoked' || row.late_reason === 'authority_closed') {
         return false;
     }
@@ -228,6 +229,13 @@ export function fact(row: MesubHeldSubscription): { term: string; date: string }
 /** What to do or expect, in a sentence, when the status alone does not say. Null on a healthy one. */
 export function noteOf(row: MesubHeldSubscription): string | null {
     if (row.paused) return 'Parked: nothing is charged while it is.';
+    // Never whose cause it is: the merchant's setup is not the subscriber's to read.
+    if (row.blocked_since && (row.status === 'active' || row.status === 'unpaid')) {
+        const until = moment(row.access_until);
+        return `Payments are on hold for now. There is nothing for you to do${
+            until ? `, and your access runs until ${until}` : ''
+        }.`;
+    }
     if (row.status === 'unpaid') {
         // Adding funds only fixes a low balance: said for that, and when Mesub names no reason.
         if (row.late_reason === 'approval_revoked') {

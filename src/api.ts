@@ -31,6 +31,8 @@ export interface MesubApi {
     // One of them with its latest charges.
     subscription(id: string): Promise<MesubSubscriptionDetail>;
     prepare(plan: string, wallet: string): Promise<PreparedSubscription>;
+    // A fresh transaction for a checkout still to sign (Mesub-io/backend#427), with the terms it names.
+    transaction(id: string): Promise<PreparedSubscription>;
     submit(id: string, signed: { transaction: string; terms_signature: string }): Promise<Settled>;
     build(action: MesubAction, id: string): Promise<WalletTransaction>;
     confirm(action: MesubAction, id: string, signature: string): Promise<Settled>;
@@ -168,6 +170,13 @@ export function createApi(options: ApiOptions): MesubApi {
                 { plan, wallet },
                 REQUEST_TIMEOUT_MS,
             )) as unknown as PreparedSubscription,
+        transaction: async (id) =>
+            (await request(
+                'POST',
+                `${at(id)}/transaction`,
+                {},
+                REQUEST_TIMEOUT_MS,
+            )) as unknown as PreparedSubscription,
         submit: async (id, signed) =>
             (await request(
                 'POST',
@@ -221,4 +230,12 @@ export function unreachable(error: unknown): boolean {
 /** The merchant's server says nobody is signed in on its site. */
 export function signedOut(error: unknown): boolean {
     return error instanceof MesubClientError && error.status === 401;
+}
+
+/** No such route: a server whose `@mesub/node` predates it. An unknown subscription names its code. */
+export function routeMissing(error: unknown): boolean {
+    if (!(error instanceof MesubClientError)) return false;
+    return (
+        error.status === 405 || (error.status === 404 && error.code !== 'subscription_not_found')
+    );
 }

@@ -1,6 +1,6 @@
 import { useWallets, type UiWallet } from '@wallet-standard/react';
 import { useEffect, useId, useRef, useState } from 'react';
-import { signedOut, unreachable } from './api';
+import { routeMissing, signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
@@ -52,7 +52,14 @@ type View =
     | { name: 'wallet'; pick: WalletView }
     | { name: 'preparing'; signer: Signer }
     | { name: 'review'; signer: Signer; prepared: PreparedSubscription; notice: string | null }
-    | { name: 'signing'; signer: Signer; what: 'terms' | 'transaction'; single: boolean }
+    | {
+          name: 'signing';
+          signer: Signer;
+          // `fresh`: the terms are signed, the transaction to sign is being built.
+          what: 'terms' | 'fresh' | 'transaction';
+          single: boolean;
+          notice: string | null;
+      }
     | { name: 'submitting'; signer: Signer; signature: string | null }
     | {
           name: 'subscribed';
@@ -68,6 +75,10 @@ type View =
 const SAFE = 'Nothing was charged.';
 const PENDING = 'Payment may be pending.';
 const FRESH_TERMS = 'The terms had expired. These are fresh: check them again.';
+const EXPIRED =
+    'The transaction expired before it was sent. Nothing was charged: approve this one.';
+const EXPIRED_TERMS =
+    'The transaction expired before it was sent, and its terms with it. Nothing was charged: check these.';
 
 const STATES: Partial<Record<View['name'], SubscribeState>> = {
     signing: 'signing',
@@ -104,7 +115,10 @@ function notPrepared(error: unknown): Failure {
         return { ...base, title: 'Wrong wallet', message: messageOf(error), action: 'wallet' };
     }
     if (status === 404) {
-        return { ...base, title: 'Plan not found', message: messageOf(error), action: 'close' };
+        // The checkout itself is gone, not the plan: another one can be made.
+        return error instanceof MesubClientError && error.code === 'subscription_not_found'
+            ? { ...base, title: 'Could not subscribe', message: messageOf(error), action: 'retry' }
+            : { ...base, title: 'Plan not found', message: messageOf(error), action: 'close' };
     }
     // A return asked while its billing period turns: a wait, not a no.
     if (error instanceof MesubClientError && error.code === 'comeback_period_rolling') {
@@ -162,7 +176,11 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         cancelUrl: string | null;
         // Whether the terms signed were for one charge: the receipt says the same.
         single: boolean;
+        // The message `terms_signature` is over: other terms need another signature.
+        terms: string;
     } | null>(null);
+    // Transactions that expired at submit, in a row: the first is replaced, the second stops.
+    const expiries = useRef(0);
     const latest = useRef({ onState, onSubscribed });
     latest.current = { onState, onSubscribed };
 
@@ -199,16 +217,48 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         setView({ name: 'failed', failure, signer, signature });
     }
 
+    // The server refused to build anything: nothing was paid, whatever was signed.
+    function refused(error: unknown, signer: Signer) {
+        if (signedOut(error)) setView({ name: 'signed-out' });
+        else fail(notPrepared(error), signer);
+    }
+
+    function notSigned(signer: Signer, title: string, error: unknown) {
+        fail(
+            {
+                step: 'approve',
+                title,
+                message:
+                    error instanceof WalletError
+                        ? error.message
+                        : `${signer.wallet.name} did not sign.`,
+                moved: 'safe',
+                action: 'retry',
+                icon: 'wallet',
+            },
+            signer,
+        );
+    }
+
     async function prepare(signer: Signer, notice: string | null = null) {
         const current = begin();
+        expiries.current = 0;
         setView({ name: 'preparing', signer });
         try {
             const prepared = await api.prepare(slug, signer.account.address);
             if (current()) setView({ name: 'review', signer, prepared, notice });
         } catch (error) {
-            if (!current()) return;
-            if (signedOut(error)) setView({ name: 'signed-out' });
-            else fail(notPrepared(error), signer);
+            if (current()) refused(error, signer);
+        }
+    }
+
+    /** A fresh transaction for that checkout. Null from a server whose routes predate it. */
+    async function fresh(id: string): Promise<PreparedSubscription | null> {
+        try {
+            return await api.transaction(id);
+        } catch (error) {
+            if (routeMissing(error)) return null;
+            throw error;
         }
     }
 
@@ -243,33 +293,18 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         if (shown.current.name !== 'review' || shown.current.prepared !== prepared) return;
         const single = singleCharge(plan, prepared.terms.message);
         const current = begin();
-        const notSigned = (title: string, error: unknown) =>
-            fail(
-                {
-                    step: 'approve',
-                    title,
-                    message:
-                        error instanceof WalletError
-                            ? error.message
-                            : `${signer.wallet.name} did not sign.`,
-                    moved: 'safe',
-                    action: 'retry',
-                    icon: 'wallet',
-                },
-                signer,
-            );
         // Never sign stale terms: ask the server again, and show what it answers.
         if (expired(prepared)) {
             await prepare(signer, FRESH_TERMS);
             return;
         }
 
-        setView({ name: 'signing', signer, what: 'terms', single });
+        setView({ name: 'signing', signer, what: 'terms', single, notice: null });
         let termsSignature;
         try {
             termsSignature = await signText(signer, prepared.terms.message);
         } catch (error) {
-            if (current()) notSigned('Terms not signed', error);
+            if (current()) notSigned(signer, 'Terms not signed', error);
             return;
         }
         if (!current()) return;
@@ -279,26 +314,96 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             return;
         }
 
-        setView({ name: 'signing', signer, what: 'transaction', single });
+        // A transaction lives 150 blocks from when it is built: built now, not while the terms were read.
+        setView({ name: 'signing', signer, what: 'fresh', single, notice: null });
+        let latest;
+        try {
+            // An older server has no such route: the transaction held is signed.
+            latest = (await fresh(prepared.subscription.id)) ?? prepared;
+        } catch (error) {
+            if (current()) refused(error, signer);
+            return;
+        }
+        if (!current()) return;
+        // It names other terms than the ones just signed: shown, then signed again.
+        if (latest.terms.message !== prepared.terms.message) {
+            setView({ name: 'review', signer, prepared: latest, notice: FRESH_TERMS });
+            return;
+        }
+        await pay(signer, latest, termsSignature, single, null);
+    }
+
+    /** Has the transaction signed, and submits it with the terms signature held. */
+    async function pay(
+        signer: Signer,
+        held: PreparedSubscription,
+        termsSignature: string,
+        single: boolean,
+        notice: string | null,
+    ) {
+        const current = begin();
+        setView({ name: 'signing', signer, what: 'transaction', single, notice });
         let signed;
         try {
             // Signed, not sent: Mesub co-signs and sends it.
-            signed = await signOnly(signer, chain, prepared.transaction);
+            signed = await signOnly(signer, chain, held.transaction);
         } catch (error) {
-            if (current()) notSigned('Transaction not signed', error);
+            if (current()) notSigned(signer, 'Transaction not signed', error);
             return;
         }
         if (!current()) return;
 
         sent.current = {
-            id: prepared.subscription.id,
+            id: held.subscription.id,
             signed: { transaction: signed.transaction, terms_signature: termsSignature },
             signer,
             signature: signed.signature,
-            cancelUrl: termsCancelUrl(prepared.terms.message),
+            cancelUrl: termsCancelUrl(held.terms.message),
             single,
+            terms: held.terms.message,
         };
         await submit();
+    }
+
+    // Its blockhash died before Mesub sent it: a new transaction for the same subscription, never a new one.
+    async function renew(handed: NonNullable<typeof sent.current>, current: () => boolean) {
+        const { id, signer, single } = handed;
+        const stop = (message: string) =>
+            fail(
+                {
+                    step: 'confirming',
+                    title: 'Transaction expired',
+                    message,
+                    moved: 'safe',
+                    action: 'retry',
+                    icon: 'merchant',
+                },
+                signer,
+            );
+        if (++expiries.current > 1) {
+            stop('The transaction expired again before it could be sent. Try again in a moment.');
+            return;
+        }
+
+        setView({ name: 'signing', signer, what: 'fresh', single, notice: EXPIRED });
+        let latest;
+        try {
+            latest = await fresh(id);
+        } catch (error) {
+            if (current()) refused(error, signer);
+            return;
+        }
+        if (!current()) return;
+        // An older server builds one with a new checkout only: asked for, not started here.
+        if (!latest) {
+            stop('The transaction expired before it could be sent.');
+            return;
+        }
+        if (latest.terms.message !== handed.terms) {
+            setView({ name: 'review', signer, prepared: latest, notice: EXPIRED_TERMS });
+            return;
+        }
+        await pay(signer, latest, handed.signed.terms_signature, single, EXPIRED);
     }
 
     // Also "Check again": Mesub recognises what it already co-signed and answers from the chain.
@@ -341,6 +446,10 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             if (!current()) return;
             if (signedOut(error)) {
                 setView({ name: 'signed-out' });
+                return;
+            }
+            if (error instanceof MesubClientError && error.code === 'transaction_expired') {
+                await renew(handed, current);
                 return;
             }
             const status = error instanceof MesubClientError ? error.status : null;
@@ -712,6 +821,31 @@ function stageScreen(props: {
 
     if (view.name === 'signing') {
         const terms = view.what === 'terms';
+        const notice = view.notice ? (
+            <p data-mesub-notice="" role="status">
+                {view.notice}
+            </p>
+        ) : null;
+        if (view.what === 'fresh') {
+            return {
+                step: 'approve',
+                view: 'approve-fresh',
+                onBack: props.onWallets,
+                body: (
+                    <>
+                        <Hero kind="wait" icon={wallet.icon} />
+                        <h2 id={titleId}>Preparing the payment</h2>
+                        {notice}
+                        <p data-mesub-notice="" role="status" aria-busy="true">
+                            Nothing to approve yet
+                        </p>
+                        <button type="button" data-mesub-cancel="" onClick={props.onClose}>
+                            Cancel
+                        </button>
+                    </>
+                ),
+            };
+        }
         return {
             step: 'approve',
             view: `approve-${view.what}`,
@@ -729,6 +863,7 @@ function stageScreen(props: {
                               ? `Step 2 of 2: ${price} now, a single charge.`
                               : `Step 2 of 2: ${price} now, then ${price} ${every}.`}
                     </p>
+                    {notice}
                     <button type="button" data-mesub-cancel="" onClick={props.onClose}>
                         Cancel
                     </button>

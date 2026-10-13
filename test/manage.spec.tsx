@@ -11,6 +11,7 @@ import {
 import {
     base58,
     bodies,
+    checkout,
     ENDPOINT,
     json,
     made,
@@ -265,12 +266,15 @@ describe('the list', () => {
     });
 
     it('reads again once a subscription was made through the button', async () => {
-        const fetch = server({
-            'GET /plans/pro': () => json(200, plan),
-            'GET /subscriptions': () => json(200, { subscriptions: [] }),
-            'POST /subscriptions': () => json(201, prepared()),
-            'POST /subscriptions/sub_1/submit': () => json(201, { subscription: subscription() }),
-        });
+        const fetch = server(
+            checkout({
+                'GET /plans/pro': () => json(200, plan),
+                'GET /subscriptions': () => json(200, { subscriptions: [] }),
+                'POST /subscriptions': () => json(201, prepared()),
+                'POST /subscriptions/sub_1/submit': () =>
+                    json(201, { subscription: subscription() }),
+            }),
+        );
         registerWallet();
         render(
             <MesubProvider endpoint={ENDPOINT} fetch={fetch}>
@@ -1273,6 +1277,98 @@ describe('paying a late payment now', () => {
         await waitFor(() =>
             expect(seen).toEqual([{ ok: false, message: 'No retries are left for this period.' }]),
         );
+    });
+});
+
+describe('a subscription whose payments are on hold', () => {
+    const UNTIL = '2999-10-07T12:00:00.000Z';
+    const HOLD =
+        /^Payments are on hold for now\. There is nothing for you to do, and your access runs until .+\.$/;
+    const blocked = (over: Partial<MesubSubscription> = {}) =>
+        subscription({
+            blocked_since: '2026-10-04T12:00:00.000Z',
+            blocked_reason: 'receiver_account_missing',
+            access_until: UNTIL,
+            ...over,
+        });
+    const held = (over: Partial<MesubSubscription>) => ({
+        ...subscription(over),
+        action: null,
+        payable: false,
+    });
+
+    it('says one calm line on its card, and never whose setup it is', async () => {
+        setup({ held: [blocked()] });
+
+        const card = await row();
+        const note = card.querySelector('[data-mesub-subscription-note]')!;
+
+        expect(note.textContent).toMatch(HOLD);
+        // Still the subscription it was: active, and cancellable.
+        expect(within(card).getByText('Active')).toBeTruthy();
+        expect(within(card).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+        expect(card.textContent).not.toMatch(/receiver|puller|mint|account|merchant|Mesub/i);
+    });
+
+    it('says the same in the window of one subscription', async () => {
+        const fetch = server({
+            'GET /plans/pro': () => json(200, plan),
+            'GET /subscriptions': () => json(200, { subscriptions: [blocked()] }),
+            'GET /subscriptions/sub_1': () => refusal(404, 'not_found', 'Nothing here.'),
+        });
+        render(
+            <MesubProvider endpoint={ENDPOINT} fetch={fetch}>
+                <ManageButton />
+            </MesubProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Manage subscription' }));
+        const dialog = await screen.findByRole('dialog');
+        await within(dialog).findByRole('heading', { name: 'Pro' });
+
+        expect(dialog.querySelector('[data-mesub-state-note]')!.textContent).toMatch(HOLD);
+        expect(dialog.textContent).not.toMatch(/receiver|puller|mint|merchant/i);
+    });
+
+    it.each(['puller_not_allowed', 'receiver_not_allowed', 'mint_gone', 'mesub'] as const)(
+        'words %s the same',
+        (reason) => {
+            expect(noteOf(held(blocked({ blocked_reason: reason })))).toMatch(HOLD);
+        },
+    );
+
+    it('names no date when the server gives none', () => {
+        expect(noteOf(held(blocked({ access_until: null })))).toBe(
+            'Payments are on hold for now. There is nothing for you to do.',
+        );
+    });
+
+    it('asks nothing of a late one either: no Pay now while it is held', async () => {
+        const late = blocked({
+            status: 'unpaid',
+            payment_status: 'late',
+            next_charge_at: null,
+            next_retry_at: '2099-10-05T00:00:00.000Z',
+        });
+        setup({ held: [late] });
+
+        const card = await row();
+
+        expect(card.querySelector('[data-mesub-subscription-note]')!.textContent).toMatch(HOLD);
+        expect(within(card).queryByRole('button', { name: 'Pay now' })).toBeNull();
+    });
+
+    it.each([
+        ['an older server that omits both fields', {}],
+        ['a server that sends them null', { blocked_since: null, blocked_reason: null }],
+    ])('says nothing of it on %s', (_, over) => {
+        expect(noteOf(held(over))).toBeNull();
+    });
+
+    it('keeps the words of a subscription that is no longer charged', () => {
+        // Mesub clears the block there; a stale one must not promise access.
+        expect(noteOf(held(blocked({ status: 'stopped' })))).toMatch(/^Stopped after missed/);
+        expect(noteOf(held(blocked({ paused: true })))).toMatch(/^Parked/);
     });
 });
 

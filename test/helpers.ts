@@ -133,6 +133,30 @@ export function server(handlers: Record<string, Handler>) {
     });
 }
 
+/** The route a fresh transaction is asked on, once the terms are signed. */
+export const FRESH = 'POST /subscriptions/sub_1/transaction';
+
+/**
+ * The checkout's routes as a current server answers them: a fresh transaction
+ * comes with what `POST /subscriptions` last answered, so with the same terms,
+ * unless the test says otherwise.
+ */
+export function checkout(handlers: Record<string, Handler>): Record<string, Handler> {
+    const create = handlers['POST /subscriptions'];
+    let held: unknown = prepared();
+    return {
+        [FRESH]: () => json(201, held),
+        ...handlers,
+        ...(create && {
+            'POST /subscriptions': async (body) => {
+                const answer = await create(body);
+                if (answer.ok) held = await answer.clone().json();
+                return answer;
+            },
+        }),
+    };
+}
+
 export type Server = ReturnType<typeof server>;
 
 /** The calls made, in order, as `METHOD /path`. */

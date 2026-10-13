@@ -23,4 +23,10 @@ export {
     type UseSubscriptionsResult,
 } from './subscriptions';
 export type { SolanaChain } from './wallet';
-export type { MesubAction, MesubPlan, MesubSubscription, MesubSubscriptionStatus } from './types';
+export type {
+    MesubAction,
+    MesubBlockedReason,
+    MesubPlan,
+    MesubSubscription,
+    MesubSubscriptionStatus,
+} from './types';

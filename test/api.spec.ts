@@ -1,4 +1,4 @@
-import { createApi } from '../src/api';
+import { createApi, routeMissing } from '../src/api';
 import { MesubClientError } from '../src/errors';
 import { json, plan, prepared, refusal, subscription } from './helpers';
 
@@ -57,6 +57,20 @@ describe('the requests, as the routes of @mesub/node expect them', () => {
             credentials: 'include',
             headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
             body: { plan: 'pro', wallet: 'Wa11et' },
+        });
+    });
+
+    it('asks for a fresh transaction with an empty JSON body', async () => {
+        const answer = prepared();
+        const { api, fetch } = client(() => json(201, answer));
+
+        await expect(api.transaction('sub_1')).resolves.toEqual(answer);
+        expect(sent(fetch)).toEqual({
+            url: '/api/mesub/subscriptions/sub_1/transaction',
+            method: 'POST',
+            credentials: 'include',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+            body: {},
         });
     });
 
@@ -269,5 +283,24 @@ describe('timeouts', () => {
 
         await vi.advanceTimersByTimeAsync(15_000);
         expect(settled).toHaveBeenCalledWith(expect.objectContaining({ code: 'timeout' }));
+    });
+});
+
+describe('a route an older server does not have', () => {
+    it.each([
+        [404, 'not_found', true],
+        [404, null, true],
+        [405, 'method_not_allowed', true],
+        // The route is there: it is the subscription that is not.
+        [404, 'subscription_not_found', false],
+        [409, 'not_awaiting_signature', false],
+        [500, null, false],
+        [null, 'network', false],
+    ] as const)('reads %s %s as missing: %s', (status, code, missing) => {
+        expect(routeMissing(new MesubClientError('No.', status, code))).toBe(missing);
+    });
+
+    it('is not any other error', () => {
+        expect(routeMissing(new Error('No.'))).toBe(false);
     });
 });

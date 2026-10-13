@@ -1,6 +1,13 @@
 import { useEffect, useId, useState } from 'react';
 import { useMesubInternal } from './context';
-import { paidIn, paymentSaid, pickSubscription, retryOf, symbolOf } from './detail-logic';
+import {
+    paidBrief,
+    paidIn,
+    paymentSaid,
+    pickSubscription,
+    retryOf,
+    symbolOf,
+} from './detail-logic';
 import { MesubDialog } from './dialog';
 import {
     cadence,
@@ -10,7 +17,8 @@ import {
     formatUsd,
     grouped,
     moment,
-    priceOf,
+    briefPrice,
+    fit,
     shortAddress,
     shortMoment,
     tokenOf,
@@ -145,7 +153,12 @@ export function SubscriptionDialog({
         const upcoming = detail?.upcoming ?? [];
         const past = detail?.payments ?? [];
         // In the plan's token; left out while the plan or the total is unknown, never guessed.
-        const total = detail?.paid?.amount ? paidIn(detail.paid.amount, plan, formatAmount) : null;
+        const total = detail?.paid?.amount
+            ? paidBrief(detail.paid.amount, plan, formatAmount)
+            : null;
+        const rate = plan ? briefPrice(plan) : null;
+        const due = (display: string | null | undefined) =>
+            display ? `${grouped(display)}${symbolOf(plan)}` : '';
         // What comes next is told once: on its own line when the server serves it, as a fact otherwise.
         const facts = upcoming.length > 0 && dated?.term !== 'Access until' ? null : dated;
 
@@ -168,11 +181,11 @@ export function SubscriptionDialog({
                     </span>
                 </div>
 
-                {plan ? (
+                {plan && rate ? (
                     <p data-mesub-rate="">
-                        <strong>
+                        <strong title={rate.title} data-mesub-fit={fit(rate.text)}>
                             <TokenLogo plan={plan} />
-                            {priceOf(plan)}
+                            {rate.text}
                         </strong>{' '}
                         {cadence(plan.period_hours)}
                     </p>
@@ -196,7 +209,7 @@ export function SubscriptionDialog({
                     {total ? (
                         <div data-mesub-row="">
                             <dt>Total paid</dt>
-                            <dd>{total}</dd>
+                            <dd title={total.title}>{total.text}</dd>
                         </div>
                     ) : null}
                     {moment(plan?.ends_at) ? (
@@ -231,10 +244,9 @@ export function SubscriptionDialog({
                                                     <small title="Retry">{retryOf(next)}</small>
                                                 ) : null}
                                             </span>
-                                            <span>
-                                                {next.amount_display
-                                                    ? `${grouped(next.amount_display)}${symbolOf(plan)}`
-                                                    : ''}
+                                            {/* Each payment in full: where one checks. */}
+                                            <span data-mesub-fit={fit(due(next.amount_display))}>
+                                                {due(next.amount_display)}
                                             </span>
                                         </li>
                                     ))}
@@ -267,7 +279,7 @@ export function SubscriptionDialog({
                                                         </small>
                                                     ) : null}
                                                 </span>
-                                                <span>
+                                                <span data-mesub-fit={fit(amount ?? '')}>
                                                     {payment.signature &&
                                                     payment.outcome === 'paid' ? (
                                                         <a

@@ -301,7 +301,7 @@ describe('the checkout, screen by screen', () => {
         const wallet = mountCheckout(bonk, TOKENS);
         const dialog = await toPlan();
 
-        expect(text(dialog, '[data-mesub-price] strong')).toBe('30,000 Bonk');
+        expect(text(dialog, '[data-mesub-price] strong')).toBe('30K Bonk');
         expect(text(dialog, '[data-mesub-usd]')).toBe('about $0.10 every hour');
         expect(dialog.querySelector('[data-mesub-unverified]')).toBeNull();
 
@@ -315,10 +315,8 @@ describe('the checkout, screen by screen', () => {
         expect(image.getAttribute('height')).toBe('20');
         expect(image.closest('[data-mesub-price] strong')).toBeTruthy();
 
-        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30,000 Bonk');
-        expect(text(dialog, '[data-mesub-price]')).toBe(
-            '30,000 Bonkevery hourabout $0.10 every hour',
-        );
+        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30K Bonk');
+        expect(text(dialog, '[data-mesub-price]')).toBe('30K Bonkevery hourabout $0.10 every hour');
         expect(logo(dialog)).toBeTruthy();
         expect(termsRows(dialog)).toEqual([
             ['First charge', '30,000 Bonk now'],
@@ -328,8 +326,8 @@ describe('the checkout, screen by screen', () => {
         ]);
 
         await toDone(dialog);
-        expect(within(dialog).getByText('Pro, 30,000 Bonk every hour')).toBeTruthy();
-        expect(paidToday(dialog)).toBe('30,000 Bonkabout $0.10');
+        expect(within(dialog).getByText('Pro, 30K Bonk every hour')).toBeTruthy();
+        expect(paidToday(dialog)).toBe('30K Bonkabout $0.10');
         // What the wallet signed is the server's message, to the letter.
         expect(wallet.signMessage.mock.calls[0]![0]).toEqual({
             account: wallet.account,
@@ -343,19 +341,19 @@ describe('the checkout, screen by screen', () => {
 
         fireEvent.error(logo(dialog)!);
         expect(dialog.querySelector('img[data-mesub-token-logo]')).toBeNull();
-        expect(text(dialog, '[data-mesub-price] strong')).toBe('30,000 Bonk');
+        expect(text(dialog, '[data-mesub-price] strong')).toBe('30K Bonk');
 
         await toReview(dialog);
         fireEvent.error(logo(dialog)!);
         expect(logo(dialog)).toBeNull();
-        expect(text(dialog, '[data-mesub-price] strong')).toBe('30,000 Bonk');
+        expect(text(dialog, '[data-mesub-price] strong')).toBe('30K Bonk');
     });
 
     it('an unverified token: said so, with its mint, and no image', async () => {
         mountCheckout(unverified, TOKENS);
         const dialog = await toPlan();
 
-        expect(text(dialog, '[data-mesub-price] strong')).toBe('30,000 FAKE');
+        expect(text(dialog, '[data-mesub-price] strong')).toBe('30K FAKE');
         expect(text(dialog, '[data-mesub-unverified]')).toBe(
             'Unverified token: Fake Coin, mint DezX…B263',
         );
@@ -363,7 +361,7 @@ describe('the checkout, screen by screen', () => {
         expect(text(dialog, '[data-mesub-usd]')).toBe('about $0.10 every hour');
         expect(logo(dialog)).toBeNull();
 
-        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30,000 FAKE');
+        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30K FAKE');
         expect(text(dialog, '[data-mesub-unverified]')).toBe(
             'Unverified token: Fake Coin, mint DezX…B263',
         );
@@ -376,7 +374,7 @@ describe('the checkout, screen by screen', () => {
         ]);
 
         await toDone(dialog);
-        expect(paidToday(dialog)).toBe('30,000 FAKEabout $0.10');
+        expect(paidToday(dialog)).toBe('30K FAKEabout $0.10');
     });
 
     it('a hostile symbol: text, cut short, never markup', async () => {
@@ -390,14 +388,14 @@ describe('the checkout, screen by screen', () => {
         );
         const dialog = await toPlan();
 
-        expect(text(dialog, '[data-mesub-price] strong')).toBe('30,000 <img src=x o…');
+        expect(text(dialog, '[data-mesub-price] strong')).toBe('30K <img src=x o…');
         expect(text(dialog, '[data-mesub-unverified]')).toBe(
             'Unverified token: <script>alert(1)</script>, mint DezX…B263',
         );
         expect(dialog.querySelector('[data-mesub-price] :is(img, b, script)')).toBeNull();
         expect(dialog.querySelector('script')).toBeNull();
 
-        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30,000 <img src=x o…');
+        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30K <img src=x o…');
         expect(dialog.querySelector('[data-mesub-terms] :is(img, b, script)')).toBeNull();
         expect((window as unknown as { pwned?: number }).pwned).toBeUndefined();
     });
@@ -406,11 +404,11 @@ describe('the checkout, screen by screen', () => {
         mountCheckout(older, TOKENS);
         const dialog = await toPlan();
 
-        expect(text(dialog, '[data-mesub-price]')).toBe('30,000 DezX…B263every hour');
+        expect(text(dialog, '[data-mesub-price]')).toBe('30K DezX…B263every hour');
         expect(dialog.querySelector('[data-mesub-price]')?.children).toHaveLength(2);
         expect(logo(dialog)).toBeNull();
 
-        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30,000 DezX…B263');
+        expect((await toReview(dialog)).textContent).toBe('Sign and pay 30K DezX…B263');
         expect(termsRows(dialog)).toEqual([
             ['First charge', '30,000 tokens now'],
             ['Then', '30,000 tokens every hour, until you cancel'],
@@ -419,8 +417,8 @@ describe('the checkout, screen by screen', () => {
         ]);
 
         await toDone(dialog);
-        expect(within(dialog).getByText('Pro, 30,000 DezX…B263 every hour')).toBeTruthy();
-        expect(paidToday(dialog)).toBe('30,000 DezX…B263');
+        expect(within(dialog).getByText('Pro, 30K DezX…B263 every hour')).toBeTruthy();
+        expect(paidToday(dialog)).toBe('30K DezX…B263');
     });
 
     it('says a tiny dollar value in words', async () => {
@@ -439,7 +437,7 @@ describe('the checkout, screen by screen', () => {
         mountCheckout({ ...bonk, amount_usd: null }, TOKENS);
         const dialog = await toPlan();
         expect(dialog.querySelector('[data-mesub-usd]')).toBeNull();
-        expect(text(dialog, '[data-mesub-price]')).toBe('30,000 Bonkevery hour');
+        expect(text(dialog, '[data-mesub-price]')).toBe('30K Bonkevery hour');
     });
 });
 
@@ -510,7 +508,7 @@ describe('the subscriptions, listed and opened', () => {
         mount(bonk, [], 'list');
         const price = await listed();
 
-        expect(price.textContent).toBe('30,000 Bonk every hour');
+        expect(price.textContent).toBe('30K Bonk every hour');
         expect(logo(price)?.getAttribute('src')).toBe(LOGO);
         fireEvent.error(logo(price)!);
         expect(logo(price)).toBeNull();
@@ -520,14 +518,14 @@ describe('the subscriptions, listed and opened', () => {
         mount(unverified, [], 'list');
         const price = await listed();
 
-        expect(price.textContent).toBe('30,000 FAKE every hour');
+        expect(price.textContent).toBe('30K FAKE every hour');
         expect(logo(price)).toBeNull();
     });
 
     it('lists a plan from an older server as before, with the separator', async () => {
         mount(older, [], 'list');
 
-        expect((await listed()).textContent).toBe('30,000 DezX…B263 every hour');
+        expect((await listed()).textContent).toBe('30K DezX…B263 every hour');
     });
 
     it('opens a verified coin: each payment with what it was worth at the charge', async () => {
@@ -540,9 +538,9 @@ describe('the subscriptions, listed and opened', () => {
         ]);
         const dialog = await open();
 
-        expect(text(dialog, '[data-mesub-rate]')).toBe('30,000 Bonk every hour');
+        expect(text(dialog, '[data-mesub-rate]')).toBe('30K Bonk every hour');
         expect(logo(dialog.querySelector('[data-mesub-rate]')!)?.getAttribute('src')).toBe(LOGO);
-        expect(rows(dialog).find(([label]) => label === 'Total paid')?.[1]).toBe('90,000 Bonk');
+        expect(rows(dialog).find(([label]) => label === 'Total paid')?.[1]).toBe('90K Bonk');
         // The price at the charge is a fact: no "about".
         expect(amounts(dialog)).toEqual([
             '30,000 Bonk',
@@ -568,7 +566,7 @@ describe('the subscriptions, listed and opened', () => {
         mount(unverified, [charge('0.1')]);
         const dialog = await open();
 
-        expect(text(dialog, '[data-mesub-rate]')).toBe('30,000 FAKE every hour');
+        expect(text(dialog, '[data-mesub-rate]')).toBe('30K FAKE every hour');
         expect(logo(dialog)).toBeNull();
         expect(amounts(dialog)).toEqual(['30,000 FAKE', '30,000 FAKE$0.10']);
     });
@@ -577,8 +575,8 @@ describe('the subscriptions, listed and opened', () => {
         mount(older, [charge()]);
         const dialog = await open();
 
-        expect(text(dialog, '[data-mesub-rate]')).toBe('30,000 DezX…B263 every hour');
-        expect(rows(dialog).find(([label]) => label === 'Total paid')?.[1]).toBe('90,000');
+        expect(text(dialog, '[data-mesub-rate]')).toBe('30K DezX…B263 every hour');
+        expect(rows(dialog).find(([label]) => label === 'Total paid')?.[1]).toBe('90K');
         expect(amounts(dialog)).toEqual(['30,000', '30,000']);
         expect(dialog.querySelector('[data-mesub-payment] > span:last-child small')).toBeNull();
     });

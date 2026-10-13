@@ -10,7 +10,7 @@ import {
 import { signedOut } from './api';
 import { useMesubInternal } from './context';
 import { MesubClientError } from './errors';
-import { cadence, day, moment, priceOf, shortAddress } from './format';
+import { briefPrice, cadence, day, moment, fit, shortAddress } from './format';
 import { TokenLogo } from './screens';
 import type { MesubAction, MesubPlan, MesubSubscription } from './types';
 
@@ -387,6 +387,7 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                     const name = plan?.name ?? row.plan ?? 'Subscription';
                     const since = day(row.confirmed_at);
                     const note = noteOf(row);
+                    const price = plan ? briefPrice(plan) : null;
                     return (
                         <li key={row.id} data-mesub-subscription={row.id}>
                             <div data-mesub-subscription-head="">
@@ -405,11 +406,11 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                                     {row.paused ? 'Parked' : (STATUS[row.status] ?? row.status)}
                                 </span>
                             </div>
-                            {plan ? (
+                            {plan && price ? (
                                 <p data-mesub-subscription-price="">
-                                    <strong>
+                                    <strong title={price.title} data-mesub-fit={fit(price.text)}>
                                         <TokenLogo plan={plan} />
-                                        {priceOf(plan)}
+                                        {price.text}
                                     </strong>{' '}
                                     {cadence(plan.period_hours)}
                                 </p>

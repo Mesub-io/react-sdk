@@ -2,7 +2,7 @@ import type { UiWallet } from '@wallet-standard/react';
 import { useState, type ReactNode } from 'react';
 import { INSTALL_ICONS } from './brand';
 import type { DialogScreen } from './dialog';
-import { explorerUrl, planUsd, priceOf, tokenOf, unverifiedNote } from './format';
+import { briefPrice, explorerUrl, fit, planUsd, tokenOf, unverifiedNote } from './format';
 import type { MesubPlan } from './types';
 import { isSolanaWallet, lacking, usable, type Purpose, type SolanaChain } from './wallet';
 
@@ -91,12 +91,14 @@ export function Price({
 }) {
     const usd = planUsd(plan);
     const note = unverifiedNote(plan);
+    const price = briefPrice(plan);
 
     return (
         <p data-mesub-price="">
-            <strong>
+            {/* Short where it can be, the exact amount on hover; a long one shrinks. */}
+            <strong title={price.title} data-mesub-fit={fit(price.text)}>
                 <TokenLogo plan={plan} />
-                {priceOf(plan)}
+                {price.text}
             </strong>
             <span>{every}</span>
             {usd ? <small data-mesub-usd="">{single ? usd : `${usd} ${every}`}</small> : null}

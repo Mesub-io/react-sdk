@@ -109,6 +109,57 @@ export function priceOf(plan: Priced & Pick<MesubPlan, 'amount_display'>): strin
     return `${grouped(plan.amount_display)} ${tokenOf(plan).unit}`;
 }
 
+const UNITS = ['K', 'M', 'B', 'T'];
+
+/**
+ * `30000` is `30K`, `30500` is `30.5K`, `6000000000` is `6B`: from 10,000 up,
+ * under 1e15, and only when nothing is lost at two decimals. Null when the
+ * amount stays in full. On the digits as text: never rounded, never a float.
+ */
+export function short(display: string): string | null {
+    if (!/^\d+$/.test(display)) return null;
+    const digits = display.replace(/^0+(?=\d)/, '');
+    if (digits.length < 5 || digits.length > 15) return null;
+
+    // The largest unit it reaches: K for 5 or 6 digits, T for 13 to 15.
+    const unit = Math.floor((digits.length - 1) / 3);
+    const cut = digits.length - unit * 3;
+    const rest = digits.slice(cut);
+    if (/[1-9]/.test(rest.slice(2))) return null;
+
+    const decimals = rest.slice(0, 2).replace(/0+$/, '');
+    return `${digits.slice(0, cut)}${decimals ? `.${decimals}` : ''}${UNITS[unit - 1]}`;
+}
+
+/** An amount where it is read fast. `title` is the exact one, set only when `text` is short. */
+export interface Brief {
+    text: string;
+    title: string | undefined;
+}
+
+/** Short when the rule allows and the token is no vouched stablecoin, in full otherwise. */
+export function brief(display: string, vouched: boolean, unit = ''): Brief {
+    const full = `${grouped(display)}${unit}`;
+    const cut = vouched ? null : short(display);
+
+    return cut ? { text: `${cut}${unit}`, title: full } : { text: full, title: undefined };
+}
+
+/** `priceOf` where it is read fast: `30K Bonk`, `1,500 USDC`, `30,512 Bonk`. */
+export function briefPrice(plan: Priced & Pick<MesubPlan, 'amount_display'>): Brief {
+    const token = tokenOf(plan);
+
+    return brief(plan.amount_display, token.vouched, ` ${token.unit}`);
+}
+
+/** How far a long amount shrinks to stay in its box, for `data-mesub-fit`. None at ordinary lengths. */
+export function fit(text: string): '2' | '3' | '4' | undefined {
+    const length = Array.from(text).length;
+    if (length > 30) return '4';
+    if (length > 18) return '3';
+    return length > 14 ? '2' : undefined;
+}
+
 /** The plan's dollar value as an estimate, or null: never beside a vouched stablecoin. */
 export function planUsd(plan: Priced & Pick<MesubPlan, 'amount_usd'>): string | null {
     return tokenOf(plan).vouched ? null : aboutUsd(plan.amount_usd);

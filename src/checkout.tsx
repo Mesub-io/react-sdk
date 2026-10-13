@@ -5,12 +5,13 @@ import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
 import {
+    briefPrice,
     cadence,
     chargedOnce,
+    fit,
     moment,
     manageLink,
     planUsd,
-    priceOf,
     shortAddress,
     termsCancelUrl,
     termsFacts,
@@ -627,7 +628,8 @@ function stageScreen(props: {
     onClose(): void;
 }): DialogScreen {
     const { view, plan, chain, titleId } = props;
-    const price = priceOf(plan);
+    // Short where it is read fast; the terms keep the exact amount.
+    const { text: price, title: exact } = briefPrice(plan);
     // A plan with an end date stops charging there: said before anything is signed.
     const ends = moment(plan.ends_at);
     // The terms once they are on screen or signed, the plan before.
@@ -805,6 +807,8 @@ function stageScreen(props: {
                     <button
                         type="button"
                         data-mesub-submit=""
+                        title={exact}
+                        data-mesub-fit={fit(price)}
                         onClick={() => props.onSign(view.signer, view.prepared)}
                     >
                         Sign and pay {price}
@@ -854,7 +858,7 @@ function stageScreen(props: {
                     <h2 id={titleId}>
                         {terms ? 'Sign the terms' : 'Approve the payment'} in {wallet.name}
                     </h2>
-                    <p>
+                    <p title={terms ? undefined : exact}>
                         {terms
                             ? 'Step 1 of 2: a message, it moves nothing.'
                             : single
@@ -903,13 +907,13 @@ function stageScreen(props: {
             <>
                 <Hero kind="check" />
                 <h2 id={titleId}>You are subscribed</h2>
-                <p>
+                <p title={exact}>
                     {plan.name}, {price} {every}
                 </p>
                 <dl data-mesub-summary="">
                     <div data-mesub-row="">
                         <dt>Paid today</dt>
-                        <dd>
+                        <dd title={exact}>
                             {price}
                             {planUsd(plan) ? <small>{planUsd(plan)}</small> : null}
                         </dd>

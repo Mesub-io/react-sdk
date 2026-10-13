@@ -1,4 +1,4 @@
-import { grouped, tokenOf } from './format';
+import { brief, grouped, tokenOf, type Brief } from './format';
 import type { MesubPayment, MesubPlan, MesubSubscription } from './types';
 
 /** Statuses of a subscription worth opening first: something is still running or owed. */
@@ -62,6 +62,18 @@ export function paidIn(
     if (!plan || !/^\d+$/.test(amount)) return null;
 
     return `${grouped(format(amount, plan.decimals))}${symbolOf(plan)}`;
+}
+
+/** `paidIn` where it is read fast: short when the rule allows, the exact amount as `title`. */
+export function paidBrief(
+    amount: string,
+    plan: (Pick<MesubPlan, 'decimals' | 'symbol'> & Partial<Pick<MesubPlan, 'token'>>) | undefined,
+    format: (amount: string, decimals: number) => string,
+): Brief | null {
+    if (!plan || !/^\d+$/.test(amount)) return null;
+    const { vouched } = tokenOf({ mint: '', ...plan });
+
+    return brief(format(amount, plan.decimals), vouched, symbolOf(plan));
 }
 
 /** ` Bonk` after an amount in a list, or nothing: a short mint has no room there. */

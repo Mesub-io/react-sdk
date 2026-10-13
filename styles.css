@@ -1852,6 +1852,73 @@
   font-weight: 400;
 }
 
+/* ------------------------------------------------------- long amounts
+ * An amount left in full digits never leaves its box: [data-mesub-fit] is set
+ * past a length ("2", "3", "4"), the text shrinks, then breaks anywhere.
+ * Ordinary amounts carry no attribute and keep their size.
+ */
+[data-mesub-price] strong[data-mesub-fit] {
+  min-inline-size: 0;
+}
+/* one line of the same height as an ordinary price */
+[data-mesub-price] strong[data-mesub-fit="2"] {
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+/* two lines within that height */
+[data-mesub-price] strong[data-mesub-fit="3"] {
+  font-size: 20px;
+  line-height: 23px;
+  letter-spacing: -0.01em;
+}
+[data-mesub-price] strong[data-mesub-fit="4"] {
+  font-size: 16px;
+  line-height: 23px;
+  letter-spacing: 0;
+}
+[data-mesub-price] strong:is([data-mesub-fit="3"], [data-mesub-fit="4"]) [data-mesub-token-logo] {
+  inline-size: 18px;
+  block-size: 18px;
+  margin-inline-end: 6px;
+}
+/* two lines fit the button's own height */
+[data-mesub-submit]:is([data-mesub-fit="3"], [data-mesub-fit="4"]) {
+  padding-block: 5px;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+[data-mesub-row] dt {
+  flex: none;
+}
+[data-mesub-row] dd {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+[data-mesub-dialog] p[data-mesub-rate],
+[data-mesub-subscription-price] {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+[data-mesub-rate] strong:is([data-mesub-fit="3"], [data-mesub-fit="4"]) {
+  font-size: 20px;
+  line-height: 26px;
+  letter-spacing: -0.01em;
+}
+[data-mesub-subscription-price] strong:is([data-mesub-fit="3"], [data-mesub-fit="4"]) {
+  font-size: 16px;
+  line-height: 22px;
+}
+/* a payment in full digits: on a line of its own under the date and the word */
+[data-mesub-payment] > span:last-child {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+[data-mesub-payment] > span[data-mesub-fit] {
+  grid-column: 1 / -1;
+  padding-block-end: 8px;
+}
 
 @media (max-width: 479.98px) {
   [data-mesub-dialog] { padding: 24px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
@@ -1860,6 +1927,9 @@
   [data-mesub-dialog] { padding-block-start: 14px; }
 
   [data-mesub-price] strong { font-size: 40px; line-height: 44px; }
+  [data-mesub-price] strong[data-mesub-fit="2"] { font-size: 24px; }
+  [data-mesub-price] strong[data-mesub-fit="3"] { font-size: 18px; line-height: 22px; }
+  [data-mesub-price] strong[data-mesub-fit="4"] { font-size: 15px; line-height: 22px; }
   [data-mesub-wallets] [data-mesub-wallet], [data-mesub-install] { min-block-size: 60px; }
 }
 

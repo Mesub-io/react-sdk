@@ -3,6 +3,15 @@
  * dates as ISO strings, chain numbers as strings.
  */
 
+/** What Mesub knows of a plan's token. Never the merchant's words. */
+export interface MesubToken {
+    symbol: string | null;
+    name: string | null;
+    logo_url: string | null;
+    // True for a mint Mesub vouches for, or one Jupiter verifies.
+    verified: boolean;
+}
+
 /** A plan, as `GET /plans/:slug` serves it. */
 export interface MesubPlan {
     slug: string;
@@ -18,6 +27,10 @@ export interface MesubPlan {
     // Null for a token Mesub does not vouch for.
     symbol: string | null;
     mint: string;
+    // Both absent from a server that predates them.
+    token?: MesubToken | null | undefined;
+    // Decimal dollars at the latest known price.
+    amount_usd?: string | null | undefined;
     period_hours: number;
     network: 'devnet' | 'mainnet-beta';
     status: 'active' | 'sunset';
@@ -115,6 +128,8 @@ export interface MesubPayment {
     outcome: string;
     // The token's base units.
     amount: string;
+    // Decimal dollars at the charge. Absent from an older server.
+    amount_usd?: string | null | undefined;
     reason: string | null;
     // The transaction, once something was sent.
     signature: string | null;

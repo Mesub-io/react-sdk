@@ -9,6 +9,8 @@ import {
     chargedOnce,
     moment,
     manageLink,
+    planUsd,
+    priceOf,
     shortAddress,
     termsCancelUrl,
     termsFacts,
@@ -19,6 +21,7 @@ import {
     failureScreen,
     Hero,
     Merchant,
+    Price,
     rememberWallet,
     signedOutScreen,
     walletScreen,
@@ -624,7 +627,7 @@ function stageScreen(props: {
     onClose(): void;
 }): DialogScreen {
     const { view, plan, chain, titleId } = props;
-    const price = `${plan.amount_display} ${plan.symbol ?? shortAddress(plan.mint)}`;
+    const price = priceOf(plan);
     // A plan with an end date stops charging there: said before anything is signed.
     const ends = moment(plan.ends_at);
     // The terms once they are on screen or signed, the plan before.
@@ -687,10 +690,7 @@ function stageScreen(props: {
                 <>
                     {merchant}
                     <h2 id={titleId}>{plan.name}</h2>
-                    <p data-mesub-price="">
-                        <strong>{price}</strong>
-                        <span>{every}</span>
-                    </p>
+                    <Price plan={plan} every={every} single={single} />
                     {ends ? (
                         <p data-mesub-ends="">
                             {single
@@ -742,10 +742,7 @@ function stageScreen(props: {
                 <>
                     {merchant}
                     <h2 id={titleId}>{plan.name}</h2>
-                    <p data-mesub-price="">
-                        <strong>{price}</strong>
-                        <span>{every}</span>
-                    </p>
+                    <Price plan={plan} every={every} single={single} />
                     {view.notice ? (
                         <p data-mesub-notice="" role="status">
                             {view.notice}
@@ -778,7 +775,7 @@ function stageScreen(props: {
                         <summary>The terms you sign</summary>
                         {/* A plain list, the rows of the one above: what a person needs of the terms. */}
                         <dl data-mesub-summary="">
-                            {termsFacts(terms.message).map((fact) => (
+                            {termsFacts(terms.message, plan).map((fact) => (
                                 <div data-mesub-row="" key={fact.label}>
                                     <dt>{fact.label}</dt>
                                     <dd title={fact.full}>
@@ -794,6 +791,7 @@ function stageScreen(props: {
                                         ) : (
                                             fact.value
                                         )}
+                                        {fact.note ? <small> {fact.note}</small> : null}
                                     </dd>
                                 </div>
                             ))}
@@ -911,7 +909,10 @@ function stageScreen(props: {
                 <dl data-mesub-summary="">
                     <div data-mesub-row="">
                         <dt>Paid today</dt>
-                        <dd>{price}</dd>
+                        <dd>
+                            {price}
+                            {planUsd(plan) ? <small>{planUsd(plan)}</small> : null}
+                        </dd>
                     </div>
                     {nextCharge ? (
                         <div data-mesub-row="">

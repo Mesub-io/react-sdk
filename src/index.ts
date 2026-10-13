@@ -29,4 +29,5 @@ export type {
     MesubPlan,
     MesubSubscription,
     MesubSubscriptionStatus,
+    MesubToken,
 } from './types';

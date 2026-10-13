@@ -1,8 +1,9 @@
 import type { UiWallet } from '@wallet-standard/react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { INSTALL_ICONS } from './brand';
 import type { DialogScreen } from './dialog';
-import { explorerUrl } from './format';
+import { explorerUrl, planUsd, priceOf, tokenOf, unverifiedNote } from './format';
+import type { MesubPlan } from './types';
 import { isSolanaWallet, lacking, usable, type Purpose, type SolanaChain } from './wallet';
 
 const LAST_WALLET_KEY = 'mesub:last-wallet';
@@ -49,6 +50,62 @@ export function Explorer({
         >
             {label}
         </a>
+    );
+}
+
+type Token = Pick<MesubPlan, 'symbol' | 'mint' | 'token'>;
+
+/**
+ * The token's image, before an amount: a verified token's only, over https.
+ * Its box is fixed by the stylesheet, and one that fails to load is taken out.
+ */
+export function TokenLogo({ plan }: { plan: Token }) {
+    const { logo } = tokenOf(plan);
+    const [failed, setFailed] = useState<string | null>(null);
+    if (!logo || failed === logo) return null;
+
+    return (
+        <img
+            data-mesub-token-logo=""
+            src={logo}
+            alt=""
+            width={20}
+            height={20}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={() => setFailed(logo)}
+        />
+    );
+}
+
+/** The price of a plan, on the checkout: the amount, how often, then what is worth knowing of the token. */
+export function Price({
+    plan,
+    every,
+    single,
+}: {
+    plan: Token & Pick<MesubPlan, 'amount_display' | 'amount_usd'>;
+    every: string;
+    single: boolean;
+}) {
+    const usd = planUsd(plan);
+    const note = unverifiedNote(plan);
+
+    return (
+        <p data-mesub-price="">
+            <strong>
+                <TokenLogo plan={plan} />
+                {priceOf(plan)}
+            </strong>
+            <span>{every}</span>
+            {usd ? <small data-mesub-usd="">{single ? usd : `${usd} ${every}`}</small> : null}
+            {note ? (
+                <small data-mesub-unverified="" title={plan.mint}>
+                    {note}
+                </small>
+            ) : null}
+        </p>
     );
 }
 

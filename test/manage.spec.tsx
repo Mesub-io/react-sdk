@@ -183,6 +183,27 @@ describe('the list', () => {
         expect(within(await row()).getByRole('button', { name: 'Close' })).toBeTruthy();
     });
 
+    it.each(['closed_elsewhere', 'authority_closed'])(
+        'offers no Close on one whose account was closed outside Mesub (%s)',
+        async (end_reason) => {
+            setup({
+                held: [
+                    subscription({
+                        status: 'ended',
+                        end_reason,
+                        access: false,
+                        access_until: null,
+                        next_charge_at: null,
+                    }),
+                ],
+            });
+
+            const gone = await row();
+            expect(within(gone).getByText('Ended')).toBeTruthy();
+            expect(within(gone).queryByRole('button')).toBeNull();
+        },
+    );
+
     it('says when access ends on one in its last period, and announces no charge', async () => {
         const ends = new Date(Date.now() + 86_400_000).toISOString();
         setup({ held: [subscription({ next_charge_at: null, access_until: ends })] });

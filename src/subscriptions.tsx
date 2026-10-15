@@ -57,7 +57,11 @@ function actionOf(subscription: MesubSubscription, now: number): MesubAction | n
         return !Number.isNaN(end) && end <= now ? 'close' : 'resume';
     }
     if (status === 'ended') {
-        const closed = ['closed', 'authority_closed'].includes(subscription.end_reason ?? '');
+        // Its account is gone already: closed here, or outside Mesub (`closed_elsewhere`,
+        // `authority_closed` before Mesub-io/backend#476).
+        const closed = ['closed', 'closed_elsewhere', 'authority_closed'].includes(
+            subscription.end_reason ?? '',
+        );
         return closed ? null : 'close';
     }
     return null;

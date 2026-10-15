@@ -1128,6 +1128,14 @@ describe('how a charge reads', () => {
             { label: 'Missed, low balance', tone: 'bad' },
         ],
         [
+            { outcome: 'rejected', reason: 'program_4' },
+            { label: 'Missed, approval was removed', tone: 'bad' },
+        ],
+        [
+            { outcome: 'rejected', reason: 'program:4' },
+            { label: 'Missed, approval was removed', tone: 'bad' },
+        ],
+        [
             { outcome: 'rejected', reason: 'something_new' },
             { label: 'Missed', tone: 'bad' },
         ],

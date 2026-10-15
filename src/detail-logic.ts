@@ -32,6 +32,8 @@ export interface PaymentSaid {
 
 const REASONS: Record<string, string> = {
     insufficient_balance: 'low balance',
+    // The token program's OwnerMismatch: the wallet revoked Mesub's approval, or gave it to another app.
+    program_4: 'approval was removed',
 };
 
 /**

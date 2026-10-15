@@ -739,6 +739,100 @@ describe("what the merchant's server answers", () => {
         expect(onChanged).not.toHaveBeenCalled();
     });
 
+    it('builds a new transaction when the confirm says it expired, by its code', async () => {
+        let first = true;
+        const { fetch, wallet } = setup({
+            overrides: {
+                'POST /subscriptions/sub_1/cancel/confirm': () => {
+                    if (!first) return json(201, { subscription: cancelled });
+                    first = false;
+                    return json(201, {
+                        subscription: subscription(),
+                        // Reworded any day: the code decides.
+                        reason: 'Your transaction ran out of time.',
+                        reason_code: 'transaction_expired',
+                    });
+                },
+            },
+        });
+
+        const dialog = await start('Cancel');
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Transaction expired' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'The transaction expired before it landed. Try again with a new one.',
+        );
+        expect(within(dialog).getByText('Nothing changed.')).toBeTruthy();
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Subscription cancelled' }),
+        ).toBeTruthy();
+        expect(bodies(fetch, 'POST /subscriptions/sub_1/cancel')).toHaveLength(2);
+        expect(wallet.signAndSendTransaction).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+        ['cancel', 'Cancel', 'cancellation_not_landed'],
+        ['resume', 'Resume', 'resume_not_landed'],
+        ['close', 'Close', 'close_not_landed'],
+    ] as const)(
+        'checks the same %s again when it has not landed yet, and builds nothing',
+        async (action, label, code) => {
+            let first = true;
+            const done = {
+                cancel: cancelled,
+                resume: subscription(),
+                close: subscription({ status: 'ended', end_reason: 'closed', access: false }),
+            }[action];
+            const { fetch, wallet } = setup({
+                held: [
+                    action === 'cancel'
+                        ? subscription()
+                        : action === 'resume'
+                          ? cancelled
+                          : subscription({
+                                status: 'ended',
+                                end_reason: 'cancelled',
+                                access: false,
+                            }),
+                ],
+                overrides: {
+                    [`POST /subscriptions/sub_1/${action}/confirm`]: () => {
+                        if (!first) return json(201, { subscription: done });
+                        first = false;
+                        return json(201, {
+                            subscription: subscription(),
+                            reason: 'It did not land.',
+                            reason_code: code,
+                        });
+                    },
+                },
+            });
+
+            const dialog = await start(label);
+
+            expect(
+                await within(dialog).findByRole('heading', { name: 'Still confirming' }),
+            ).toBeTruthy();
+            expect(within(dialog).getByRole('alert').textContent).toBe(
+                `The ${action} has not landed yet. Wait a moment, then check again.`,
+            );
+            expect(within(dialog).getByText('The transaction may still land.')).toBeTruthy();
+
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Check again' }));
+            await within(dialog).findByRole('heading', { name: /^Subscription / });
+            expect(wallet.signAndSendTransaction).toHaveBeenCalledTimes(1);
+            expect(bodies(fetch, `POST /subscriptions/sub_1/${action}`)).toHaveLength(1);
+            expect(bodies(fetch, `POST /subscriptions/sub_1/${action}/confirm`)).toEqual([
+                { signature: base58(wallet.signature) },
+                { signature: base58(wallet.signature) },
+            ]);
+        },
+    );
+
     it("shows Mesub's own words on a 409, and asks the wallet nothing", async () => {
         const { wallet } = setup({
             overrides: {

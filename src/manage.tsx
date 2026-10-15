@@ -15,7 +15,7 @@ import {
     type Failure,
     type WalletView,
 } from './screens';
-import type { MesubAction, MesubSubscription } from './types';
+import type { MesubAction, MesubSubscription, Settled } from './types';
 import { connectAccounts, findConnected, signAndSend, WalletError, type Signer } from './wallet';
 
 export interface ManageProps {
@@ -65,6 +65,46 @@ const WORDS: Record<MesubAction, { ask: string; go: string; keep: string; done: 
 
 const messageOf = (error: unknown) =>
     error instanceof MesubClientError ? error.message : 'Something went wrong.';
+
+/** The confirms' `reason_code` for a transaction the chain may still take: checked, not rebuilt. */
+const NOT_YET = ['cancellation_not_landed', 'resume_not_landed', 'close_not_landed'];
+
+/**
+ * What a confirm that settled nothing comes to, by its `reason_code`, never by
+ * its sentence. A code this version does not know is Mesub's sentence, and Try again.
+ */
+function unsettled(action: MesubAction, settled: Settled): Failure {
+    const code = settled.reason_code;
+    // Its blockhash ran out before it landed: nothing changed, and a new one is built.
+    if (code === 'transaction_expired') {
+        return {
+            step: 'confirming',
+            title: 'Transaction expired',
+            message: 'The transaction expired before it landed. Try again with a new one.',
+            moved: 'safe',
+            action: 'retry',
+            icon: 'wallet',
+        };
+    }
+    if (code && NOT_YET.includes(code)) {
+        return {
+            step: 'confirming',
+            title: 'Still confirming',
+            message: `The ${action} has not landed yet. Wait a moment, then check again.`,
+            moved: 'pending',
+            action: 'check',
+            icon: 'wallet',
+        };
+    }
+    return {
+        step: 'confirming',
+        title: 'It did not go through',
+        message: settled.reason,
+        moved: 'safe',
+        action: 'retry',
+        icon: 'wallet',
+    };
+}
 
 /** What the action does, before anything is signed. */
 function consequence(
@@ -291,17 +331,8 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
             latest.current.onChanged(settled.reason ? null : settled.subscription);
             if (!current()) return;
             if (settled.reason) {
-                fail(
-                    {
-                        step: 'confirming',
-                        title: 'It did not go through',
-                        message: settled.reason,
-                        moved: 'safe',
-                        action: 'retry',
-                        icon: 'wallet',
-                    },
-                    signer,
-                );
+                const failure = unsettled(action, settled);
+                fail(failure, signer, failure.moved === 'pending' ? signature : null);
                 return;
             }
             setView({ name: 'done', subscription: settled.subscription, signature });

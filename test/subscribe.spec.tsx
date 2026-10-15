@@ -1419,6 +1419,201 @@ describe('a fresh transaction, once the terms are signed', () => {
         expect(wallet.signMessage).toHaveBeenCalledTimes(1);
         expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
     });
+
+    /** Submit settled nothing, for that `reason_code`, in a sentence the widget never reads. */
+    const unsettled = (code: string) => () =>
+        json(201, {
+            subscription: subscription({ status: 'pending', access: false }),
+            reason: 'Reworded any day.',
+            reason_code: code,
+        });
+
+    it('replaces a transaction whose reason_code says it expired: no failed payment', async () => {
+        const { fetch, wallet, onSubscribed } = setup({
+            overrides: {
+                [FRESH]: inTurn(
+                    () => built(OTHER_TX),
+                    () => built(THIRD_TX),
+                ),
+                [SUBMIT]: inTurn(unsettled('transaction_expired'), () =>
+                    json(201, { subscription: subscription() }),
+                ),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(within(dialog).queryByText('Reworded any day.')).toBeNull();
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX, THIRD_TX]);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(2);
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+        expect(onSubscribed).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks the same transaction again when nothing landed yet, and replaces nothing', async () => {
+        const { fetch, wallet } = setup({
+            overrides: {
+                [SUBMIT]: inTurn(unsettled('nothing_landed'), () =>
+                    json(201, { subscription: subscription() }),
+                ),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Still confirming' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'The transaction has not landed yet. Wait a moment, then check again: nothing is paid twice.',
+        );
+        expect(within(dialog).getByText('Payment may be pending.')).toBeTruthy();
+
+        click('Check again');
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        const [first, second] = bodies(fetch, SUBMIT);
+        expect(second).toEqual(first);
+        expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
+        expect(bodies(fetch, FRESH)).toHaveLength(1);
+    });
+
+    it("shows Mesub's sentence for a code it does not know", async () => {
+        setup({ overrides: { [SUBMIT]: unsettled('subscription_mismatch') } });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Payment did not go through' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe('Reworded any day.');
+    });
+});
+
+describe('transaction_expires_at: a transaction replaced before it dies', () => {
+    const SUBMIT = 'POST /subscriptions/sub_1/submit';
+    const OTHER_TX = Uint8Array.from([9, 9, 9]);
+    const THIRD_TX = Uint8Array.from([8, 8, 8]);
+
+    /** That transaction, dying `ms` from now on the server's clock, with the server's `Date` if given. */
+    const dyingIn = (transaction: Uint8Array, ms: number, serverDate?: number) => () => {
+        const now = serverDate ?? Date.now();
+        return json(
+            201,
+            {
+                ...prepared(),
+                transaction: base64(transaction),
+                transaction_expires_at: new Date(now + ms).toISOString(),
+            },
+            serverDate === undefined ? {} : { Date: new Date(serverDate).toUTCString() },
+        );
+    };
+
+    /** Each call answers with the next, the last one from then on. */
+    function inTurn(...answers: (() => Response)[]): Handler {
+        let call = 0;
+        return () => answers[Math.min(call++, answers.length - 1)]!();
+    }
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const transactionsSigned = (wallet: ReturnType<typeof registerWallet>) =>
+        wallet.signTransaction.mock.calls.map(([input]) => input!.transaction);
+
+    /** The wallet takes `ms` to approve its first transaction. */
+    function slowFirst(wallet: ReturnType<typeof registerWallet>, ms: number) {
+        wallet.signTransaction.mockImplementationOnce(async (input) => {
+            vi.setSystemTime(Date.now() + ms);
+            return [{ signedTransaction: signedBy(wallet.signature, input!.transaction) }];
+        });
+    }
+
+    it('never submits one the wallet held past its life: a fresh one is signed instead', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const { fetch, wallet, onSubscribed } = setup({
+            overrides: {
+                [FRESH]: inTurn(dyingIn(OTHER_TX, 6_000), dyingIn(THIRD_TX, 30_000)),
+            },
+        });
+        // Two seconds in the wallet: under the margin of what a submit takes.
+        slowFirst(wallet, 2_000);
+
+        const dialog = await toReview();
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX, THIRD_TX]);
+        // Only the live one reached Mesub, with the terms signed once.
+        expect(bodies(fetch, SUBMIT)).toEqual([
+            {
+                transaction: base64(signedBy(wallet.signature, THIRD_TX)),
+                terms_signature: base58(wallet.signature),
+            },
+        ]);
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(bodies(fetch, 'POST /subscriptions')).toHaveLength(1);
+        expect(onSubscribed).toHaveBeenCalledTimes(1);
+    });
+
+    it('submits one signed in time', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        const { fetch, wallet } = setup({
+            overrides: { [FRESH]: dyingIn(OTHER_TX, 30_000) },
+        });
+        slowFirst(wallet, 10_000);
+
+        const dialog = await toReview();
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX]);
+        expect(bodies(fetch, FRESH)).toHaveLength(1);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(1);
+    });
+
+    it("counts the time left on the server's clock, not on a visitor's that is a minute ahead", async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        // The server's clock a minute behind this one: by this one, the transaction died already.
+        const behind = () => Date.now() - 60_000;
+        const { fetch, wallet } = setup({
+            overrides: {
+                [FRESH]: inTurn(
+                    () => dyingIn(OTHER_TX, 30_000, behind())(),
+                    () => dyingIn(THIRD_TX, 30_000, behind())(),
+                ),
+            },
+        });
+        // 26 seconds of its 30: past the margin, by the server's clock.
+        slowFirst(wallet, 26_000);
+
+        const dialog = await toReview();
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX, THIRD_TX]);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(1);
+    });
+
+    it('trusts the chain, not a clock that calls a transaction dead on arrival', async () => {
+        const { fetch, wallet } = setup({
+            overrides: { [FRESH]: dyingIn(OTHER_TX, -10_000) },
+        });
+
+        const dialog = await toReview();
+        sign();
+        await within(dialog).findByRole('heading', { name: 'You are subscribed' });
+
+        expect(transactionsSigned(wallet)).toEqual([OTHER_TX]);
+        expect(bodies(fetch, FRESH)).toHaveLength(1);
+        expect(bodies(fetch, SUBMIT)).toHaveLength(1);
+    });
 });
 
 describe('useSubscribe, for a button of your own', () => {

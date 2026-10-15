@@ -204,6 +204,134 @@ describe('the list', () => {
         },
     );
 
+    describe('as `closable` says, on a server that serves it', () => {
+        it.each([
+            ['an ended one', { status: 'ended', end_reason: 'cancelled', access: false }],
+            [
+                'one stopped because its wallet closed the approval for good',
+                { status: 'stopped', stop_reason: 'authority_closed', access: false },
+            ],
+            // Whatever the dates say: the server read the chain.
+            ['a cancellation', { status: 'cancelled', next_charge_at: null }],
+        ] as const)('offers Close on %s', async (_, over) => {
+            setup({
+                held: [subscription({ ...(over as Partial<MesubSubscription>), closable: true })],
+            });
+
+            const held = await row();
+            expect(within(held).getByRole('button', { name: 'Close' })).toBeTruthy();
+            expect(within(held).queryByText('Close from')).toBeNull();
+        });
+
+        it('offers no Close on an ended one that is not closable', async () => {
+            setup({
+                held: [
+                    subscription({
+                        status: 'ended',
+                        end_reason: 'plan_removed',
+                        access: false,
+                        closable: false,
+                        closable_from: null,
+                    }),
+                ],
+            });
+
+            expect(within(await row()).queryByRole('button')).toBeNull();
+        });
+
+        it('says from when a cancellation can be closed, and offers Resume meanwhile', async () => {
+            setup({
+                held: [
+                    subscription({
+                        status: 'cancelled',
+                        next_charge_at: null,
+                        closable: false,
+                        closable_from: '2999-10-04T12:00:00.000Z',
+                    }),
+                ],
+            });
+
+            const held = await row();
+            expect(within(held).getByText('Close from')).toBeTruthy();
+            expect(within(held).getByRole('button', { name: 'Resume' })).toBeTruthy();
+            expect(within(held).queryByRole('button', { name: 'Close' })).toBeNull();
+        });
+
+        it('offers Close once `closable_from` passed with the page open', async () => {
+            setup({
+                held: [
+                    subscription({
+                        status: 'cancelled',
+                        next_charge_at: null,
+                        // The access the server served, ahead: the close date decides.
+                        access_until: '2999-10-04T12:00:00.000Z',
+                        closable: false,
+                        closable_from: '2020-01-01T00:00:00.000Z',
+                    }),
+                ],
+            });
+
+            const held = await row();
+            expect(within(held).getByRole('button', { name: 'Close' })).toBeTruthy();
+            expect(within(held).queryByText('Close from')).toBeNull();
+        });
+
+        it('offers no Resume on a cancellation with no access: it can only be closed later', async () => {
+            setup({
+                held: [
+                    subscription({
+                        status: 'cancelled',
+                        access: false,
+                        access_until: null,
+                        next_charge_at: null,
+                        closable: false,
+                        closable_from: '2999-10-04T12:00:00.000Z',
+                    }),
+                ],
+            });
+
+            const held = await row();
+            expect(within(held).queryByRole('button')).toBeNull();
+            expect(within(held).getByText('Close from')).toBeTruthy();
+            expect(held.querySelector('[data-mesub-subscription-note]')!.textContent).toMatch(
+                /Mesub will not collect it\. Close it once it ends/,
+            );
+        });
+
+        it('offers Cancel on one stopped after its retries, with no close date yet', async () => {
+            setup({
+                held: [
+                    subscription({
+                        status: 'stopped',
+                        stop_reason: 'out_of_retries',
+                        access: false,
+                        closable: false,
+                        closable_from: null,
+                    }),
+                ],
+            });
+
+            const held = await row();
+            expect(within(held).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+            expect(within(held).queryByText('Close from')).toBeNull();
+        });
+
+        it('offers nothing on one stopped for good that Mesub does not read as closable', async () => {
+            setup({
+                held: [
+                    subscription({
+                        status: 'stopped',
+                        stop_reason: 'authority_closed',
+                        access: false,
+                        closable: false,
+                    }),
+                ],
+            });
+
+            expect(within(await row()).queryByRole('button')).toBeNull();
+        });
+    });
+
     it('says when access ends on one in its last period, and announces no charge', async () => {
         const ends = new Date(Date.now() + 86_400_000).toISOString();
         setup({ held: [subscription({ next_charge_at: null, access_until: ends })] });
@@ -1450,9 +1578,33 @@ describe('what a card says under its dates', () => {
         [{ status: 'stopped', late_reason: 'approval_revoked' }, /^Stopped after missed payments/],
         [{ status: 'cancelled' }, /Resume before the end/],
         [{ status: 'stopped' }, /Stopped after missed payments/],
+        // Why it stopped, from `stop_reason` (Mesub-io/backend#402).
+        [
+            { status: 'stopped', stop_reason: 'out_of_retries' },
+            /^Stopped: every retry of the missed payment failed.*cancel it if you are not coming back\.$/,
+        ],
+        [
+            { status: 'stopped', stop_reason: 'retry_deadline_passed' },
+            /^Stopped: the missed payment was not paid by the date to pay by/,
+        ],
+        [
+            { status: 'stopped', stop_reason: 'authority_closed' },
+            /^Stopped: your wallet's approval for this token was closed for good.*access has ended\.$/,
+        ],
+        // One this version does not know: read as no reason.
+        [{ status: 'stopped', stop_reason: 'something_new' }, /^Stopped after missed payments/],
         [{ paused: true }, /Parked/],
     ] as const)('explains %j', (over, text) => {
         expect(noteOf(held(over as Partial<MesubSubscription>, null))).toMatch(text);
+    });
+
+    it('offers the deposit back on one stopped for good, and on a cancellation, once it can be closed', () => {
+        expect(
+            noteOf(held({ status: 'stopped', stop_reason: 'authority_closed' }, 'close')),
+        ).toMatch(/Close it to get its deposit back\.$/);
+        expect(noteOf(held({ status: 'cancelled' }, 'close'))).toBe(
+            'Cancelled, and over. Close it to get its deposit back.',
+        );
     });
 
     it('offers the deposit back on an ended one only when it can be closed', () => {

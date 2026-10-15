@@ -48,15 +48,34 @@ export interface UseSubscriptionsResult {
 // A checkout nobody signed, one that failed, one a newer row replaced: not held.
 const HELD = new Set(['active', 'cancelled', 'unpaid', 'stopped', 'ended']);
 
+/** When a cancelled one can be closed: as the server says, else at the end of its access. */
+function closesAt(subscription: MesubSubscription): number {
+    return Date.parse(
+        subscription.closable_from ??
+            subscription.access_until ??
+            subscription.current_period_end ??
+            '',
+    );
+}
+
 function actionOf(subscription: MesubSubscription, now: number): MesubAction | null {
     const { status } = subscription;
+    // Mesub says whether the chain lets it close now (Mesub-io/backend#402): an ended one, a
+    // cancellation past its end, one stopped because its wallet closed Mesub's access for good.
+    if (subscription.closable === true) return 'close';
+    // Nobody can charge it again, nor bring it back: nothing to cancel.
+    if (status === 'stopped' && subscription.stop_reason === 'authority_closed') return null;
     if (status === 'active' || status === 'unpaid' || status === 'stopped') return 'cancel';
     if (status === 'cancelled') {
-        const end = Date.parse(subscription.access_until ?? subscription.current_period_end ?? '');
+        const end = closesAt(subscription);
         // Past its end with the page still open: the server will say `ended` next read.
-        return !Number.isNaN(end) && end <= now ? 'close' : 'resume';
+        if (!Number.isNaN(end) && end <= now) return 'close';
+        // Cancelled with a payment missed: it cannot be resumed, only closed once it ends.
+        return subscription.access ? 'resume' : null;
     }
     if (status === 'ended') {
+        // A server that says it: not closable means its account is gone, or Mesub cannot close it.
+        if (subscription.closable === false) return null;
         // Its account is gone already: closed here, or outside Mesub (`closed_elsewhere`,
         // `authority_closed` before Mesub-io/backend#476).
         const closed = ['closed', 'closed_elsewhere', 'authority_closed'].includes(
@@ -157,7 +176,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
     useEffect(() => {
         const ends = rows
             .filter((row) => row.status === 'cancelled')
-            .map((row) => Date.parse(row.access_until ?? row.current_period_end ?? ''))
+            .map(closesAt)
             .filter((end) => !Number.isNaN(end) && end > now);
         if (ends.length === 0) return;
         // setTimeout overflows past 24 days: nobody keeps the page open that long.
@@ -231,6 +250,33 @@ export function fact(row: MesubHeldSubscription): { term: string; date: string }
     return null;
 }
 
+/**
+ * When it can be closed, when not yet: the date Mesub serves (Mesub-io/backend#402),
+ * the end of the period a cancellation set. Null once it can be, or with no date known.
+ */
+export function closeFrom(row: MesubHeldSubscription): string | null {
+    if (row.closable !== false || row.action === 'close') return null;
+    return moment(row.closable_from);
+}
+
+/** Why it stopped, by `stop_reason`, in the words the subscriber reads. */
+function stoppedNote(row: MesubHeldSubscription): string {
+    const open =
+        "Its subscription account stays open on your wallet, so the plan's owner could still charge it: cancel it if you are not coming back.";
+    switch (row.stop_reason) {
+        case 'out_of_retries':
+            return `Stopped: every retry of the missed payment failed, and your access has ended. ${open}`;
+        case 'retry_deadline_passed':
+            return `Stopped: the missed payment was not paid by the date to pay by, and your access has ended. ${open}`;
+        case 'authority_closed':
+            return `Stopped: your wallet's approval for this token was closed for good, so no payment can go through any more, and your access has ended.${
+                row.action === 'close' ? ' Close it to get its deposit back.' : ''
+            }`;
+        default:
+            return 'Stopped after missed payments. Nothing more is charged.';
+    }
+}
+
 /** What to do or expect, in a sentence, when the status alone does not say. Null on a healthy one. */
 export function noteOf(row: MesubHeldSubscription): string | null {
     if (row.paused) return 'Parked: nothing is charged while it is.';
@@ -256,8 +302,15 @@ export function noteOf(row: MesubHeldSubscription): string | null {
             ? 'The last payment did not go through, so access is off. Add funds to the wallet, then pay now, with nothing to sign, before the date to pay by.'
             : 'The last payment did not go through. Add funds to the wallet, then pay now.';
     }
-    if (row.status === 'cancelled') return 'Cancelled. Resume before the end to keep it.';
-    if (row.status === 'stopped') return 'Stopped after missed payments. Nothing more is charged.';
+    if (row.status === 'cancelled') {
+        if (row.action === 'close') return 'Cancelled, and over. Close it to get its deposit back.';
+        // Cancelled with a payment missed: no resume, and the payment is not collected.
+        if (!row.access) {
+            return 'Cancelled. Your last payment was missed, so you have no access, and Mesub will not collect it. Close it once it ends to get its deposit back.';
+        }
+        return 'Cancelled. Resume before the end to keep it.';
+    }
+    if (row.status === 'stopped') return stoppedNote(row);
     if (row.status === 'ended') {
         return row.action === 'close'
             ? 'Ended. Close it to get its deposit back.'
@@ -430,6 +483,12 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                                     <div data-mesub-row="">
                                         <dt>Since</dt>
                                         <dd>{since}</dd>
+                                    </div>
+                                ) : null}
+                                {closeFrom(row) ? (
+                                    <div data-mesub-row="">
+                                        <dt>Close from</dt>
+                                        <dd>{closeFrom(row)}</dd>
                                     </div>
                                 ) : null}
                                 <div data-mesub-row="">

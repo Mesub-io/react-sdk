@@ -31,13 +31,21 @@ export interface PaymentSaid {
 }
 
 const REASONS: Record<string, string> = {
-    'insufficient-balance': 'low balance',
-    'approval-revoked': 'approval was removed',
+    insufficient_balance: 'low balance',
+    // The token program's OwnerMismatch: the wallet revoked Mesub's approval, or gave it to another app.
+    program_4: 'approval was removed',
 };
+
+/**
+ * A reason in the spelling Mesub serves: `insufficient_balance`, `program_4`.
+ * An older server says `insufficient-balance`, `program:4`; read as the same
+ * until Mesub-io/backend#476 is deployed, then this can go.
+ */
+const snake = (reason: string) => reason.replace(/[-:]/g, '_');
 
 /** A charge in words. An outcome this version does not know is shown as Mesub named it. */
 export function paymentSaid(payment: Pick<MesubPayment, 'outcome' | 'reason'>): PaymentSaid {
-    const why = payment.reason ? REASONS[payment.reason] : undefined;
+    const why = payment.reason ? REASONS[snake(payment.reason)] : undefined;
 
     switch (payment.outcome) {
         case 'paid':

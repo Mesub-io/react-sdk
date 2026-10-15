@@ -869,7 +869,7 @@ describe('ManageButton', () => {
                         attempted_at: iso(-3),
                         outcome: 'rejected',
                         amount: '2000000',
-                        reason: 'insufficient-balance',
+                        reason: 'insufficient_balance',
                         signature: SIGNATURE,
                     },
                     {
@@ -1119,11 +1119,24 @@ describe('how a charge reads', () => {
             { label: 'Paid', tone: 'good' },
         ],
         [
+            { outcome: 'rejected', reason: 'insufficient_balance' },
+            { label: 'Missed, low balance', tone: 'bad' },
+        ],
+        // The spelling of a server before Mesub-io/backend#475 reads the same.
+        [
             { outcome: 'rejected', reason: 'insufficient-balance' },
             { label: 'Missed, low balance', tone: 'bad' },
         ],
         [
-            { outcome: 'rejected', reason: 'something-new' },
+            { outcome: 'rejected', reason: 'program_4' },
+            { label: 'Missed, approval was removed', tone: 'bad' },
+        ],
+        [
+            { outcome: 'rejected', reason: 'program:4' },
+            { label: 'Missed, approval was removed', tone: 'bad' },
+        ],
+        [
+            { outcome: 'rejected', reason: 'something_new' },
             { label: 'Missed', tone: 'bad' },
         ],
         [
@@ -1135,7 +1148,7 @@ describe('how a charge reads', () => {
             { label: 'Skipped', tone: 'none' },
         ],
         [
-            { outcome: 'blocked', reason: 'terms-missing' },
+            { outcome: 'blocked', reason: 'terms_missing' },
             { label: 'Not charged', tone: 'none' },
         ],
         [
@@ -1330,12 +1343,15 @@ describe('a subscription whose payments are on hold', () => {
         expect(dialog.textContent).not.toMatch(/receiver|puller|mint|merchant/i);
     });
 
-    it.each(['puller_not_allowed', 'receiver_not_allowed', 'mint_gone', 'mesub'] as const)(
-        'words %s the same',
-        (reason) => {
-            expect(noteOf(held(blocked({ blocked_reason: reason })))).toMatch(HOLD);
-        },
-    );
+    it.each([
+        'puller_not_allowed',
+        'receiver_not_allowed',
+        'receiver_account_frozen',
+        'mint_gone',
+        'mesub',
+    ] as const)('words %s the same', (reason) => {
+        expect(noteOf(held(blocked({ blocked_reason: reason })))).toMatch(HOLD);
+    });
 
     it('names no date when the server gives none', () => {
         expect(noteOf(held(blocked({ access_until: null })))).toBe(

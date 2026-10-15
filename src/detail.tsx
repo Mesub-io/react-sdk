@@ -25,6 +25,7 @@ import {
 } from './format';
 import { TokenLogo } from './screens';
 import {
+    closeFrom,
     fact,
     noteOf,
     PayNow,
@@ -216,6 +217,12 @@ export function SubscriptionDialog({
                         <div data-mesub-row="">
                             <dt>Plan ends</dt>
                             <dd>{moment(plan?.ends_at)}</dd>
+                        </div>
+                    ) : null}
+                    {closeFrom(row) ? (
+                        <div data-mesub-row="">
+                            <dt>Close from</dt>
+                            <dd>{closeFrom(row)}</dd>
                         </div>
                     ) : null}
                     <div data-mesub-row="">

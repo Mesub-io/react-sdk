@@ -1,6 +1,6 @@
 import { useWallets, type UiWallet } from '@wallet-standard/react';
 import { useEffect, useId, useRef, useState } from 'react';
-import { routeMissing, signedOut, unreachable } from './api';
+import { deadlineOf, routeMissing, signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
@@ -83,6 +83,8 @@ const EXPIRED =
     'The transaction expired before it was sent. Nothing was charged: approve this one.';
 const EXPIRED_TERMS =
     'The transaction expired before it was sent, and its terms with it. Nothing was charged: check these.';
+const NOT_LANDED =
+    'The transaction has not landed yet. Wait a moment, then check again: nothing is paid twice.';
 
 const STATES: Partial<Record<View['name'], SubscribeState>> = {
     signing: 'signing',
@@ -90,10 +92,23 @@ const STATES: Partial<Record<View['name'], SubscribeState>> = {
     subscribed: 'subscribed',
 };
 
+/** A few seconds: what a request to the server and its answer take, at worst. */
+const MARGIN_MS = 5_000;
+
 /** Past `expires_at`, or within a few seconds of it: not worth asking the wallet. */
 function expired(prepared: PreparedSubscription): boolean {
     const until = Date.parse(prepared.terms.expires_at);
-    return !Number.isNaN(until) && until - Date.now() < 5_000;
+    return !Number.isNaN(until) && until - Date.now() < MARGIN_MS;
+}
+
+/**
+ * Its transaction dies before Mesub could send it, by `transaction_expires_at`:
+ * one signed then is replaced rather than submitted dead. False from a server
+ * that does not say: the submit's `transaction_expired` still catches it.
+ */
+function dying(prepared: PreparedSubscription): boolean {
+    const until = deadlineOf(prepared);
+    return until !== null && until - Date.now() < MARGIN_MS;
 }
 
 /**
@@ -366,6 +381,11 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             single,
             terms: held.terms.message,
         };
+        // The wallet's window stayed open past the transaction's life: replaced, never sent dead.
+        if (dying(held)) {
+            await renew(sent.current, current);
+            return;
+        }
         await submit();
     }
 
@@ -421,6 +441,27 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             const settled = await api.submit(id, signed);
             if (settled.reason) {
                 if (!current()) return;
+                // Not a failed payment: its blockhash ran out before it landed, and it never will.
+                if (settled.reason_code === 'transaction_expired') {
+                    await renew(handed, current);
+                    return;
+                }
+                // Not yet on chain: the same transaction may still land, so it is checked, not replaced.
+                if (settled.reason_code === 'nothing_landed') {
+                    fail(
+                        {
+                            step: 'confirming',
+                            title: 'Still confirming',
+                            message: NOT_LANDED,
+                            moved: 'pending',
+                            action: 'check',
+                            icon: 'merchant',
+                        },
+                        signer,
+                        signature,
+                    );
+                    return;
+                }
                 fail(
                     {
                         step: 'confirming',

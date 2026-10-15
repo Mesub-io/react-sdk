@@ -59,6 +59,13 @@ export type MesubBlockedReason =
     | 'mint_gone'
     | 'mesub';
 
+/**
+ * Why a `stopped` one stopped (Mesub-io/backend#402): every retry failed, the
+ * Free date to pay by passed, or the wallet closed the account that lets
+ * Mesub charge it, for good. A newer one may come.
+ */
+export type MesubStopReason = 'out_of_retries' | 'retry_deadline_passed' | 'authority_closed';
+
 /** A subscription of the signed-in customer, as `GET /subscriptions` lists it. */
 export interface MesubSubscription {
     id: string;
@@ -71,6 +78,9 @@ export interface MesubSubscription {
     // Why a payment is late, on an `unpaid` one: insufficient_balance, approval_revoked,
     // authority_closed, or null. A newer one is read as null.
     late_reason: string | null;
+    // Why a `stopped` one stopped; null on any other status, and on one stopped before
+    // Mesub recorded why. Absent from an older server. A newer one is read as null.
+    stop_reason?: MesubStopReason | null;
     // Whether it grants access now.
     access: boolean;
     payment_status: 'paid' | 'late' | 'none';
@@ -88,6 +98,11 @@ export interface MesubSubscription {
     next_retry_at: string | null;
     retry_deadline: string | null;
     access_until: string | null;
+    // Whether the wallet can close it on Solana now and get its deposit back, and from
+    // when if not now (null when no date is known yet: a running one must be cancelled
+    // first). As Mesub last read the chain (Mesub-io/backend#402). Absent from an older server.
+    closable?: boolean;
+    closable_from?: string | null;
     created_at: string;
     confirmed_at: string | null;
 }
@@ -109,20 +124,31 @@ export interface PreparedSubscription {
     // Base64, signed by nobody.
     transaction: string;
     last_valid_block_height: string;
+    // When that block height should pass: an estimate that errs early, about half a minute
+    // after the answer (Mesub-io/backend#471). Absent from an older server.
+    transaction_expires_at?: string;
     costs: MesubCosts;
     terms: { message: string; expires_at: string };
 }
 
-/** What submit and the confirms answer. `reason` is set when nothing landed. */
+/**
+ * What submit and the confirms answer. `reason` is set when nothing was settled: a
+ * sentence for a person, which Mesub may reword. `reason_code` comes with it
+ * (Mesub-io/backend#470), for the widget to branch on: `transaction_expired`,
+ * `nothing_landed`, `close_not_landed`... An open family; absent from an older server.
+ */
 export interface Settled {
     subscription: MesubSubscription;
     reason?: string;
+    reason_code?: string;
 }
 
 /** What cancel, resume and close answer: a transaction the wallet signs and sends. */
 export interface WalletTransaction {
     transaction: string;
     last_valid_block_height: string;
+    // As on `PreparedSubscription`. Absent from an older server.
+    transaction_expires_at?: string;
 }
 
 /** One charge Mesub tried, as the merchant's server hands it on. */

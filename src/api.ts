@@ -40,6 +40,33 @@ export interface MesubApi {
     payNow(id: string): Promise<MesubSubscription>;
 }
 
+/**
+ * When each transaction answered dies, on this browser's clock: from its
+ * `transaction_expires_at` (Mesub-io/backend#471), held beside the answer.
+ */
+const deadlines = new WeakMap<object, number>();
+
+/** When that answer's transaction stops landing, on this clock. Null when nobody said. */
+export function deadlineOf(answer: object): number | null {
+    return deadlines.get(answer) ?? null;
+}
+
+/**
+ * `transaction_expires_at` on this clock. A visitor's clock can be off by
+ * minutes, so the time left is counted against the server's `Date` when the
+ * browser may read it, minus the second that header rounds away: it errs
+ * early, as Mesub's estimate does. Without it, this clock is trusted unless it
+ * says the transaction was dead on arrival: then the clock is wrong, and the
+ * chain will say when it expires.
+ */
+function dyingAt(expiresAt: unknown, served: string | null, received: number): number | null {
+    const at = typeof expiresAt === 'string' ? Date.parse(expiresAt) : Number.NaN;
+    if (Number.isNaN(at)) return null;
+    const now = served === null ? Number.NaN : Date.parse(served);
+    const until = Number.isNaN(now) ? at : received + (at - now) - 1000;
+    return until > received ? until : null;
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -123,6 +150,12 @@ export function createApi(options: ApiOptions): MesubApi {
                     'bad_response',
                 );
             }
+            const until = dyingAt(
+                answer.transaction_expires_at,
+                response.headers.get('Date'),
+                Date.now(),
+            );
+            if (until !== null) deadlines.set(answer, until);
             return answer;
         }
 

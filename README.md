@@ -104,9 +104,12 @@ dialog, from the plan to the receipt:
    predates the route answers 404: the transaction of the review is signed.
 5. **Confirming**: both go to `POST /subscriptions/:id/submit`. Mesub co-signs
    and sends the transaction, and `onSubscribed` fires once it landed.
-   A transaction that expired before it was sent (`transaction_expired`) is
-   replaced once, for the same subscription, and signed again; a second expiry
-   in a row stops with "Nothing was charged."
+   A transaction that expired before it was sent (`transaction_expired`, as an
+   error code or as the submit's `reason_code`) is replaced once, for the same
+   subscription, and signed again; a second expiry in a row stops with "Nothing
+   was charged." One the wallet held past its `transaction_expires_at` is
+   replaced the same way before it is submitted, the time left counted on your
+   server's clock (its `Date` header) when the browser can read it.
 
 The button is a `<button>` with `data-mesub-subscribe` and `data-mesub-state`
 (`idle`, `open`, `signing`, `confirming` or `subscribed`). `children` is its
@@ -163,11 +166,20 @@ its plan, its status, its next charge or the end of its access, the wallet that
 pays it, and the one thing it allows now. A subscription in the last period of
 a plan that ends has no next charge: it shows the end of its access instead.
 
-| The subscription is                           | It allows  |
-| --------------------------------------------- | ---------- |
-| running (`active`, `unpaid`, `stopped`)       | **Cancel** |
-| `cancelled`, with access still running        | **Resume** |
-| over (`ended`, or cancelled and past its end) | **Close**  |
+| The subscription is                                                    | It allows  |
+| ---------------------------------------------------------------------- | ---------- |
+| running (`active`, `unpaid`, `stopped`)                                | **Cancel** |
+| `cancelled`, with access still running                                 | **Resume** |
+| `closable: true` (ended, cancelled and past its end, stopped for good) | **Close**  |
+
+Close follows `closable`, as Mesub last read the chain. Until then, a card
+shows **Close from** and the date of `closable_from`, and offers Close once
+that date passes with the page open. A cancellation with a payment missed has
+no access and cannot be resumed: it offers nothing until it can be closed. A
+server that predates `closable` is read by the status and the dates, as before.
+A `stopped` one says why from `stop_reason`: every retry failed, the date to pay
+by passed, or the wallet's approval was closed for good (that one is closed, not
+cancelled).
 
 Each opens a dialog that says what it does, then runs two steps: your server
 builds a transaction (`POST /subscriptions/:id/cancel`, `/resume` or `/close`),
@@ -240,8 +252,13 @@ charged." (or "Nothing changed.") only when nothing can have landed.
   terms. Stale terms are never signed nor submitted.
 - **The wrong wallet** for a subscription being managed: it says which account
   the wallet is on and which one pays. Nothing is built or signed.
-- **Nothing landed** (`reason` on submit or on a confirm): Mesub's reason, as
-  written.
+- **Nothing settled** (`reason` on submit or on a confirm): the widget branches
+  on `reason_code`, never on the sentence. `transaction_expired` asks for a
+  fresh transaction, as above, on submit, and builds a new one on a confirm.
+  `nothing_landed` on submit, or `cancellation_not_landed`,
+  `resume_not_landed` and `close_not_landed` on a confirm: the transaction may
+  still land, so it says so and offers Check again, which sends nothing new.
+  Any other code: Mesub's reason, as written, and Try again.
 - **Mesub refuses** (409: already subscribed, not enough to pay the first
   period, plan closed...): its message, as written. A 403 `wallet_mismatch`
   asks for another wallet, a 429 says how long to wait.

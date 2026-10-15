@@ -64,6 +64,9 @@ export interface MesubSubscription {
     id: string;
     status: MesubSubscriptionStatus;
     paused: boolean;
+    // Why an `ended` one ended: cancelled, plan_removed, plan_replaced, plan_ended,
+    // closed_elsewhere (its account closed outside Mesub; authority_closed before
+    // Mesub-io/backend#476) or closed; null on any other status. A newer one may come.
     end_reason: string | null;
     // Why a payment is late, on an `unpaid` one: insufficient_balance, approval_revoked,
     // authority_closed, or null. A newer one is read as null.

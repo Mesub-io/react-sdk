@@ -27,6 +27,7 @@ export type {
     MesubAction,
     MesubBlockedReason,
     MesubPlan,
+    MesubStopReason,
     MesubSubscription,
     MesubSubscriptionStatus,
     MesubToken,

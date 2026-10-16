@@ -1,4 +1,4 @@
-import { createApi, routeMissing } from '../src/api';
+import { busyFor, createApi, routeMissing } from '../src/api';
 import { MesubClientError } from '../src/errors';
 import { json, plan, prepared, refusal, subscription } from './helpers';
 
@@ -173,6 +173,20 @@ describe('what goes wrong', () => {
         );
 
         await expect(api.subscriptions()).rejects.toMatchObject({ status: 429, retryAfter: 30 });
+    });
+
+    it('reads Retry-After on a busy 503, in seconds', async () => {
+        const { api } = client(() =>
+            refusal(503, 'unavailable', 'Too many submits.', { 'Retry-After': '2' }),
+        );
+
+        const error = await api.payNow('sub_1').catch((caught: unknown) => caught);
+        expect(error).toMatchObject({ status: 503, code: 'unavailable', retryAfter: 2 });
+        expect(busyFor(error)).toBe(2);
+        expect(busyFor(new MesubClientError('Busy.', 503, 'unavailable'))).toBeNull();
+        expect(
+            busyFor(new MesubClientError('Slow.', 429, 'rate_limited', { retryAfter: 2 })),
+        ).toBeNull();
     });
 
     it('falls back on the status when the refusal is not JSON', async () => {

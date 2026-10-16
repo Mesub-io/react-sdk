@@ -851,6 +851,23 @@ describe("what the merchant's server answers", () => {
         );
     });
 
+    it('says how long to wait on a busy 503', async () => {
+        setup({
+            overrides: {
+                'POST /subscriptions': () =>
+                    refusal(503, 'unavailable', 'Busy.', { 'Retry-After': '2' }),
+            },
+        });
+
+        const dialog = await toWallets();
+        fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
+
+        expect(await within(dialog).findByRole('heading', { name: 'Busy right now' })).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'Too many requests at once. Try again in 2 seconds.',
+        );
+    });
+
     it('closes on a plan that does not exist', async () => {
         const { fetch } = setup({
             overrides: { 'GET /plans/pro': () => refusal(404, 'plan_not_found', 'No such plan.') },
@@ -1049,6 +1066,147 @@ describe('submit', () => {
         ).toBeTruthy();
         expect(within(dialog).getByText('Payment may be pending.')).toBeTruthy();
         expect(within(dialog).getByRole('button', { name: 'Check again' })).toBeTruthy();
+    });
+
+    it('waits out a busy 503 and sends the same submit once more, signing nothing again', async () => {
+        let busy = true;
+        const { fetch, wallet, onSubscribed } = setup({
+            overrides: {
+                'POST /subscriptions/sub_1/submit': () =>
+                    busy
+                        ? refusal(503, 'unavailable', 'Too many submits.', { 'Retry-After': '2' })
+                        : json(201, { subscription: subscription() }),
+            },
+        });
+
+        const dialog = await toReview();
+        vi.useFakeTimers();
+        sign();
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(within(dialog).getByRole('heading', { name: 'Confirming on Solana' })).toBeTruthy();
+        expect(
+            within(dialog).getByText('Busy right now: sending again in 2 seconds.'),
+        ).toBeTruthy();
+        expect(bodies(fetch, 'POST /subscriptions/sub_1/submit')).toHaveLength(1);
+
+        busy = false;
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1_900);
+        });
+        expect(bodies(fetch, 'POST /subscriptions/sub_1/submit')).toHaveLength(1);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        vi.useRealTimers();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'You are subscribed' }),
+        ).toBeTruthy();
+        const sent = bodies(fetch, 'POST /subscriptions/sub_1/submit');
+        expect(sent).toHaveLength(2);
+        expect(sent[1]).toEqual(sent[0]);
+        expect(wallet.signMessage).toHaveBeenCalledTimes(1);
+        expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
+        expect(onSubscribed).toHaveBeenCalledTimes(1);
+    });
+
+    it('says how long to wait when still busy after the one retry, and checks the same submit', async () => {
+        let busy = true;
+        const { fetch, wallet } = setup({
+            overrides: {
+                'POST /subscriptions/sub_1/submit': () =>
+                    busy
+                        ? refusal(503, 'unavailable', 'Too many submits.', { 'Retry-After': '2' })
+                        : json(201, { subscription: subscription() }),
+            },
+        });
+
+        const dialog = await toReview();
+        vi.useFakeTimers();
+        sign();
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(2_000);
+        });
+        vi.useRealTimers();
+
+        expect(await within(dialog).findByRole('heading', { name: 'Busy right now' })).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(
+            'Too many payments are being sent at once. Wait 2 seconds, then check again: the same payment is sent, never a second one.',
+        );
+        // Not said safe, nor a way to a second payment.
+        expect(within(dialog).queryByText('Nothing was charged.')).toBeNull();
+        expect(within(dialog).getByText('Payment may be pending.')).toBeTruthy();
+        expect(within(dialog).queryByRole('button', { name: /Back|Try again/ })).toBeNull();
+        expect(bodies(fetch, 'POST /subscriptions/sub_1/submit')).toHaveLength(2);
+
+        busy = false;
+        click('Check again');
+        expect(
+            await within(dialog).findByRole('heading', { name: 'You are subscribed' }),
+        ).toBeTruthy();
+        const sent = bodies(fetch, 'POST /subscriptions/sub_1/submit');
+        expect(sent).toHaveLength(3);
+        expect(new Set(sent.map((body) => JSON.stringify(body))).size).toBe(1);
+        expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not wait out a long busy 503 on its own', async () => {
+        const { fetch } = setup({
+            overrides: {
+                'POST /subscriptions/sub_1/submit': () =>
+                    refusal(503, 'unavailable', 'Too many submits.', { 'Retry-After': '30' }),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(await within(dialog).findByRole('heading', { name: 'Busy right now' })).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toMatch(/Wait 30 seconds/);
+        expect(bodies(fetch, 'POST /subscriptions/sub_1/submit')).toHaveLength(1);
+    });
+
+    it('treats a 503 without a wait as unknown, as before', async () => {
+        const { fetch } = setup({
+            overrides: {
+                'POST /subscriptions/sub_1/submit': () =>
+                    refusal(503, 'unavailable', 'Mesub is unavailable.'),
+            },
+        });
+
+        const dialog = await toReview();
+        sign();
+
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Still confirming' }),
+        ).toBeTruthy();
+        expect(bodies(fetch, 'POST /subscriptions/sub_1/submit')).toHaveLength(1);
+    });
+
+    it('sends nothing more once the dialog is closed during the wait', async () => {
+        const { fetch } = setup({
+            overrides: {
+                'POST /subscriptions/sub_1/submit': () =>
+                    refusal(503, 'unavailable', 'Too many submits.', { 'Retry-After': '2' }),
+            },
+        });
+
+        const dialog = await toReview();
+        vi.useFakeTimers();
+        sign();
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5_000);
+        });
+        vi.useRealTimers();
+
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(bodies(fetch, 'POST /subscriptions/sub_1/submit')).toHaveLength(1);
     });
 
     it('still tells the merchant when the dialog was closed while confirming', async () => {

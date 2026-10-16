@@ -260,6 +260,18 @@ export function unreachable(error: unknown): boolean {
     return error instanceof MesubClientError && error.status === null;
 }
 
+/**
+ * Mesub is busy, said with a wait: a 503 `unavailable` with `Retry-After`
+ * (Mesub-io/backend#505). Too many submits at once (2 s) or a Pay now the
+ * queue refused (20 s): nothing was signed, sent or queued. The seconds to
+ * wait, or null for any other error.
+ */
+export function busyFor(error: unknown): number | null {
+    if (!(error instanceof MesubClientError)) return null;
+    if (error.status !== 503 || error.code !== 'unavailable') return null;
+    return error.retryAfter;
+}
+
 /** The merchant's server says nobody is signed in on its site. */
 export function signedOut(error: unknown): boolean {
     return error instanceof MesubClientError && error.status === 401;

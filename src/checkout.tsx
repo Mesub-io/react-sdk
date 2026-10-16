@@ -1,6 +1,6 @@
 import { useWallets, type UiWallet } from '@wallet-standard/react';
 import { useEffect, useId, useRef, useState } from 'react';
-import { deadlineOf, routeMissing, signedOut, unreachable } from './api';
+import { busyFor, deadlineOf, routeMissing, signedOut, unreachable } from './api';
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
@@ -64,7 +64,7 @@ type View =
           single: boolean;
           notice: string | null;
       }
-    | { name: 'submitting'; signer: Signer; signature: string | null }
+    | { name: 'submitting'; signer: Signer; signature: string | null; notice?: string }
     | {
           name: 'subscribed';
           signer: Signer;
@@ -91,6 +91,11 @@ const STATES: Partial<Record<View['name'], SubscribeState>> = {
     submitting: 'confirming',
     subscribed: 'subscribed',
 };
+
+/** The longest Mesub's busy wait at submit is waited out on its own, in seconds: it asks 2. */
+const BUSY_WAIT_MAX_S = 10;
+
+const seconds = (n: number) => `${n} ${n === 1 ? 'second' : 'seconds'}`;
 
 /** A few seconds: what a request to the server and its answer take, at worst. */
 const MARGIN_MS = 5_000;
@@ -153,6 +158,15 @@ function notPrepared(error: unknown): Failure {
     // Mesub's own refusal (already subscribed, plan closed): its words, as written.
     if (status === 409) {
         return { ...base, title: 'Cannot subscribe', message: messageOf(error), action: 'close' };
+    }
+    const busy = busyFor(error);
+    if (busy !== null) {
+        return {
+            ...base,
+            title: 'Busy right now',
+            message: `Too many requests at once. Try again in ${seconds(busy)}.`,
+            action: 'retry',
+        };
     }
     if (status === 429) {
         const wait = error instanceof MesubClientError ? error.retryAfter : null;
@@ -431,7 +445,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
     }
 
     // Also "Check again": Mesub recognises what it already co-signed and answers from the chain.
-    async function submit() {
+    async function submit(waited = false) {
         const handed = sent.current;
         if (!handed) return;
         const { id, signed, signer, signature, cancelUrl, single } = handed;
@@ -495,6 +509,36 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             }
             if (error instanceof MesubClientError && error.code === 'transaction_expired') {
                 await renew(handed, current);
+                return;
+            }
+            // Too many submits at once (Mesub-io/backend#505): the same bytes, once more after the
+            // wait, as "Check again" sends them. Never a new signature nor a new transaction.
+            const busy = busyFor(error);
+            if (busy !== null) {
+                if (!waited && busy <= BUSY_WAIT_MAX_S) {
+                    setView({
+                        name: 'submitting',
+                        signer,
+                        signature,
+                        notice: `Busy right now: sending again in ${seconds(busy)}.`,
+                    });
+                    await new Promise((resolve) => setTimeout(resolve, busy * 1000));
+                    if (current()) await submit(true);
+                    return;
+                }
+                fail(
+                    {
+                        step: 'confirming',
+                        title: 'Busy right now',
+                        message: `Too many payments are being sent at once. Wait ${seconds(busy)}, then check again: the same payment is sent, never a second one.`,
+                        // The server's own replays may have lost a send before: no way to a second payment.
+                        moved: 'pending',
+                        action: 'check',
+                        icon: 'merchant',
+                    },
+                    signer,
+                    signature,
+                );
                 return;
             }
             const status = error instanceof MesubClientError ? error.status : null;
@@ -924,6 +968,11 @@ function stageScreen(props: {
                     <Hero kind="wait" icon={plan.logo_url} />
                     <h2 id={titleId}>Confirming on Solana</h2>
                     <p>This can take up to a minute.</p>
+                    {view.notice ? (
+                        <p data-mesub-notice="" role="status">
+                            {view.notice}
+                        </p>
+                    ) : null}
                     {view.signature ? (
                         <Explorer
                             signature={view.signature}

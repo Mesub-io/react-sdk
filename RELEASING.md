@@ -25,13 +25,23 @@ None of it lives in this repository, so a branch cannot undo it.
    package that exists, and `@mesub/react` is its own package: the trusted
    publisher of `@mesub/node` does not cover it. If npmjs.com still says so
    when you get there:
-    - create a granular access token: publish only, `@mesub` scope only, the
-      shortest expiry offered;
+    - create a granular access token: "Read and write (publish and stage)",
+      `@mesub` scope with all its packages, "Bypass two-factor
+      authentication" ticked (a run cannot type a code: without it npm
+      answers 403), the shortest expiry offered;
     - store it as the secret `NPM_TOKEN` of the `npm` environment of
       Mesub-io/react-sdk (below), not as a repository secret;
     - release 0.1.0 as described further down: the workflow publishes with
       that token, provenance included;
+    - npm only stages a version sent with such a token: on npmjs.com, the
+      package's staged version, approve it with your two-factor code. Until
+      then `latest` is a `0.0.0-stage` placeholder with nothing in it;
+      deprecate it after (`npm deprecate @mesub/react@0.0.0-stage "..."`);
     - delete the token on npmjs.com and the secret on GitHub straight after.
+
+    A 404 on the publish means the token cannot write to `@mesub` (wrong
+    scope, or "select packages" while the package does not exist yet).
+
 3. **The trusted publisher.** On npmjs.com, `@mesub/react`, Settings, Trusted
    Publisher, GitHub Actions: organization `Mesub-io`, repository
    `react-sdk`, workflow `publish.yml`, environment `npm`. Every publish

@@ -16,9 +16,22 @@ part in the browser: picking one, connecting it, signing in the right order.
 
 **[Read the docs](https://docs.mesub.io/docs/react)** for the walkthrough.
 
-> **Status: early, 0.x, not on npm yet.** The API may still change between
-> minor versions. See the [board](https://github.com/orgs/Mesub-io/projects/5)
-> for what is next.
+[![npm](https://img.shields.io/npm/v/@mesub/react)](https://www.npmjs.com/package/@mesub/react)
+
+> **Status: early, 0.x.** The API may still change between minor versions:
+> `npm update` takes patches (0.1.x), a new minor (0.2.0) takes
+> `npm install @mesub/react@latest`. See the
+> [board](https://github.com/orgs/Mesub-io/projects/5) for what is next.
+
+## Install
+
+```sh
+npm install @mesub/react
+```
+
+`react` and `react-dom` 18 or later are peer dependencies. Every release is
+built by GitHub Actions from a tagged commit and published with a provenance
+statement: `npm audit signatures` verifies it.
 
 ## Requirements
 

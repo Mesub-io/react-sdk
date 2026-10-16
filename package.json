@@ -14,7 +14,10 @@
     "solana",
     "subscriptions",
     "react",
-    "sdk"
+    "sdk",
+    "widget",
+    "wallet",
+    "usdc"
   ],
   "type": "module",
   "sideEffects": [

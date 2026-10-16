@@ -27,6 +27,8 @@ export interface PayNowResult {
     // Sent: the outcome comes with the pull, and the list reads again.
     ok: boolean;
     message: string;
+    // Mesub was busy (Mesub-io/backend#499): the seconds before paying again can work.
+    retryAfter?: number;
 }
 
 /** What `useSubscriptions()` returns. */
@@ -117,10 +119,9 @@ export function payNowRefusal(failure: unknown): string {
         }
         case 'unavailable': {
             // The queue refused it (Mesub-io/backend#499): nothing was queued, pay again after the wait.
-            const wait = busyFor(failure);
-            return wait === null
+            return busyFor(failure) === null
                 ? failure.message
-                : `Too many payments at once. Pay again in ${wait} ${wait === 1 ? 'second' : 'seconds'}.`;
+                : "Mesub can't take the payment right now. Nothing was charged.";
         }
         case 'retries_spent':
             return 'No retries are left for this period.';
@@ -215,7 +216,12 @@ export function useSubscriptions(): UseSubscriptionsResult {
             try {
                 await api.payNow(id);
             } catch (failure) {
-                return { ok: false, message: payNowRefusal(failure) };
+                const wait = busyFor(failure);
+                return {
+                    ok: false,
+                    message: payNowRefusal(failure),
+                    ...(wait === null ? {} : { retryAfter: wait }),
+                };
             }
             // Still late until the pull lands: read again for what it says now.
             void reload();
@@ -352,32 +358,43 @@ function usePlans(slugs: string[]): Record<string, MesubPlan> {
 export function PayNow({ pay }: { pay(): Promise<PayNowResult> }) {
     const [busy, setBusy] = useState(false);
     const [said, setSaid] = useState<PayNowResult | null>(null);
+    // Mesub was busy: the button waits this many seconds, then can be pressed again.
+    const [wait, setWait] = useState(0);
+
+    useEffect(() => {
+        if (wait <= 0) return;
+        const timer = setTimeout(() => {
+            setWait(wait - 1);
+            if (wait === 1) setSaid(null);
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [wait]);
 
     async function click() {
         setBusy(true);
         try {
-            setSaid(await pay());
+            const result = await pay();
+            setSaid(result);
+            setWait(result.retryAfter ?? 0);
         } finally {
             setBusy(false);
         }
     }
 
+    const tone = said?.ok ? 'sent' : wait > 0 ? 'wait' : 'refused';
     return (
         <div data-mesub-pay-now="">
             <button
                 type="button"
                 data-mesub-action="pay-now"
-                disabled={busy}
+                disabled={busy || wait > 0}
                 aria-busy={busy || undefined}
                 onClick={() => void click()}
             >
-                Pay now
+                {wait > 0 ? `Pay again in ${wait} s` : 'Pay now'}
             </button>
             {said ? (
-                <p
-                    role={said.ok ? 'status' : 'alert'}
-                    data-mesub-pay-now-said={said.ok ? 'sent' : 'refused'}
-                >
+                <p role={said.ok ? 'status' : 'alert'} data-mesub-pay-now-said={tone}>
                     {said.message}
                 </p>
             ) : null}

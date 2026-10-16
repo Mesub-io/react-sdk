@@ -1469,7 +1469,7 @@ describe('paying a late payment now', () => {
             'unavailable',
             'The charge could not be queued.',
             { 'Retry-After': '20' },
-            'Too many payments at once. Pay again in 20 seconds.',
+            "Mesub can't take the payment right now. Nothing was charged.",
         ],
         ['unavailable', 'Mesub is unavailable.', {}, 'Mesub is unavailable.'],
     ])('says why on %s', async (code, message, headers, said) => {
@@ -1484,6 +1484,33 @@ describe('paying a late payment now', () => {
         fireEvent.click(within(await row()).getByRole('button', { name: 'Pay now' }));
 
         expect((await screen.findByRole('alert')).textContent).toBe(said);
+    });
+
+    it('holds Pay now with a countdown while Mesub is busy, then offers it again', async () => {
+        setup({
+            held: [late()],
+            overrides: {
+                'POST /subscriptions/sub_1/retry': () =>
+                    refusal(503, 'unavailable', 'The charge could not be queued.', {
+                        'Retry-After': '2',
+                    }),
+            },
+        });
+
+        fireEvent.click(within(await row()).getByRole('button', { name: 'Pay now' }));
+        const held = await within(await row()).findByRole('button', { name: 'Pay again in 2 s' });
+        expect((held as HTMLButtonElement).disabled).toBe(true);
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            "Mesub can't take the payment right now. Nothing was charged.",
+        );
+
+        const again = await within(await row()).findByRole(
+            'button',
+            { name: 'Pay now' },
+            { timeout: 3500 },
+        );
+        expect((again as HTMLButtonElement).disabled).toBe(false);
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it.each([

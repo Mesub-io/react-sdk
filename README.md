@@ -269,8 +269,9 @@ charged." (or "Nothing changed.") only when nothing can have landed.
 - **Mesub is busy** (a 503 `unavailable` with `Retry-After`): on submit, too
   many at once and nothing was signed or sent, so the widget waits (2 seconds,
   10 at most) and sends the same request once more; still busy, it says how
-  long to wait and offers Check again. **Pay now** refused that way says when
-  to pay again (about 20 seconds); preparing says when to try again.
+  long to wait and offers Check again. **Pay now** refused that way holds its
+  button with a countdown (about 20 seconds), says nothing was charged, then
+  can be pressed again; preparing says when to try again.
 - **Double clicks** open one dialog, prepare one subscription and ask the
   wallet once.
 

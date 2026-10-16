@@ -2614,3 +2614,151 @@
   grid-column: 1 / -1;
 }
 
+
+/* ============================================================ MANAGE, THE CHECKOUT'S LOOK
+ * The Manage window and the list in a page read like the checkout (#66): a
+ * centred head with the merchant's logo, the price large, the note centred
+ * above the buttons, Pay now as the checkout's primary, the one action as its
+ * quiet filled button, and what Pay now came to as a centred line.
+ */
+
+/* head: logo, name and merchant, status, centred */
+:is([data-mesub-identity], [data-mesub-subscription-head]) {
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+:is([data-mesub-identity], [data-mesub-subscription-head]) [data-mesub-logo],
+[data-mesub-subscription] [data-mesub-subscription-head] [data-mesub-logo] {
+  inline-size: 56px;
+  block-size: 56px;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px var(--_border), 0 8px 20px -10px rgb(20 21 26 / 35%);
+  font-size: 20px;
+}
+:is([data-mesub-identity] > div, [data-mesub-subscription-name]) {
+  flex: none;
+  justify-items: center;
+  max-inline-size: 100%;
+}
+[data-mesub-dialog] [data-mesub-identity] h2 {
+  text-align: center;
+}
+[data-mesub-subscription-name] strong {
+  font-size: 17px;
+  line-height: 22px;
+}
+[data-mesub-subscription-name] span {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* the price, large and centred, its period under it */
+:is([data-mesub-dialog] p[data-mesub-rate], [data-mesub-subscription-price]) {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+:is([data-mesub-rate], [data-mesub-subscription-price]) strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 40px;
+  line-height: 44px;
+  letter-spacing: -0.03em;
+}
+
+/* the note: the checkout's quiet line above the buttons */
+:is([data-mesub-dialog] p[data-mesub-state-note], [data-mesub-subscription-note]) {
+  margin: 0;
+  color: var(--_text-soft);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+/* Pay now: the checkout's primary */
+[data-mesub-step="subscription"] > [data-mesub-pay-now] {
+  grid-column: 1 / -1;
+}
+[data-mesub-pay-now] {
+  gap: 8px;
+}
+[data-mesub-pay-now] [data-mesub-action="pay-now"] {
+  min-block-size: 48px;
+  border-radius: var(--_radius-lg);
+  font-size: 14px;
+}
+[data-mesub-pay-now] [data-mesub-action="pay-now"]:disabled:not([aria-busy="true"]) {
+  border-color: transparent;
+  background: var(--_sunk);
+  color: var(--_muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the one action (cancel, resume, close): the checkout's quiet filled button */
+:is([data-mesub-step="subscription"] > [data-mesub-action], [data-mesub-subscription] > [data-mesub-action]) {
+  min-block-size: 48px;
+  border-color: transparent;
+  border-radius: var(--_radius-lg);
+  background: var(--_sunk);
+  color: var(--_text);
+  font-size: 14px;
+}
+:is([data-mesub-step="subscription"] > [data-mesub-action], [data-mesub-subscription] > [data-mesub-action]):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--_text) 9%, var(--_bg));
+}
+:is([data-mesub-step="subscription"] > [data-mesub-action], [data-mesub-subscription] > [data-mesub-action]):active:not(:disabled) {
+  border-color: transparent;
+}
+/* under a filled action, Done is the checkout's text button */
+[data-mesub-step="subscription"] > [data-mesub-action] + [data-mesub-cancel] {
+  margin-block-start: -8px;
+}
+
+/* what Pay now came to: a centred line, as "Nothing was charged." on the checkout */
+[data-mesub-pay-now-said] {
+  position: relative;
+  justify-self: center;
+  margin: 0;
+  color: var(--_text-soft);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  text-wrap: pretty;
+}
+[data-mesub-pay-now-said="sent"] {
+  padding-inline-start: 18px;
+  color: var(--_success-text);
+}
+[data-mesub-pay-now-said="sent"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 2px;
+  inset-block-start: 4px;
+  inline-size: 9px;
+  block-size: 5px;
+  border-inline-start: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+[data-mesub-pay-now-said="refused"] {
+  color: var(--_danger-text);
+}
+[data-mesub-pay-now-said="wait"] {
+  color: var(--_text-soft);
+}
+
+/* the list in a page: one card per subscription, at the checkout window's width */
+[data-mesub-subscription-list] {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  align-items: start;
+}
+[data-mesub-subscription] {
+  gap: 14px;
+  padding: 20px;
+  border-radius: calc(var(--_radius-lg) + 4px);
+}

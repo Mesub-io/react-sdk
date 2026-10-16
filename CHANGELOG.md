@@ -5,7 +5,7 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-16)
 
 The first version published to npm. Requires React 18 or 19, and on your
 server the routes of `@mesub/node` 0.1.x.

@@ -7,7 +7,7 @@ import {
     type ButtonHTMLAttributes,
     type HTMLAttributes,
 } from 'react';
-import { signedOut } from './api';
+import { busyFor, signedOut } from './api';
 import { useMesubInternal } from './context';
 import { MesubClientError } from './errors';
 import { briefPrice, cadence, day, moment, fit, shortAddress } from './format';
@@ -114,6 +114,13 @@ export function payNowRefusal(failure: unknown): string {
             return minutes === null
                 ? failure.message
                 : `You can pay again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+        }
+        case 'unavailable': {
+            // The queue refused it (Mesub-io/backend#499): nothing was queued, pay again after the wait.
+            const wait = busyFor(failure);
+            return wait === null
+                ? failure.message
+                : `Too many payments at once. Pay again in ${wait} ${wait === 1 ? 'second' : 'seconds'}.`;
         }
         case 'retries_spent':
             return 'No retries are left for this period.';

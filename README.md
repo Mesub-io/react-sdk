@@ -266,6 +266,11 @@ charged." (or "Nothing changed.") only when nothing can have landed.
   again. Submit and the confirms wait 90 seconds for the chain; past that, or
   on a 5xx, the outcome is unknown: "Payment may be pending" and Check again,
   which sends the same request and never a second payment.
+- **Mesub is busy** (a 503 `unavailable` with `Retry-After`): on submit, too
+  many at once and nothing was signed or sent, so the widget waits (2 seconds,
+  10 at most) and sends the same request once more; still busy, it says how
+  long to wait and offers Check again. **Pay now** refused that way says when
+  to pay again (about 20 seconds); preparing says when to try again.
 - **Double clicks** open one dialog, prepare one subscription and ask the
   wallet once.
 

@@ -1465,11 +1465,19 @@ describe('paying a late payment now', () => {
             'No retries are left for this period.',
         ],
         ['pull_running', 'A pull is running.', {}, 'A pull is running.'],
+        [
+            'unavailable',
+            'The charge could not be queued.',
+            { 'Retry-After': '20' },
+            'Too many payments at once. Pay again in 20 seconds.',
+        ],
+        ['unavailable', 'Mesub is unavailable.', {}, 'Mesub is unavailable.'],
     ])('says why on %s', async (code, message, headers, said) => {
         setup({
             held: [late()],
             overrides: {
-                'POST /subscriptions/sub_1/retry': () => refusal(409, code, message, headers),
+                'POST /subscriptions/sub_1/retry': () =>
+                    refusal(code === 'unavailable' ? 503 : 409, code, message, headers),
             },
         });
 

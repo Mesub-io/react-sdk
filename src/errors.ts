@@ -6,7 +6,7 @@ export class MesubClientError extends Error {
     override readonly name = 'MesubClientError';
     readonly status: number | null;
     readonly code: string | null;
-    // Seconds, from Retry-After on a 429.
+    // Seconds, from Retry-After: on a 429, and on a 503 `unavailable` (Mesub-io/backend#505).
     readonly retryAfter: number | null;
 
     constructor(

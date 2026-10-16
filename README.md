@@ -25,6 +25,10 @@ part in the browser: picking one, connecting it, signing in the right order.
 React 18 or 19. Works with Next.js's App Router: the build starts with
 `'use client'`. Nothing Solana to install on your side.
 
+On your server, `@mesub/node` with its routes mounted (`mesubRoutes` or
+`mesubRouteHandlers`): `@mesub/react` 0.1.x works with the routes of
+`@mesub/node` 0.1.x. Upgrade both to the same minor together.
+
 ## One line on each side
 
 On your server, after your own login
@@ -309,6 +313,13 @@ pnpm check:exports # resolves through import and require, starts with 'use clien
 The pre-push hook runs all of it, as CI does. [`playground/`](./playground)
 runs the widget against a local back, with a merchant server that mounts the
 routes.
+
+### Releasing
+
+A version tag on main publishes, once a reviewer approves: see
+[RELEASING.md](./RELEASING.md) for the one-time setup, the checklist and the
+compatibility rule with `@mesub/node`, and [CHANGELOG.md](./CHANGELOG.md) for
+what changed.
 
 ## License
 

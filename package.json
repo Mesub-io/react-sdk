@@ -1,7 +1,7 @@
 {
   "name": "@mesub/react",
-  "version": "0.0.0",
-  "description": "React widget for Mesub: the wallet part of subscribing, cancelling and resuming, on top of the routes @mesub/node mounts on your server.",
+  "version": "0.1.0",
+  "description": "React widget for Mesub: the wallet part of subscribing, cancelling, resuming and closing, on top of the routes @mesub/node mounts on your server.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -54,7 +54,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:exports": "node scripts/check-exports.mjs",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "prepublishOnly": "pnpm build && pnpm check:exports",
     "playground": "vite --config playground/vite.config.ts",
     "playground:server": "node --env-file=playground/.env.local playground/server.mjs"

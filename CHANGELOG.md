@@ -5,6 +5,14 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
+## 0.1.1 (2026-10-20)
+
+Works with the routes of `@mesub/node` 0.1.x, as before.
+
+- `chain` defaults to `solana:mainnet`, where Mesub runs. Under 0.1.0 a
+  provider without `chain` had the wallet sign for another network than
+  Mesub's plans (#77).
+
 ## 0.1.0 (2026-10-16)
 
 The first version published to npm. Requires React 18 or 19, and on your

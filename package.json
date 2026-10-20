@@ -1,6 +1,6 @@
 {
   "name": "@mesub/react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React widget for Mesub: the wallet part of subscribing, cancelling, resuming and closing, on top of the routes @mesub/node mounts on your server.",
   "license": "MIT",
   "repository": {

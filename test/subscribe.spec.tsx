@@ -22,6 +22,7 @@ import {
     WALLET,
     type Handler,
 } from './helpers';
+import { planEnd } from '../src/format';
 import { registerWallet, signedBy, type FakeWalletOptions } from './wallets';
 
 const routes: Record<string, Handler> = {
@@ -169,7 +170,9 @@ describe('subscribing, from the click to Done', () => {
 
         fireEvent.click(button());
         const dialog = await screen.findByRole('dialog');
-        expect(await within(dialog).findByText(/^Ends on /)).toBeTruthy();
+        // Always with its time, in UTC, however far away it is.
+        expect(await within(dialog).findByText(`Ends on ${planEnd(ends)}`)).toBeTruthy();
+        expect(planEnd(ends)).toMatch(/, \d{2}:\d{2} UTC$/);
 
         fireEvent.click(
             await within(dialog).findByRole('button', { name: 'Continue with a wallet' }),
@@ -177,6 +180,7 @@ describe('subscribing, from the click to Done', () => {
         fireEvent.click(await within(dialog).findByRole('button', { name: 'Fake Wallet' }));
         await within(dialog).findByRole('button', { name: 'Sign and pay 2 USDC' });
         expect(within(dialog).getByText('Plan ends')).toBeTruthy();
+        expect(within(dialog).getByText(planEnd(ends)!)).toBeTruthy();
         // The plan outlives the next period: that charge is still announced.
         expect(within(dialog).getByText('Next charge')).toBeTruthy();
     });
@@ -306,7 +310,7 @@ describe('a plan that ends before a second charge', () => {
         expect(cadenceOf(dialog)).toBe('once');
         expect(within(dialog).queryByText(/^every /)).toBeNull();
         expect(dialog.querySelector('[data-mesub-ends]')?.textContent).toMatch(
-            /^Access until .+, when the plan ends\. Nothing more is charged\.$/,
+            /^Access until [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{2}:\d{2} UTC, when the plan ends\. Nothing more is charged\.$/,
         );
     });
 

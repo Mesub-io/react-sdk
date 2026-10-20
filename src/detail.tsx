@@ -16,7 +16,7 @@ import {
     formatAmount,
     formatUsd,
     grouped,
-    moment,
+    planEnd,
     briefPrice,
     fit,
     shortAddress,
@@ -213,10 +213,10 @@ export function SubscriptionDialog({
                             <dd title={total.title}>{total.text}</dd>
                         </div>
                     ) : null}
-                    {moment(plan?.ends_at) ? (
+                    {planEnd(plan?.ends_at) ? (
                         <div data-mesub-row="">
                             <dt>Plan ends</dt>
-                            <dd>{moment(plan?.ends_at)}</dd>
+                            <dd>{planEnd(plan?.ends_at)}</dd>
                         </div>
                     ) : null}
                     {closeFrom(row) ? (

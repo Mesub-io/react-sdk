@@ -10,6 +10,7 @@ import {
     chargedOnce,
     fit,
     moment,
+    planEnd,
     manageLink,
     planUsd,
     shortAddress,
@@ -716,7 +717,7 @@ function stageScreen(props: {
     // Short where it is read fast; the terms keep the exact amount.
     const { text: price, title: exact } = briefPrice(plan);
     // A plan with an end date stops charging there: said before anything is signed.
-    const ends = moment(plan.ends_at);
+    const ends = planEnd(plan.ends_at);
     // The terms once they are on screen or signed, the plan before.
     const single =
         view.name === 'review'
@@ -987,7 +988,8 @@ function stageScreen(props: {
 
     // Signed as one charge: no next one is announced, whatever came back.
     const nextCharge = view.single ? null : moment(view.subscription.next_charge_at);
-    const accessUntil = view.single ? (moment(view.subscription.access_until) ?? ends) : null;
+    // One charge: access stops at the plan's end, written as it was before signing.
+    const accessUntil = view.single ? (ends ?? moment(view.subscription.access_until)) : null;
     const manage = manageLink(props.manageUrl, view.cancelUrl);
 
     return {

@@ -553,7 +553,7 @@ describe('cancel, resume, close: the wallet signs and sends, the server confirms
 
         expect(
             await within(dialog).findByText(
-                /^It runs again until .+, when the plan ends\. Nothing more is charged\.$/,
+                /^It runs again until [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{2}:\d{2} UTC, when the plan ends\. Nothing more is charged\.$/,
             ),
         ).toBeTruthy();
         expect(within(dialog).queryByText(/Charges start again/)).toBeNull();
@@ -1042,15 +1042,19 @@ describe('ManageButton', () => {
         detail,
         plan: slug,
         children,
+        ends,
     }: {
         held?: MesubSubscription[];
         // What GET /subscriptions/:id answers; left out, the route does not exist.
         detail?: unknown;
         plan?: string;
         children?: string;
+        // The plan's ends_at; left out, the plan has no end.
+        ends?: string;
     } = {}) {
         const fetch = server({
-            'GET /plans/pro': () => json(200, plan),
+            'GET /plans/pro': () =>
+                json(200, ends === undefined ? plan : { ...plan, ends_at: ends }),
             'GET /subscriptions': () => json(200, { subscriptions: held }),
             'GET /subscriptions/sub_1': () =>
                 detail === undefined
@@ -1208,6 +1212,17 @@ describe('ManageButton', () => {
 
         const label = await within(dialog).findByText('Total paid');
         expect(label.nextElementSibling?.textContent).toBe('8 USDC');
+    });
+
+    it("shows the plan's end with its exact time in UTC", async () => {
+        mount({
+            detail: { subscription: subscription(), upcoming: [], payments: [] },
+            ends: '2999-10-20T14:00:00.000Z',
+        });
+        const dialog = await open();
+
+        const label = await within(dialog).findByText('Plan ends');
+        expect(label.nextElementSibling?.textContent).toBe('Oct 20, 2999, 14:00 UTC');
     });
 
     it('takes the sum of the charges listed as the total only while the list is whole', async () => {

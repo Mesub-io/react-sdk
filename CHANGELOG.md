@@ -10,7 +10,7 @@ those of Mesub-io/react-sdk.
 - A plan's end is shown with its exact time, in UTC: `Oct 20, 2026, 23:59 UTC`,
   never the day alone, also on a plan that ends at the end of a day. The same
   for every subscriber, whatever their zone, on the plan, the review, the
-  receipt, the subscription's detail and the resume dialog.
+  receipt, the subscription's detail and the resume dialog (#81).
 
 ## 0.1.1 (2026-10-20)
 

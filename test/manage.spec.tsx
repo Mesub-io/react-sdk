@@ -479,7 +479,7 @@ describe('cancel, resume, close: the wallet signs and sends, the server confirms
             expect(wallet.signAndSendTransaction).toHaveBeenCalledTimes(1);
             expect(wallet.signAndSendTransaction.mock.calls[0]![0]).toEqual({
                 account: wallet.account,
-                chain: 'solana:devnet',
+                chain: 'solana:mainnet',
                 transaction: TX_BYTES,
             });
             expect(wallet.signTransaction).not.toHaveBeenCalled();
@@ -496,7 +496,7 @@ describe('cancel, resume, close: the wallet signs and sends, the server confirms
             for (const [, init] of fetch.mock.calls) expect(init.credentials).toBe('include');
             expect(
                 within(dialog).getByRole('link', { name: 'View transaction' }).getAttribute('href'),
-            ).toBe(`https://explorer.solana.com/tx/${base58(wallet.signature)}?cluster=devnet`);
+            ).toBe(`https://explorer.solana.com/tx/${base58(wallet.signature)}`);
 
             // The list is read again, and the row shows what it allows now.
             await waitFor(() =>

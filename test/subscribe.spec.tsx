@@ -84,7 +84,8 @@ describe('subscribing, from the click to Done', () => {
         expect(within(dialog).getByText('2 USDC')).toBeTruthy();
         expect(within(dialog).getByText('every 3 days')).toBeTruthy();
         expect(within(dialog).getByText('Fraise')).toBeTruthy();
-        expect(within(dialog).getByText('Test network')).toBeTruthy();
+        // A mainnet plan: no test-network badge.
+        expect(within(dialog).queryByText('Test network')).toBeNull();
         expect(dialog.getAttribute('data-mesub-step')).toBe('plan');
         expect(made(fetch)).toEqual(['GET /plans/pro']);
 
@@ -121,7 +122,7 @@ describe('subscribing, from the click to Done', () => {
         expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
         expect(wallet.signTransaction.mock.calls[0]![0]).toEqual({
             account: wallet.account,
-            chain: 'solana:devnet',
+            chain: 'solana:mainnet',
             transaction: TX_BYTES,
         });
         expect(wallet.signMessage.mock.invocationCallOrder[0]).toBeLessThan(
@@ -150,7 +151,7 @@ describe('subscribing, from the click to Done', () => {
         // The wallet is the transaction's first signer here: its signature is the receipt.
         const receipt = within(dialog).getByRole('link', { name: 'View' });
         expect(receipt.getAttribute('href')).toBe(
-            `https://explorer.solana.com/tx/${base58(wallet.signature)}?cluster=devnet`,
+            `https://explorer.solana.com/tx/${base58(wallet.signature)}`,
         );
 
         click('Done');

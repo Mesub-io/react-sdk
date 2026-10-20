@@ -16,7 +16,7 @@ import type { SolanaChain } from './wallet';
 export interface MesubProviderProps {
     // Where your server mounts the routes of @mesub/node: "/api/mesub".
     endpoint: string;
-    // The network the wallet signs for and sends on. solana:devnet by default.
+    // The network the wallet signs for and sends on. solana:mainnet by default, where Mesub runs.
     chain?: SolanaChain | undefined;
     // To add your own headers or credentials. By default, credentials: 'include'.
     fetch?: FetchLike | undefined;
@@ -41,7 +41,7 @@ interface Pending {
 /** Says where the merchant's routes are, and renders the one dialog the hooks open. */
 export function MesubProvider({
     endpoint,
-    chain = 'solana:devnet',
+    chain = 'solana:mainnet',
     fetch,
     theme,
     manageUrl,

@@ -27,7 +27,7 @@ export const plan: MesubPlan = {
     symbol: 'USDC',
     mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     period_hours: 72,
-    network: 'devnet',
+    network: 'mainnet-beta',
     status: 'active',
     available: true,
     ends_at: null,

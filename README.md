@@ -70,7 +70,7 @@ export function App({ children }) {
 | Prop        | What it is                                                                                                                               |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `endpoint`  | Where you mounted the routes. A path on your site, or a full URL.                                                                        |
-| `chain`     | The network the wallet signs for: `solana:devnet` (the default) or `solana:mainnet`. It must match your plans' `network`.                |
+| `chain`     | The network the wallet signs for: `solana:mainnet` (the default, where Mesub runs). It must match your plans' `network`.                 |
 | `fetch`     | Your own `(url, init) => Promise<Response>`, to add headers or credentials.                                                              |
 | `theme`     | `light`, `dark` or `auto`, set on the widget as `data-mesub-theme`.                                                                      |
 | `manageUrl` | Where "Cancel any time" leads once subscribed: your own page (`/account`, or a full URL). Mesub's page by default; `null` for no button. |

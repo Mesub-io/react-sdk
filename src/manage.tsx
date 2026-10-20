@@ -4,7 +4,7 @@ import { signedOut } from './api';
 import { useMesubInternal } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
-import { moment, noChargeAt, shortAddress } from './format';
+import { moment, noChargeAt, planEnd, shortAddress } from './format';
 import {
     Explorer,
     failureScreen,
@@ -122,7 +122,7 @@ function consequence(
     if (action === 'resume') {
         // The plan ends before a charge can run: resuming brings none back.
         if (end && until && noChargeAt(Date.parse(end), planEndsAt)) {
-            return `It runs again until ${until}, when the plan ends. Nothing more is charged.`;
+            return `It runs again until ${planEnd(planEndsAt)}, when the plan ends. Nothing more is charged.`;
         }
         return until
             ? `Charges start again on ${until}, as before.`

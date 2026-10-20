@@ -9,6 +9,7 @@ import {
     manageLink,
     moment,
     noChargeAt,
+    planEnd,
     shortDay,
     shortMoment,
     termsCancelUrl,
@@ -407,5 +408,29 @@ describe('moment', () => {
     it.each([null, undefined, '', 'soon'])('is null for %s', (value) => {
         expect(moment(value, now)).toBeNull();
         expect(shortMoment(value, now)).toBeNull();
+    });
+});
+
+describe('planEnd', () => {
+    it.each([
+        ['an end of day, its last second', '2026-10-20T23:59:59.000Z', 'Oct 20, 2026, 23:59 UTC'],
+        ['an afternoon', '2027-01-31T14:00:00.000Z', 'Jan 31, 2027, 14:00 UTC'],
+        ['a minute', '2026-12-01T09:07:00.000Z', 'Dec 1, 2026, 09:07 UTC'],
+        ['midnight', '2026-12-01T00:00:00.000Z', 'Dec 1, 2026, 00:00 UTC'],
+        [
+            'an instant in another zone, in UTC',
+            '2026-10-21T01:30:00+02:00',
+            'Oct 20, 2026, 23:30 UTC',
+        ],
+    ])('writes %s with its time in UTC', (_, iso, written) => {
+        expect(planEnd(iso)).toBe(written);
+    });
+
+    it('drops the seconds, never rounds up to the next minute', () => {
+        expect(planEnd('2026-12-31T23:59:59.999Z')).toBe('Dec 31, 2026, 23:59 UTC');
+    });
+
+    it.each([null, undefined, '', 'soon'])('is null for %s', (value) => {
+        expect(planEnd(value)).toBeNull();
     });
 });

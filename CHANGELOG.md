@@ -5,6 +5,13 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
+## Unreleased
+
+- A plan's end is shown with its exact time, in UTC: `Oct 20, 2026, 23:59 UTC`,
+  never the day alone, also on a plan that ends at the end of a day. The same
+  for every subscriber, whatever their zone, on the plan, the review, the
+  receipt, the subscription's detail and the resume dialog.
+
 ## 0.1.1 (2026-10-20)
 
 Works with the routes of `@mesub/node` 0.1.x, as before.

@@ -242,6 +242,25 @@ export function shortMoment(iso: string | null | undefined, now = Date.now()): s
     return written(iso, { month: 'short', day: 'numeric' }, now);
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const two = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * A plan's end, always with its time and in UTC: `Oct 20, 2026, 23:59 UTC`.
+ * A plan ends on any second, not on a day, and the same words for everyone,
+ * whatever their zone. Seconds are dropped: 23:59:59 reads 23:59.
+ */
+export function planEnd(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return (
+        `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}, ` +
+        `${two(date.getUTCHours())}:${two(date.getUTCMinutes())} UTC`
+    );
+}
+
 export function shortAddress(address: string): string {
     return `${address.slice(0, 4)}…${address.slice(-4)}`;
 }

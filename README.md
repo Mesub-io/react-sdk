@@ -101,8 +101,10 @@ import { SubscribeButton } from '@mesub/react';
 dialog, from the plan to the receipt:
 
 1. **The plan**: its name, price and period, from `GET /plans/:slug`, and its end
-   date when it has one. A plan that ends before a second charge can run is
-   priced `once`, with the date its access runs to.
+   when it has one. A plan ends on any second, so its end is always written
+   with its time, in UTC, the same for every subscriber: `Oct 20, 2026, 23:59 UTC`.
+   A plan that ends before a second charge can run is priced `once`, with the
+   end its access runs to.
 2. **A wallet**: the installed wallets that can sign
    ([Wallet Standard](https://github.com/wallet-standard/wallet-standard), so
    Phantom, Solflare and the others). The one picked is asked for its account.

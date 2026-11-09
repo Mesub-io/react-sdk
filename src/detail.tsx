@@ -85,6 +85,9 @@ function useDetail(row: MesubHeldSubscription | null): MesubSubscriptionDetail |
     return detail?.subscription.id === id ? detail : null;
 }
 
+/** Said where the past payments go when the server could not read them. */
+export const PAYMENTS_UNREAD = 'Past payments could not be read just now.';
+
 /**
  * The customer's subscription to a plan, in the Mesub window: what it is, how
  * it stands, what comes next, what was charged, and the one thing it allows.
@@ -105,7 +108,7 @@ export function SubscriptionDialog({
     const [shown, setShown] = useState(PAST_SHOWN);
     const titleId = useId();
     const { chain } = useMesubInternal();
-    const { state, subscriptions, error, reload, payNow, manage } = useSubscriptions();
+    const { state, subscriptions, hasMore, error, reload, payNow, manage } = useSubscriptions();
     const row = (pickSubscription(subscriptions, slug) as MesubHeldSubscription | null) ?? null;
     const plan = usePlan(row?.plan);
     const detail = useDetail(row);
@@ -143,7 +146,11 @@ export function SubscriptionDialog({
         body = (
             <>
                 <h2 id={titleId}>No subscription yet</h2>
-                <p>You are not subscribed to this plan.</p>
+                <p>
+                    {hasMore
+                        ? 'None of your most recent subscriptions is to this plan.'
+                        : 'You are not subscribed to this plan.'}
+                </p>
             </>
         );
     } else {
@@ -153,6 +160,8 @@ export function SubscriptionDialog({
         const note = noteOf(row);
         const upcoming = detail?.upcoming ?? [];
         const past = detail?.payments ?? [];
+        // The server said it could not read them: said, never shown as no payment at all.
+        const unread = detail?.payments === null && detail.payments_error !== null;
         // In the plan's token; left out while the plan or the total is unknown, never guessed.
         const total = detail?.paid?.amount
             ? paidBrief(detail.paid.amount, plan, formatAmount)
@@ -231,7 +240,7 @@ export function SubscriptionDialog({
                     </div>
                 </dl>
 
-                {upcoming.length > 0 || past.length > 0 ? (
+                {upcoming.length > 0 || past.length > 0 || unread ? (
                     // Closed until asked for, as the terms are on the checkout: same toggle.
                     <details data-mesub-terms="" data-mesub-payments="">
                         <summary>Payments</summary>
@@ -258,6 +267,12 @@ export function SubscriptionDialog({
                                         </li>
                                     ))}
                                 </ul>
+                            </section>
+                        ) : null}
+                        {unread ? (
+                            <section aria-label="Past payments">
+                                <h3>Past</h3>
+                                <p data-mesub-payments-error="">{PAYMENTS_UNREAD}</p>
                             </section>
                         ) : null}
                         {past.length > 0 ? (

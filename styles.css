@@ -2109,7 +2109,8 @@
  *   > li[data-mesub-subscription] > div[data-mesub-subscription-head] (strong + span[data-mesub-status])
  *   + p[data-mesub-subscription-price] + dl[data-mesub-summary]
  *   + div[data-mesub-pay-now] (button + p[data-mesub-pay-now-said]) on a late one + button[data-mesub-action];
- *   p[data-mesub-empty] when there is nothing to list, button[data-mesub-retry] after an error.
+ *   p[data-mesub-empty] when there is nothing to list, button[data-mesub-retry] after an error,
+ *   p[data-mesub-subscription-note] under a list the server cut short.
  */
 
 [data-mesub-subscriptions] {
@@ -2503,6 +2504,14 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+/* past payments the server could not read: said in a quiet line, never an empty list */
+[data-mesub-payments] p[data-mesub-payments-error] {
+  margin: 0;
+  color: var(--_muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: start;
 }
 /* the rest of the history, asked for: a quiet line, never a second button */
 [data-mesub-dialog] [data-mesub-more] {

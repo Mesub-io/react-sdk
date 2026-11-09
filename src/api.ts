@@ -5,6 +5,7 @@ import type {
     MesubPlan,
     MesubSubscription,
     MesubSubscriptionDetail,
+    MesubSubscriptionList,
     MesubUpcoming,
     PreparedSubscription,
     Settled,
@@ -27,7 +28,7 @@ export interface ApiOptions {
 /** The routes `@mesub/node` mounts on the merchant's server. Nothing here reaches Mesub. */
 export interface MesubApi {
     plan(slug: string): Promise<MesubPlan>;
-    subscriptions(): Promise<MesubSubscription[]>;
+    subscriptions(): Promise<MesubSubscriptionList>;
     // One of them with its latest charges.
     subscription(id: string): Promise<MesubSubscriptionDetail>;
     prepare(plan: string, wallet: string): Promise<PreparedSubscription>;
@@ -88,6 +89,16 @@ function paidOf(answer: Record<string, unknown>): MesubSubscriptionDetail['paid'
 
     const whole = Array.isArray(answer.payments) && answer.payments.length < LISTED_AT_MOST;
     return whole ? read(answer.listed_paid) : null;
+}
+
+/** Why the server could not read the payments, when it says so in a shape the widget reads. */
+function paymentsErrorOf(
+    answer: Record<string, unknown>,
+): MesubSubscriptionDetail['payments_error'] {
+    const error = answer.payments_error;
+    return isObject(error) && typeof error.code === 'string' && typeof error.message === 'string'
+        ? { code: error.code, message: error.message }
+        : null;
 }
 
 export function createApi(options: ApiOptions): MesubApi {
@@ -179,9 +190,13 @@ export function createApi(options: ApiOptions): MesubApi {
             )) as unknown as MesubPlan,
         subscriptions: async () => {
             const answer = await request('GET', '/subscriptions', undefined, REQUEST_TIMEOUT_MS);
-            return Array.isArray(answer.subscriptions)
-                ? (answer.subscriptions as MesubSubscription[])
-                : [];
+            return {
+                subscriptions: Array.isArray(answer.subscriptions)
+                    ? (answer.subscriptions as MesubSubscription[])
+                    : [],
+                // An older server does not say: read as whole.
+                has_more: answer.has_more === true,
+            };
         },
         subscription: async (id) => {
             const answer = await request('GET', at(id), undefined, REQUEST_TIMEOUT_MS);
@@ -194,6 +209,7 @@ export function createApi(options: ApiOptions): MesubApi {
                     ? (answer.payments as MesubPayment[])
                     : null,
                 paid: paidOf(answer),
+                payments_error: paymentsErrorOf(answer),
             };
         },
         prepare: async (plan, wallet) =>

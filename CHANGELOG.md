@@ -12,6 +12,17 @@ those of Mesub-io/react-sdk.
   `receiver_account_confidential_only`, `mint_paused` and
   `mint_transfer_hook`. The widget words them as every other block: payments
   on hold, nothing for the subscriber to do (#84).
+- `MesubSubscription` types `next_retry_number` and `retries_allowed`, as the
+  routes of `@mesub/node` serve them. The payments and the charge to come read
+  in the window carry `retry`, `period_start` and `amount_usd`; amounts are in
+  the token's base units; `transaction_expires_at` may be null (#86).
+- `useSubscriptions` gives `hasMore`: true when the customer holds more
+  subscriptions than the server listed. `ManageSubscriptions` says so under
+  its list, and the window no longer says "not subscribed" when the one to
+  that plan may be among those left out (#86).
+- When the server could not read a subscription's past payments
+  (`payments_error`), its window says so in one line instead of showing none
+  (#86).
 
 ## 0.1.2 (2026-10-21)
 

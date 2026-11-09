@@ -37,6 +37,8 @@ export interface UseSubscriptionsResult {
     state: 'loading' | 'ready' | 'signed-out' | 'error';
     // Newest first. Checkouts never signed are left out.
     subscriptions: MesubHeldSubscription[];
+    // True when the customer has more than the server listed (its newest 500): older ones are missing.
+    hasMore: boolean;
     // The server's message, in the error state.
     error: string | null;
     reload(): Promise<void>;
@@ -103,6 +105,9 @@ export function payableOf(row: MesubSubscription, now: number): boolean {
     return Number.isNaN(deadline) || deadline > now;
 }
 
+/** Said under a list the server cut short. */
+export const MORE_NOT_LISTED = 'Only your most recent subscriptions are listed here.';
+
 export const PAY_NOW_SENT = 'Payment sent. It shows here once the network confirms it.';
 
 /** Why paying now was refused, as the canonical table words it; Mesub's own message otherwise. */
@@ -138,6 +143,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
 
     const [state, setState] = useState<UseSubscriptionsResult['state']>('loading');
     const [rows, setRows] = useState<MesubSubscription[]>([]);
+    const [hasMore, setHasMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
 
@@ -156,7 +162,8 @@ export function useSubscriptions(): UseSubscriptionsResult {
         try {
             const served = await api.subscriptions();
             if (!alive.current || id !== read.current) return;
-            setRows(served.filter((row) => HELD.has(row.status)));
+            setRows(served.subscriptions.filter((row) => HELD.has(row.status)));
+            setHasMore(served.has_more);
             setNow(Date.now());
             setError(null);
             setState('ready');
@@ -164,6 +171,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
             if (!alive.current || id !== read.current) return;
             if (signedOut(failure)) {
                 setRows([]);
+                setHasMore(false);
                 setError(null);
                 setState('signed-out');
                 return;
@@ -230,7 +238,7 @@ export function useSubscriptions(): UseSubscriptionsResult {
         [api, reload],
     );
 
-    return { state, subscriptions, error, reload, payNow, manage };
+    return { state, subscriptions, hasMore, error, reload, payNow, manage };
 }
 
 export const STATUS: Record<string, string> = {
@@ -413,7 +421,7 @@ export interface ManageSubscriptionsProps extends HTMLAttributes<HTMLDivElement>
  */
 export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsProps) {
     const { theme } = useMesubInternal();
-    const { state, subscriptions, error, reload, payNow, manage } = useSubscriptions();
+    const { state, subscriptions, hasMore, error, reload, payNow, manage } = useSubscriptions();
     const plans = usePlans(subscriptions.flatMap((row) => (row.plan ? [row.plan] : [])));
     const [retrying, setRetrying] = useState(false);
 
@@ -457,7 +465,7 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
                 </button>
             </>
         );
-    } else if (subscriptions.length === 0) {
+    } else if (subscriptions.length === 0 && !hasMore) {
         body = <p data-mesub-empty="none">You have no subscription yet.</p>;
     } else {
         body = (
@@ -546,6 +554,9 @@ export function ManageSubscriptions({ onChanged, ...rest }: ManageSubscriptionsP
             data-mesub-theme={theme}
         >
             {body}
+            {state === 'ready' && hasMore ? (
+                <p data-mesub-subscription-note="">{MORE_NOT_LISTED}</p>
+            ) : null}
         </div>
     );
 }

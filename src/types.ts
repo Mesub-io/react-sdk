@@ -104,6 +104,10 @@ export interface MesubSubscription {
     current_period_end: string | null;
     next_charge_at: string | null;
     next_retry_at: string | null;
+    // Which try comes next, out of how many the plan allows: 2 and 3 for "retry 2 / 3". Null
+    // unless Mesub retries on its own; absent from an older server.
+    next_retry_number?: number | null;
+    retries_allowed?: number | null;
     retry_deadline: string | null;
     access_until: string | null;
     // Whether the wallet can close it on Solana now and get its deposit back, and from
@@ -133,8 +137,8 @@ export interface PreparedSubscription {
     transaction: string;
     last_valid_block_height: string;
     // When that block height should pass: an estimate that errs early, about half a minute
-    // after the answer (Mesub-io/backend#471). Absent from an older server.
-    transaction_expires_at?: string;
+    // after the answer (Mesub-io/backend#471). Null or absent from an older server.
+    transaction_expires_at?: string | null;
     costs: MesubCosts;
     terms: { message: string; expires_at: string };
 }
@@ -155,8 +159,8 @@ export interface Settled {
 export interface WalletTransaction {
     transaction: string;
     last_valid_block_height: string;
-    // As on `PreparedSubscription`. Absent from an older server.
-    transaction_expires_at?: string;
+    // As on `PreparedSubscription`. Null or absent from an older server.
+    transaction_expires_at?: string | null;
 }
 
 /** One charge Mesub tried, as the merchant's server hands it on. */
@@ -171,9 +175,13 @@ export interface MesubPayment {
     reason: string | null;
     // The transaction, once something was sent.
     signature: string | null;
+    // A retry of a missed charge. Null or absent when the server does not say.
+    retry?: boolean | null;
     // Which retry it was, out of how many the plan allowed. Absent or null when it was not one.
     retry_number?: number | null;
     retries_allowed?: number | null;
+    // The start of the period it was for. Null when Mesub recorded none; absent from an older server.
+    period_start?: string | null;
 }
 
 /** The one charge Mesub announces next, as the merchant's server serves it. */
@@ -181,9 +189,13 @@ export interface MesubUpcoming {
     // `charge` at the due date of a running one, `retry` of a missed one.
     kind: string;
     due_at: string;
-    // The plan's price as a person counts it; null when the server could not read the plan.
+    // The plan's price in the token's base units, and as a person counts it. Null when the
+    // server could not read the plan.
     amount: string | null;
     amount_display: string | null;
+    // That price in dollars at the latest price Mesub knows: an estimate, never what is
+    // charged. Null when Mesub knows no price; absent from an older server.
+    amount_usd?: string | null;
     // On a retry: which one comes, out of how many. Absent or null when the server does not say.
     retry_number?: number | null;
     retries_allowed?: number | null;
@@ -194,10 +206,20 @@ export interface MesubSubscriptionDetail {
     subscription: MesubSubscription;
     // Soonest first, one at most today. Empty when nothing is due, or on an older server.
     upcoming: MesubUpcoming[];
-    // Newest first. Null when they could not be read.
+    // Newest first. Null when they could not be read: `payments_error` says why.
     payments: MesubPayment[] | null;
+    // Why `payments` is null, null otherwise and from an older server.
+    payments_error: { code: string; message: string } | null;
     // What was paid since it began, in base units. Null when the server does not say.
     paid: { count: number; amount: string | null } | null;
+}
+
+/** What `GET /subscriptions` answers. */
+export interface MesubSubscriptionList {
+    // Newest first, the 500 newest at most.
+    subscriptions: MesubSubscription[];
+    // True when the customer has more than those, which the server did not read.
+    has_more: boolean;
 }
 
 /** What a subscription allows now. */

@@ -5,6 +5,14 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
+## 0.1.3 (unreleased)
+
+- `MesubBlockedReason` names the four causes the API serves that this release
+  did not know: `receiver_account_needs_memo`,
+  `receiver_account_confidential_only`, `mint_paused` and
+  `mint_transfer_hook`. The widget words them as every other block: payments
+  on hold, nothing for the subscriber to do (#84).
+
 ## 0.1.2 (2026-10-21)
 
 Works with the routes of `@mesub/node` 0.1.x, as before. Also brings the

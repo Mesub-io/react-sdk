@@ -5,7 +5,9 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
-## 0.1.3 (unreleased)
+## 0.1.3 (2026-11-09)
+
+Works with the routes of `@mesub/node` 0.1.x, as before.
 
 - `MesubBlockedReason` names the four causes the API serves that this release
   did not know: `receiver_account_needs_memo`,

@@ -50,13 +50,21 @@ export type MesubSubscriptionStatus =
     | 'expired'
     | 'superseded';
 
-/** Why charges are held back: the merchant's own setup by name, `mesub` for any cause of Mesub's. */
+/**
+ * Why charges are held back: the merchant's own setup by name (the last two
+ * the token issuer's to lift), `mesub` for any cause of Mesub's. The widget
+ * words every one the same to the subscriber.
+ */
 export type MesubBlockedReason =
     | 'puller_not_allowed'
     | 'receiver_not_allowed'
     | 'receiver_account_missing'
     | 'receiver_account_frozen'
+    | 'receiver_account_needs_memo'
+    | 'receiver_account_confidential_only'
     | 'mint_gone'
+    | 'mint_paused'
+    | 'mint_transfer_hook'
     | 'mesub';
 
 /**

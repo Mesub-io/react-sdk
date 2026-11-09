@@ -1696,7 +1696,11 @@ describe('a subscription whose payments are on hold', () => {
         'puller_not_allowed',
         'receiver_not_allowed',
         'receiver_account_frozen',
+        'receiver_account_needs_memo',
+        'receiver_account_confidential_only',
         'mint_gone',
+        'mint_paused',
+        'mint_transfer_hook',
         'mesub',
     ] as const)('words %s the same', (reason) => {
         expect(noteOf(held(blocked({ blocked_reason: reason })))).toMatch(HOLD);

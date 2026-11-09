@@ -7,6 +7,11 @@ those of Mesub-io/react-sdk.
 
 ## 0.1.3 (unreleased)
 
+- `MesubBlockedReason` names the four causes the API serves that this release
+  did not know: `receiver_account_needs_memo`,
+  `receiver_account_confidential_only`, `mint_paused` and
+  `mint_transfer_hook`. The widget words them as every other block: payments
+  on hold, nothing for the subscriber to do (#84).
 - `MesubSubscription` types `next_retry_number` and `retries_allowed`, as the
   routes of `@mesub/node` serve them. The payments and the charge to come read
   in the window carry `retry`, `period_start` and `amount_usd`; amounts are in

@@ -27,7 +27,8 @@ import {
     type Handler,
 } from './helpers';
 import { paidIn, paymentSaid, pickSubscription, retryOf } from '../src/detail-logic';
-import { noteOf } from '../src/subscriptions';
+import { PAYMENTS_UNREAD } from '../src/detail';
+import { MORE_NOT_LISTED, noteOf } from '../src/subscriptions';
 import { registerWallet, type FakeWalletOptions } from './wallets';
 
 const built = () => json(201, { transaction: TX_BASE64, last_valid_block_height: '100' });
@@ -380,6 +381,26 @@ describe('the list', () => {
         setup({ held: [] });
 
         expect(await screen.findByText('You have no subscription yet.')).toBeTruthy();
+        expect(screen.queryByText(MORE_NOT_LISTED)).toBeNull();
+    });
+
+    it('says older ones are not listed when the server cut the list short', async () => {
+        setup({
+            overrides: {
+                'GET /subscriptions': () =>
+                    json(200, { subscriptions: [subscription()], has_more: true }),
+            },
+        });
+
+        expect(await row()).toBeTruthy();
+        expect(screen.getByText(MORE_NOT_LISTED)).toBeTruthy();
+    });
+
+    it('says nothing of older ones on a whole list', async () => {
+        setup();
+
+        expect(await row()).toBeTruthy();
+        expect(screen.queryByText(MORE_NOT_LISTED)).toBeNull();
     });
 
     it('shows a failed read, and reads again on Try again', async () => {
@@ -1043,8 +1064,11 @@ describe('ManageButton', () => {
         plan: slug,
         children,
         ends,
+        more = false,
     }: {
         held?: MesubSubscription[];
+        // The list's has_more: the customer holds more than it lists.
+        more?: boolean;
         // What GET /subscriptions/:id answers; left out, the route does not exist.
         detail?: unknown;
         plan?: string;
@@ -1055,7 +1079,7 @@ describe('ManageButton', () => {
         const fetch = server({
             'GET /plans/pro': () =>
                 json(200, ends === undefined ? plan : { ...plan, ends_at: ends }),
-            'GET /subscriptions': () => json(200, { subscriptions: held }),
+            'GET /subscriptions': () => json(200, { subscriptions: held, has_more: more }),
             'GET /subscriptions/sub_1': () =>
                 detail === undefined
                     ? refusal(404, 'not_found', 'Nothing here.')
@@ -1283,6 +1307,25 @@ describe('ManageButton', () => {
 
         expect(await within(dialog).findByRole('heading', { name: 'Pro' })).toBeTruthy();
         expect(within(dialog).queryByRole('listitem')).toBeNull();
+        expect(within(dialog).queryByText(PAYMENTS_UNREAD)).toBeNull();
+    });
+
+    it('says the past payments could not be read when the server says why', async () => {
+        mount({
+            detail: {
+                subscription: subscription(),
+                upcoming: [],
+                payments: null,
+                payments_error: { code: 'unavailable', message: 'Mesub did not answer.' },
+            },
+        });
+        const dialog = await open();
+
+        expect(await within(dialog).findByText(PAYMENTS_UNREAD)).toBeTruthy();
+        expect(within(dialog).getByText('Payments')).toBeTruthy();
+        expect(within(dialog).queryByRole('listitem')).toBeNull();
+        // Mesub's own words are for the merchant, not the subscriber.
+        expect(within(dialog).queryByText('Mesub did not answer.')).toBeNull();
     });
 
     it('says so when the customer has no subscription to that plan', async () => {
@@ -1292,7 +1335,20 @@ describe('ManageButton', () => {
         expect(
             await within(dialog).findByRole('heading', { name: 'No subscription yet' }),
         ).toBeTruthy();
+        expect(within(dialog).getByText('You are not subscribed to this plan.')).toBeTruthy();
         expect(within(dialog).queryByRole('button', { name: 'Cancel subscription' })).toBeNull();
+    });
+
+    it('never says "not subscribed" when the one to that plan may be among those not listed', async () => {
+        mount({ held: [subscription({ plan: 'team' })], plan: 'pro', more: true });
+        const dialog = await open();
+
+        expect(
+            await within(dialog).findByText(
+                'None of your most recent subscriptions is to this plan.',
+            ),
+        ).toBeTruthy();
+        expect(within(dialog).queryByText('You are not subscribed to this plan.')).toBeNull();
     });
 
     it('steps aside for its action, and comes back when that one is left', async () => {

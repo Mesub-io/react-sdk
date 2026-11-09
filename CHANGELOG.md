@@ -5,6 +5,20 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
+## 0.1.3 (unreleased)
+
+- `MesubSubscription` types `next_retry_number` and `retries_allowed`, as the
+  routes of `@mesub/node` serve them. The payments and the charge to come read
+  in the window carry `retry`, `period_start` and `amount_usd`; amounts are in
+  the token's base units; `transaction_expires_at` may be null (#86).
+- `useSubscriptions` gives `hasMore`: true when the customer holds more
+  subscriptions than the server listed. `ManageSubscriptions` says so under
+  its list, and the window no longer says "not subscribed" when the one to
+  that plan may be among those left out (#86).
+- When the server could not read a subscription's past payments
+  (`payments_error`), its window says so in one line instead of showing none
+  (#86).
+
 ## 0.1.2 (2026-10-21)
 
 Works with the routes of `@mesub/node` 0.1.x, as before. Also brings the

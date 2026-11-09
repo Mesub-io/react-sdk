@@ -37,7 +37,10 @@ describe('the requests, as the routes of @mesub/node expect them', () => {
     it("reads the customer's subscriptions", async () => {
         const { api, fetch } = client(() => json(200, { subscriptions: [subscription()] }));
 
-        await expect(api.subscriptions()).resolves.toEqual([subscription()]);
+        await expect(api.subscriptions()).resolves.toEqual({
+            subscriptions: [subscription()],
+            has_more: false,
+        });
         expect(sent(fetch)).toMatchObject({
             url: '/api/mesub/subscriptions',
             method: 'GET',
@@ -224,7 +227,34 @@ describe('what goes wrong', () => {
     it('answers an empty list when the server names none', async () => {
         const { api } = client(() => json(200, {}));
 
-        await expect(api.subscriptions()).resolves.toEqual([]);
+        await expect(api.subscriptions()).resolves.toEqual({ subscriptions: [], has_more: false });
+    });
+
+    it('carries has_more: the customer holds more than the server listed', async () => {
+        const { api } = client(() =>
+            json(200, { subscriptions: [subscription()], has_more: true }),
+        );
+
+        await expect(api.subscriptions()).resolves.toMatchObject({ has_more: true });
+    });
+
+    it('reads why the payments could not be read, and null for a shape it does not know', async () => {
+        const error = { code: 'unavailable', message: 'Mesub did not answer.' };
+        const read = async (payments_error: unknown) =>
+            (
+                await client(() =>
+                    json(200, {
+                        subscription: subscription(),
+                        upcoming: [],
+                        payments: null,
+                        payments_error,
+                    }),
+                ).api.subscription('sub_1')
+            ).payments_error;
+
+        await expect(read(error)).resolves.toEqual(error);
+        await expect(read(undefined)).resolves.toBeNull();
+        await expect(read({ code: 42 })).resolves.toBeNull();
     });
 });
 

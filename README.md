@@ -214,6 +214,9 @@ nor past its date to pay by. What came of it is said under the button: the
 payment on its way, or why not (a short wallet spends no retry). On Free,
 where Mesub does not try again on its own, the card shows that date to pay by.
 
+When the server could not read a subscription's past payments, its window
+says so in one line rather than show none.
+
 One whose charges are held back for a cause that is not the customer's
 (`blocked_since`) says so in one line: payments are on hold, nothing is asked
 of them, and until when their access runs. The cause is never named to them,
@@ -245,6 +248,9 @@ function Mine() {
 - `subscriptions` are newest first, each with `action`: `cancel`, `resume`,
   `close` or null, and `payable`: whether **Pay now** can succeed. Checkouts
   nobody signed are left out.
+- `hasMore` is true when the customer holds more than the server listed (its
+  500 newest): older ones are missing. `ManageSubscriptions` says so under its
+  list.
 - `payNow(id)` pays that late payment now and resolves `{ ok, message }`, the
   words to show; it never throws.
 - `manage(id)` opens the dialog for that action and resolves when it closes:

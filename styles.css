@@ -116,6 +116,8 @@
   margin: auto;
   padding: 24px;
   overflow: auto;
+  /* Scrolls only when the content is taller, and never drags the page behind */
+  overscroll-behavior: contain;
   border: 1px solid var(--_border);
   border-radius: var(--_radius-lg);
   background: var(--_bg);

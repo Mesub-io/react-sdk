@@ -24,6 +24,10 @@ export interface ManageProps {
     onClose(): void;
     // Something was sent or settled: the lists read again. Null when only the outcome is unknown.
     onChanged(subscription: MesubSubscription | null): void;
+    // From the checkout: Mesub refused to build it, so the checkout says why it cannot subscribe.
+    onRefused?: ((error: MesubClientError) => void) | undefined;
+    // From the checkout: settled, and the checkout goes on instead of the done screen.
+    onDone?: ((subscription: MesubSubscription) => void) | undefined;
 }
 
 type View =
@@ -151,7 +155,14 @@ function outcome(action: MesubAction, subscription: MesubSubscription): string {
  * The window that cancels, resumes or closes one subscription: the wallet that
  * pays it signs and sends one transaction, then the server confirms it.
  */
-export function Manage({ subscription, action, onClose, onChanged }: ManageProps) {
+export function Manage({
+    subscription,
+    action,
+    onClose,
+    onChanged,
+    onRefused,
+    onDone,
+}: ManageProps) {
     const { api, chain, plan: readPlan, openInWalletUrl } = useMesubInternal();
     const wallets = useWallets();
     const titleId = useId();
@@ -169,8 +180,8 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
     const attempt = useRef(0);
     const shown = useRef<View>(view);
     const checkingNow = useRef(false);
-    const latest = useRef({ wallets, onChanged });
-    latest.current = { wallets, onChanged };
+    const latest = useRef({ wallets, onChanged, onRefused, onDone });
+    latest.current = { wallets, onChanged, onRefused, onDone };
 
     function setView(next: View) {
         shown.current = next;
@@ -277,6 +288,10 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
                 return;
             }
             const refused = error instanceof MesubClientError && error.status !== null;
+            if (refused && error.status !== 429 && latest.current.onRefused) {
+                latest.current.onRefused(error);
+                return;
+            }
             fail(
                 {
                     step: 'approve',
@@ -335,7 +350,8 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
                 fail(failure, signer, failure.moved === 'pending' ? signature : null);
                 return;
             }
-            setView({ name: 'done', subscription: settled.subscription, signature });
+            if (latest.current.onDone) latest.current.onDone(settled.subscription);
+            else setView({ name: 'done', subscription: settled.subscription, signature });
         } catch (error) {
             if (!current()) return;
             if (signedOut(error)) {

@@ -170,6 +170,35 @@ describe('what goes wrong', () => {
         });
     });
 
+    it('keeps the fields a refusal adds beside its code and message', async () => {
+        const { api } = client(() =>
+            json(409, {
+                error: {
+                    code: 'subscription_cancelled',
+                    message: 'Close it first.',
+                    subscription_id: 'sub_old',
+                    can_resume: false,
+                },
+                closable_from: null,
+                // In `error` and beside it: `error`'s wins.
+                can_resume: true,
+            }),
+        );
+
+        const error = await api.prepare('pro', 'Wa11et').catch((caught: unknown) => caught);
+        expect((error as MesubClientError).details).toEqual({
+            subscription_id: 'sub_old',
+            can_resume: false,
+            closable_from: null,
+        });
+    });
+
+    it('has no details on a refusal that adds nothing', async () => {
+        const { api } = client(() => refusal(409, 'already_subscribed', 'No.'));
+        const error = await api.prepare('pro', 'Wa11et').catch((caught: unknown) => caught);
+        expect((error as MesubClientError).details).toEqual({});
+    });
+
     it('reads Retry-After on a 429', async () => {
         const { api } = client(() =>
             refusal(429, 'rate_limited', 'Too many requests.', { 'Retry-After': '30' }),

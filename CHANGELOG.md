@@ -5,7 +5,9 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
-## 0.1.4 (unreleased)
+## 0.1.4 (2026-11-11)
+
+Works with the routes of `@mesub/node` 0.1.x, as before.
 
 - On a phone, wallets are apps the browser cannot see. With no wallet found
   there, the widget no longer offers to install one: it offers "Open this

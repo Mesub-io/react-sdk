@@ -186,7 +186,7 @@ function notPrepared(error: unknown): Failure {
  * signatures, then Mesub sends. One dialog from the click to "Done".
  */
 export function Checkout({ plan: slug, onClose, onState, onSubscribed }: CheckoutProps) {
-    const { api, chain, manageUrl } = useMesubInternal();
+    const { api, chain, manageUrl, openInWalletUrl } = useMesubInternal();
     const wallets = useWallets();
     const titleId = useId();
 
@@ -624,6 +624,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             wallets,
             purpose: 'subscribe',
             lead: 'It pays the subscription. Nothing is signed yet.',
+            openInWalletUrl,
             setView: (pickView) => {
                 attempt.current++;
                 setView({ name: 'wallet', pick: pickView });

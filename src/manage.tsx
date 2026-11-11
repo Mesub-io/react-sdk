@@ -152,7 +152,7 @@ function outcome(action: MesubAction, subscription: MesubSubscription): string {
  * pays it signs and sends one transaction, then the server confirms it.
  */
 export function Manage({ subscription, action, onClose, onChanged }: ManageProps) {
-    const { api, chain, plan: readPlan } = useMesubInternal();
+    const { api, chain, plan: readPlan, openInWalletUrl } = useMesubInternal();
     const wallets = useWallets();
     const titleId = useId();
     const words = WORDS[action];
@@ -406,6 +406,7 @@ export function Manage({ subscription, action, onClose, onChanged }: ManageProps
             wallets,
             purpose: 'manage',
             lead: `The one that pays this subscription: ${shortAddress(payer)}.`,
+            openInWalletUrl,
             setView: (pickView) => {
                 attempt.current++;
                 setView({ name: 'wallet', pick: pickView });

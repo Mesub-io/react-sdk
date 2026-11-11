@@ -5,6 +5,18 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
+## 0.1.4 (unreleased)
+
+- On a phone, wallets are apps the browser cannot see. With no wallet found
+  there, the widget no longer offers to install one: it offers "Open this
+  page in your wallet", one link each for Phantom and Solflare, which reopen
+  the page in the wallet's own browser, or lead to the app when it is not
+  installed. Desktop keeps the Install links. `openInWalletUrl` on
+  `MesubProvider` names the page to reopen; the current one by default
+  (#90).
+- The Phantom and Solflare links, on a phone or to install, show the wallets'
+  own logos instead of letter tiles (#90).
+
 ## 0.1.3 (2026-11-09)
 
 Works with the routes of `@mesub/node` 0.1.x, as before.

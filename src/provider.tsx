@@ -25,6 +25,8 @@ export interface MesubProviderProps {
     // Where "Cancel any time" leads once subscribed: your own page ("/account"), Mesub's by
     // default, null for no button.
     manageUrl?: string | null | undefined;
+    // On a phone with no wallet, the page the wallet app reopens: the current one by default.
+    openInWalletUrl?: string | undefined;
     children?: ReactNode;
 }
 
@@ -45,6 +47,7 @@ export function MesubProvider({
     fetch,
     theme,
     manageUrl,
+    openInWalletUrl,
     children,
 }: MesubProviderProps) {
     const api = useMemo(() => createApi({ endpoint, fetch }), [endpoint, fetch]);
@@ -116,13 +119,25 @@ export function MesubProvider({
             chain,
             theme,
             manageUrl,
+            openInWalletUrl,
             plan,
             revision,
             subscribe,
             manage,
             openSubscription,
         }),
-        [api, chain, theme, manageUrl, plan, revision, subscribe, manage, openSubscription],
+        [
+            api,
+            chain,
+            theme,
+            manageUrl,
+            openInWalletUrl,
+            plan,
+            revision,
+            subscribe,
+            manage,
+            openSubscription,
+        ],
     );
 
     return (

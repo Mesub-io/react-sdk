@@ -4,6 +4,7 @@ import { busyFor, deadlineOf, routeMissing, signedOut, unreachable } from './api
 import { useMesubInternal, type SubscribeState } from './context';
 import { MesubDialog, type DialogScreen } from './dialog';
 import { MesubClientError } from './errors';
+import { Manage } from './manage';
 import {
     briefPrice,
     cadence,
@@ -46,6 +47,21 @@ export interface CheckoutProps {
     // Each state reached, for the button underneath.
     onState(state: SubscribeState): void;
     onSubscribed(subscription: MesubSubscription, signature: string | null): void;
+    // An old subscription was resumed or closed from here: the lists read again.
+    onChanged?: (() => void) | undefined;
+}
+
+/** The customer's own cancelled subscription that blocks this one, and what frees the way. */
+interface WayOut {
+    id: string;
+    action: 'resume' | 'close';
+}
+
+/** A 409 `subscription_cancelled`, with the way out its body names. */
+interface Blocked {
+    signer: Signer;
+    error: MesubClientError;
+    way: WayOut;
 }
 
 type PlanState =
@@ -75,6 +91,10 @@ type View =
           single: boolean;
       }
     | { name: 'failed'; failure: Failure; signer: Signer | null; signature: string | null }
+    | ({ name: 'blocked' } & Blocked)
+    // Reading the subscription that blocks, then resuming or closing it as the manage dialog does.
+    | ({ name: 'finding' } & Blocked)
+    | ({ name: 'managing'; subscription: MesubSubscription } & Blocked)
     | { name: 'signed-out' };
 
 const SAFE = 'Nothing was charged.';
@@ -84,6 +104,7 @@ const EXPIRED =
     'The transaction expired before it was sent. Nothing was charged: approve this one.';
 const EXPIRED_TERMS =
     'The transaction expired before it was sent, and its terms with it. Nothing was charged: check these.';
+const CLOSED = 'Your old subscription is closed. Check the terms, then subscribe.';
 const NOT_LANDED =
     'The transaction has not landed yet. Wait a moment, then check again: nothing is paid twice.';
 
@@ -128,6 +149,20 @@ function singleCharge(plan: MesubPlan, terms?: string): boolean {
 
 const messageOf = (error: unknown) =>
     error instanceof MesubClientError ? error.message : 'Something went wrong.';
+
+/**
+ * The way out of a 409 `subscription_cancelled`, from the fields Mesub adds to
+ * it: resume it while it runs, or close it now. Null when the body names none
+ * (another customer's, closable only later, or a server that predates them).
+ */
+function wayOut(error: unknown): WayOut | null {
+    if (!(error instanceof MesubClientError)) return null;
+    if (error.status !== 409 || error.code !== 'subscription_cancelled') return null;
+    const { subscription_id: id, can_resume: resume, closable_from: from } = error.details;
+    if (typeof id !== 'string' || id === '' || typeof resume !== 'boolean') return null;
+    if (resume) return { id, action: 'resume' };
+    return from === null ? { id, action: 'close' } : null;
+}
 
 /** `POST /subscriptions` refused, or never answered: nothing was signed yet. */
 function notPrepared(error: unknown): Failure {
@@ -185,7 +220,7 @@ function notPrepared(error: unknown): Failure {
  * The window `useSubscribe` opens: the plan, a wallet, what it costs, the two
  * signatures, then Mesub sends. One dialog from the click to "Done".
  */
-export function Checkout({ plan: slug, onClose, onState, onSubscribed }: CheckoutProps) {
+export function Checkout({ plan: slug, onClose, onState, onSubscribed, onChanged }: CheckoutProps) {
     const { api, chain, manageUrl, openInWalletUrl } = useMesubInternal();
     const wallets = useWallets();
     const titleId = useId();
@@ -215,8 +250,8 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
     } | null>(null);
     // Transactions that expired at submit, in a row: the first is replaced, the second stops.
     const expiries = useRef(0);
-    const latest = useRef({ onState, onSubscribed });
-    latest.current = { onState, onSubscribed };
+    const latest = useRef({ onState, onSubscribed, onChanged });
+    latest.current = { onState, onSubscribed, onChanged };
 
     function setView(next: View) {
         shown.current = next;
@@ -253,8 +288,44 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
 
     // The server refused to build anything: nothing was paid, whatever was signed.
     function refused(error: unknown, signer: Signer) {
+        const way = wayOut(error);
         if (signedOut(error)) setView({ name: 'signed-out' });
-        else fail(notPrepared(error), signer);
+        else if (way && error instanceof MesubClientError) {
+            setView({ name: 'blocked', signer, error, way });
+        } else fail(notPrepared(error), signer);
+    }
+
+    // Mesub's words and Close, as when no way out is named: nothing was signed.
+    function stuck(blocked: Blocked) {
+        attempt.current++;
+        fail(notPrepared(blocked.error), blocked.signer);
+    }
+
+    /** "Resume it" or "Close it and subscribe": the subscription, then the manage dialog's steps. */
+    async function free(blocked: Blocked) {
+        if (shown.current.name !== 'blocked') return;
+        const current = begin();
+        setView({ ...blocked, name: 'finding' });
+        let subscription;
+        try {
+            ({ subscription } = await api.subscription(blocked.way.id));
+        } catch (error) {
+            if (!current()) return;
+            if (signedOut(error)) setView({ name: 'signed-out' });
+            else stuck(blocked);
+            return;
+        }
+        if (!current()) return;
+        if (subscription?.id !== blocked.way.id) {
+            stuck(blocked);
+            return;
+        }
+        setView({ ...blocked, name: 'managing', subscription });
+    }
+
+    // Closed: back to the review, with fresh terms. The new subscription is never signed for them.
+    function closed(signer: Signer) {
+        void prepare(signer, CLOSED);
     }
 
     function notSigned(signer: Signer, title: string, error: unknown) {
@@ -605,6 +676,21 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
         else void prepare(signer);
     }
 
+    if (view.name === 'managing') {
+        const blocked = view;
+        // The manage dialog's own steps and words: one approval in the wallet that pays it.
+        return (
+            <Manage
+                subscription={view.subscription}
+                action={view.way.action}
+                onClose={onClose}
+                onChanged={() => latest.current.onChanged?.()}
+                onRefused={() => stuck(blocked)}
+                onDone={view.way.action === 'close' ? () => closed(blocked.signer) : undefined}
+            />
+        );
+    }
+
     let screen: DialogScreen;
     if (view.name === 'signed-out') {
         screen = signedOutScreen({
@@ -643,6 +729,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed }: Checkou
             onContinue: toWallets,
             onSign: (signer, prepared) => void sign(signer, prepared, loaded.plan),
             onAct: act,
+            onFree: (blocked) => void free(blocked),
             onWallets: toWallets,
             onClose,
         });
@@ -702,7 +789,7 @@ function planScreen(
 }
 
 function stageScreen(props: {
-    view: Exclude<View, { name: 'wallet' } | { name: 'signed-out' }>;
+    view: Exclude<View, { name: 'wallet' } | { name: 'signed-out' } | { name: 'managing' }>;
     plan: MesubPlan;
     chain: SolanaChain;
     manageUrl: string | null | undefined;
@@ -711,6 +798,7 @@ function stageScreen(props: {
     onContinue(): void;
     onSign(signer: Signer, prepared: PreparedSubscription): void;
     onAct(action: Failure['action'], signer: Signer | null): void;
+    onFree(blocked: Blocked): void;
     onWallets(): void;
     onClose(): void;
 }): DialogScreen {
@@ -750,6 +838,58 @@ function stageScreen(props: {
             onBack: props.onWallets,
             backLabel: 'Use another wallet',
         });
+    }
+
+    if (view.name === 'blocked') {
+        const resume = view.way.action === 'resume';
+        return {
+            step: 'review',
+            view: `blocked-${view.way.action}`,
+            onBack: props.onWallets,
+            body: (
+                <>
+                    <Hero kind="error" icon={plan.logo_url} />
+                    <h2 id={titleId}>Cannot subscribe</h2>
+                    <p role="alert" data-mesub-error="">
+                        {view.error.message}
+                    </p>
+                    <p data-mesub-funds="safe">{SAFE}</p>
+                    <p data-mesub-footnote="">
+                        {resume
+                            ? `One approval in ${view.signer.wallet.name} resumes it. It pays nothing but the network fee.`
+                            : `One approval in ${view.signer.wallet.name} closes it, then you check the terms and subscribe.`}
+                    </p>
+                    <button
+                        type="button"
+                        data-mesub-submit=""
+                        data-mesub-way={view.way.action}
+                        onClick={() => props.onFree(view)}
+                    >
+                        {resume ? 'Resume it' : 'Close it and subscribe'}
+                    </button>
+                    <button type="button" data-mesub-cancel="" onClick={props.onClose}>
+                        Close
+                    </button>
+                </>
+            ),
+        };
+    }
+
+    if (view.name === 'finding') {
+        return {
+            step: 'review',
+            view: 'blocked-finding',
+            onBack: props.onWallets,
+            body: (
+                <>
+                    <Hero kind="wait" icon={plan.logo_url} />
+                    <h2 id={titleId}>Finding your subscription</h2>
+                    <p data-mesub-notice="" role="status" aria-busy="true">
+                        Nothing to sign yet
+                    </p>
+                </>
+            ),
+        };
     }
 
     if (view.name === 'plan') {

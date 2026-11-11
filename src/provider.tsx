@@ -151,6 +151,7 @@ export function MesubProvider({
                         settled(subscription);
                         open.request.onSubscribed(subscription, signature);
                     }}
+                    onChanged={() => settled(null)}
                     onClose={close}
                 />
             ) : null}

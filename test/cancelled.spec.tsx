@@ -252,13 +252,16 @@ describe('a checkout refused for a cancelled subscription', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
 
         expect(await screen.findByRole('button', { name: 'Resume subscription' })).toBeTruthy();
-        expect(made(fetch)).toEqual([
-            'GET /plans/pro',
-            'POST /subscriptions',
-            'GET /subscriptions/sub_old',
-            'GET /subscriptions/sub_old',
-            'GET /plans/pro',
-        ]);
+        // The manage dialog reads its plan after its button shows.
+        await waitFor(() =>
+            expect(made(fetch)).toEqual([
+                'GET /plans/pro',
+                'POST /subscriptions',
+                'GET /subscriptions/sub_old',
+                'GET /subscriptions/sub_old',
+                'GET /plans/pro',
+            ]),
+        );
     });
 
     it('shows why the close is refused, not the first refusal, and signs nothing', async () => {

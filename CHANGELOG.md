@@ -7,6 +7,9 @@ those of Mesub-io/react-sdk.
 
 ## 0.1.5 (unreleased)
 
+- The dialog keeps its content height in in-app browsers that give a modal
+  dialog none, such as Phantom's on iPhone: the sheet no longer fills the
+  screen with gaps between its rows (#94).
 - A checkout refused because the customer's own subscription to that plan is
   cancelled is no longer a dead end. While it still runs, "Resume it" resumes
   it with one approval in the wallet. Once it is over, "Close it and

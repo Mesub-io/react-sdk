@@ -90,7 +90,14 @@ type View =
           cancelUrl: string | null;
           single: boolean;
       }
-    | { name: 'failed'; failure: Failure; signer: Signer | null; signature: string | null }
+    | {
+          name: 'failed';
+          failure: Failure;
+          signer: Signer | null;
+          signature: string | null;
+          // Resuming or closing the one that blocks failed: Try again does that again.
+          blocked?: Blocked;
+      }
     | ({ name: 'blocked' } & Blocked)
     // Reading the subscription that blocks, then resuming or closing it as the manage dialog does.
     | ({ name: 'finding' } & Blocked)
@@ -162,6 +169,41 @@ function wayOut(error: unknown): WayOut | null {
     if (typeof id !== 'string' || id === '' || typeof resume !== 'boolean') return null;
     if (resume) return { id, action: 'resume' };
     return from === null ? { id, action: 'close' } : null;
+}
+
+/**
+ * Resuming or closing the one that blocks was refused, or never answered: its
+ * own words. Try again when it is only for now, else Close.
+ */
+function notFreed(action: WayOut['action'], error: unknown): Failure {
+    const base = { step: 'review', moved: 'safe', icon: 'merchant' } as const;
+    if (unreachable(error)) {
+        return { ...base, title: 'No answer', message: messageOf(error), action: 'retry' };
+    }
+    const busy = busyFor(error);
+    if (busy !== null) {
+        return {
+            ...base,
+            title: 'Busy right now',
+            message: `Too many requests at once. Try again in ${seconds(busy)}.`,
+            action: 'retry',
+        };
+    }
+    if (error instanceof MesubClientError && error.status === 429) {
+        return {
+            ...base,
+            title: 'Too many requests',
+            message: error.retryAfter ? `Try again in ${error.retryAfter} seconds.` : error.message,
+            action: 'retry',
+        };
+    }
+    const again = error instanceof MesubClientError && error.details.retryable === true;
+    return {
+        ...base,
+        title: again ? `Could not ${action} it` : `Cannot ${action} it`,
+        message: messageOf(error),
+        action: again ? 'retry' : 'close',
+    };
 }
 
 /** `POST /subscriptions` refused, or never answered: nothing was signed yet. */
@@ -282,8 +324,13 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed, onChanged
         // Once per opening: the provider mounts a new Checkout each time.
     }, []);
 
-    function fail(failure: Failure, signer: Signer | null, signature: string | null = null) {
-        setView({ name: 'failed', failure, signer, signature });
+    function fail(
+        failure: Failure,
+        signer: Signer | null,
+        signature: string | null = null,
+        blocked?: Blocked,
+    ) {
+        setView({ name: 'failed', failure, signer, signature, ...(blocked && { blocked }) });
     }
 
     // The server refused to build anything: nothing was paid, whatever was signed.
@@ -295,15 +342,20 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed, onChanged
         } else fail(notPrepared(error), signer);
     }
 
-    // Mesub's words and Close, as when no way out is named: nothing was signed.
-    function stuck(blocked: Blocked) {
+    /**
+     * Resuming or closing it failed: that refusal's own words. Without one, the
+     * first refusal's words and Close, as when no way out is named. Nothing was signed.
+     */
+    function stuck({ signer, error, way }: Blocked, failed?: unknown) {
         attempt.current++;
-        fail(notPrepared(blocked.error), blocked.signer);
+        if (failed === undefined) fail(notPrepared(error), signer);
+        else fail(notFreed(way.action, failed), signer, null, { signer, error, way });
     }
 
     /** "Resume it" or "Close it and subscribe": the subscription, then the manage dialog's steps. */
     async function free(blocked: Blocked) {
-        if (shown.current.name !== 'blocked') return;
+        const now = shown.current;
+        if (now.name !== 'blocked' && !(now.name === 'failed' && now.blocked)) return;
         const current = begin();
         setView({ ...blocked, name: 'finding' });
         let subscription;
@@ -312,11 +364,17 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed, onChanged
         } catch (error) {
             if (!current()) return;
             if (signedOut(error)) setView({ name: 'signed-out' });
-            else stuck(blocked);
+            else stuck(blocked, error);
             return;
         }
         if (!current()) return;
-        if (subscription?.id !== blocked.way.id) {
+        // Only the signer's own cancelled subscription to this plan: anything else is not offered.
+        if (
+            subscription?.id !== blocked.way.id ||
+            subscription.plan !== slug ||
+            subscription.status !== 'cancelled' ||
+            subscription.wallet !== blocked.signer.account.address
+        ) {
             stuck(blocked);
             return;
         }
@@ -669,7 +727,9 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed, onChanged
     }
 
     function act(action: Failure['action'], signer: Signer | null) {
+        const now = shown.current;
         if (action === 'close') onClose();
+        else if (action === 'retry' && now.name === 'failed' && now.blocked) void free(now.blocked);
         else if (action === 'check') void checkAgain();
         else if (action === 'wallet' || !signer) toWallets();
         // Again from the server: a fresh transaction, and the review of what it costs.
@@ -685,7 +745,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed, onChanged
                 action={view.way.action}
                 onClose={onClose}
                 onChanged={() => latest.current.onChanged?.()}
-                onRefused={() => stuck(blocked)}
+                onRefused={(error) => stuck(blocked, error)}
                 onDone={view.way.action === 'close' ? () => closed(blocked.signer) : undefined}
             />
         );

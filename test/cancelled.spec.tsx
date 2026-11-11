@@ -5,6 +5,7 @@ import {
     ENDPOINT,
     json,
     made,
+    OTHER_WALLET,
     plan,
     prepared,
     refusal,
@@ -207,36 +208,55 @@ describe('a checkout refused for a cancelled subscription', () => {
         expect(within(dialog).getByRole('button', { name: 'Resume it' })).toBeTruthy();
     });
 
-    it("falls back to Mesub's words when the subscription cannot be read", async () => {
+    const RESUME = { subscription_id: 'sub_old', can_resume: true, closable_from: null };
+    const CLOSE = { subscription_id: 'sub_old', can_resume: false, closable_from: null };
+
+    it('says why the subscription cannot be read, and offers Close', async () => {
         const { wallet } = setup({
-            'POST /subscriptions': () =>
-                cancelled(RESUMABLE, {
-                    subscription_id: 'sub_old',
-                    can_resume: true,
-                    closable_from: null,
-                }),
+            'POST /subscriptions': () => cancelled(RESUMABLE, RESUME),
             'GET /subscriptions/sub_old': () =>
                 refusal(404, 'subscription_not_found', 'No such subscription.'),
         });
 
         const dialog = await toRefusal();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Resume it' }));
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Resume it' })).toBeNull());
         const back = await screen.findByRole('dialog');
-        expect(await within(back).findByRole('heading', { name: 'Cannot subscribe' })).toBeTruthy();
-        expect(within(back).getByRole('alert').textContent).toBe(RESUMABLE);
+        expect(await within(back).findByRole('heading', { name: 'Cannot resume it' })).toBeTruthy();
+        expect(within(back).getByRole('alert').textContent).toBe('No such subscription.');
+        expect(within(back).queryByRole('button', { name: 'Try again' })).toBeNull();
         expect(closeOf(back)).toBeTruthy();
         expect(wallet.signAndSendTransaction).not.toHaveBeenCalled();
     });
 
-    it("falls back to Mesub's words when the close is refused, and signs nothing", async () => {
+    it('offers Try again when the subscription could not be reached, and reads it again', async () => {
+        let reads = 0;
+        const { fetch } = setup({
+            'POST /subscriptions': () => cancelled(RESUMABLE, RESUME),
+            'GET /subscriptions/sub_old': () => {
+                if (++reads === 1) throw new TypeError('Failed to fetch');
+                return json(200, { subscription: old(), upcoming: [], payments: [] });
+            },
+        });
+
+        const dialog = await toRefusal();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Resume it' }));
+        expect(await within(dialog).findByRole('heading', { name: 'No answer' })).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe('Could not reach the server.');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByRole('button', { name: 'Resume subscription' })).toBeTruthy();
+        expect(made(fetch)).toEqual([
+            'GET /plans/pro',
+            'POST /subscriptions',
+            'GET /subscriptions/sub_old',
+            'GET /subscriptions/sub_old',
+            'GET /plans/pro',
+        ]);
+    });
+
+    it('shows why the close is refused, not the first refusal, and signs nothing', async () => {
         const { wallet } = setup({
-            'POST /subscriptions': () =>
-                cancelled(CLOSABLE, {
-                    subscription_id: 'sub_old',
-                    can_resume: false,
-                    closable_from: null,
-                }),
+            'POST /subscriptions': () => cancelled(CLOSABLE, CLOSE),
             'POST /subscriptions/sub_old/close': () =>
                 refusal(403, 'forbidden', 'This subscription is not yours.'),
         });
@@ -245,13 +265,98 @@ describe('a checkout refused for a cancelled subscription', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close it and subscribe' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Close subscription' }));
 
-        await waitFor(() =>
-            expect(screen.queryByRole('heading', { name: 'Cannot subscribe' })).toBeTruthy(),
-        );
+        // The manage steps give way to the checkout's own dialog.
+        expect(await screen.findByRole('heading', { name: 'Cannot close it' })).toBeTruthy();
         const back = screen.getByRole('dialog');
-        expect(within(back).getByRole('alert').textContent).toBe(CLOSABLE);
-        expect(within(back).queryByRole('button', { name: /Close it/ })).toBeNull();
+        expect(within(back).getByRole('alert').textContent).toBe('This subscription is not yours.');
+        expect(within(back).queryByRole('button', { name: /Close it|Try again/ })).toBeNull();
         expect(closeOf(back)).toBeTruthy();
+        fireEvent.click(closeOf(back));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(wallet.signAndSendTransaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        [
+            'Mesub is busy',
+            () =>
+                json(
+                    503,
+                    { error: { code: 'unavailable', message: 'Busy.' }, retryable: true },
+                    { 'Retry-After': '2' },
+                ),
+            'Busy right now',
+            'Too many requests at once. Try again in 2 seconds.',
+        ],
+        [
+            'Mesub says it is retryable',
+            () =>
+                json(409, {
+                    error: { code: 'chain_lagging', message: 'Solana is behind. Try again.' },
+                    retryable: true,
+                }),
+            'Could not close it',
+            'Solana is behind. Try again.',
+        ],
+    ])(
+        'offers Try again when the close is refused for now: %s',
+        async (_, answer, title, words) => {
+            let builds = 0;
+            let asked = 0;
+            const { fetch, wallet } = setup({
+                'POST /subscriptions': () =>
+                    ++asked === 1 ? cancelled(CLOSABLE, CLOSE) : json(201, prepared()),
+                'POST /subscriptions/sub_old/close': () => (++builds === 1 ? answer() : built()),
+            });
+
+            const dialog = await toRefusal();
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Close it and subscribe' }));
+            fireEvent.click(await screen.findByRole('button', { name: 'Close subscription' }));
+
+            expect(await screen.findByRole('heading', { name: title })).toBeTruthy();
+            const back = screen.getByRole('dialog');
+            expect(within(back).getByRole('alert').textContent).toBe(words);
+            fireEvent.click(within(back).getByRole('button', { name: 'Try again' }));
+
+            // The subscription read again, then the manage steps once more.
+            fireEvent.click(await screen.findByRole('button', { name: 'Close subscription' }));
+            await screen.findByRole('button', { name: 'Sign and pay 2 USDC' });
+            expect(wallet.signAndSendTransaction).toHaveBeenCalledTimes(1);
+            expect(
+                made(fetch).filter((call) => call === 'GET /subscriptions/sub_old'),
+            ).toHaveLength(2);
+        },
+    );
+
+    it.each([
+        ['another plan', { plan: 'basic' }],
+        ['not cancelled', { status: 'active' }],
+        ['another wallet', { wallet: OTHER_WALLET }],
+    ])('keeps the first refusal when the subscription read is on %s', async (_, over) => {
+        const { fetch, wallet } = setup({
+            'POST /subscriptions': () => cancelled(CLOSABLE, CLOSE),
+            'GET /subscriptions/sub_old': () =>
+                json(200, { subscription: old(over), upcoming: [], payments: [] }),
+        });
+
+        const dialog = await toRefusal();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close it and subscribe' }));
+        await waitFor(() =>
+            expect(
+                within(dialog).queryByRole('button', { name: 'Close it and subscribe' }),
+            ).toBeNull(),
+        );
+        expect(
+            await within(dialog).findByRole('heading', { name: 'Cannot subscribe' }),
+        ).toBeTruthy();
+        expect(within(dialog).getByRole('alert').textContent).toBe(CLOSABLE);
+        expect(closeOf(dialog)).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Close subscription' })).toBeNull();
+        expect(made(fetch)).toEqual([
+            'GET /plans/pro',
+            'POST /subscriptions',
+            'GET /subscriptions/sub_old',
+        ]);
         expect(wallet.signAndSendTransaction).not.toHaveBeenCalled();
     });
 

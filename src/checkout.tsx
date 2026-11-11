@@ -172,8 +172,23 @@ function wayOut(error: unknown): WayOut | null {
 }
 
 /**
+ * Whether that subscription is the cancelled one the way out names. One past its
+ * end reads `ended` with `end_reason: 'cancelled'`: only closable, and only when
+ * Mesub does not say otherwise.
+ */
+function cancelledFor(action: WayOut['action'], subscription: MesubSubscription): boolean {
+    if (action === 'resume') return subscription.status === 'cancelled';
+    if (subscription.closable === false) return false;
+    return (
+        subscription.status === 'cancelled' ||
+        (subscription.status === 'ended' && subscription.end_reason === 'cancelled')
+    );
+}
+
+/**
  * Resuming or closing the one that blocks was refused, or never answered: its
- * own words. Try again when it is only for now, else Close.
+ * own words. Try again when it is only for now (no answer, too many requests,
+ * any 5xx), else Close: a 4xx is a refusal.
  */
 function notFreed(action: WayOut['action'], error: unknown): Failure {
     const base = { step: 'review', moved: 'safe', icon: 'merchant' } as const;
@@ -197,7 +212,11 @@ function notFreed(action: WayOut['action'], error: unknown): Failure {
             action: 'retry',
         };
     }
-    const again = error instanceof MesubClientError && error.details.retryable === true;
+    const status = error instanceof MesubClientError ? error.status : null;
+    // A 502 from the merchant's route when Mesub did not answer, a 503, a 500: only for now.
+    const again =
+        (status !== null && status >= 500) ||
+        (error instanceof MesubClientError && error.details.retryable === true);
     return {
         ...base,
         title: again ? `Could not ${action} it` : `Cannot ${action} it`,
@@ -372,7 +391,7 @@ export function Checkout({ plan: slug, onClose, onState, onSubscribed, onChanged
         if (
             subscription?.id !== blocked.way.id ||
             subscription.plan !== slug ||
-            subscription.status !== 'cancelled' ||
+            !cancelledFor(blocked.way.action, subscription) ||
             subscription.wallet !== blocked.signer.account.address
         ) {
             stuck(blocked);

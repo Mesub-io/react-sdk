@@ -37,6 +37,12 @@ const old = (over = {}) =>
         closable_from: null,
         ...over,
     });
+/** A cancelled one past its end, as Mesub shows it: ended, for a cancellation. */
+const OVER = { status: 'ended', end_reason: 'cancelled', access: false };
+const read =
+    (over = {}) =>
+    () =>
+        json(200, { subscription: old(over), upcoming: [], payments: [] });
 const built = () => json(201, { transaction: TX_BASE64, last_valid_block_height: '100' });
 
 function setup(overrides: Record<string, Handler>) {
@@ -134,6 +140,7 @@ describe('a checkout refused for a cancelled subscription', () => {
                           closable_from: null,
                       })
                     : json(201, prepared()),
+            'GET /subscriptions/sub_old': read(OVER),
         });
 
         const dialog = await toRefusal();
@@ -257,6 +264,7 @@ describe('a checkout refused for a cancelled subscription', () => {
     it('shows why the close is refused, not the first refusal, and signs nothing', async () => {
         const { wallet } = setup({
             'POST /subscriptions': () => cancelled(CLOSABLE, CLOSE),
+            'GET /subscriptions/sub_old': read(OVER),
             'POST /subscriptions/sub_old/close': () =>
                 refusal(403, 'forbidden', 'This subscription is not yours.'),
         });
@@ -282,21 +290,29 @@ describe('a checkout refused for a cancelled subscription', () => {
             () =>
                 json(
                     503,
-                    { error: { code: 'unavailable', message: 'Busy.' }, retryable: true },
+                    { error: { code: 'unavailable', message: 'Busy.' } },
                     { 'Retry-After': '2' },
                 ),
             'Busy right now',
             'Too many requests at once. Try again in 2 seconds.',
         ],
         [
-            'Mesub says it is retryable',
-            () =>
-                json(409, {
-                    error: { code: 'chain_lagging', message: 'Solana is behind. Try again.' },
-                    retryable: true,
-                }),
+            'the route says Mesub did not answer',
+            () => refusal(502, 'unavailable', 'Mesub did not answer.'),
             'Could not close it',
-            'Solana is behind. Try again.',
+            'Mesub did not answer.',
+        ],
+        [
+            'Mesub is unavailable, with no wait named',
+            () => refusal(503, 'unavailable', 'Mesub is unavailable.'),
+            'Could not close it',
+            'Mesub is unavailable.',
+        ],
+        [
+            'Mesub failed',
+            () => refusal(500, 'internal_error', 'Something went wrong.'),
+            'Could not close it',
+            'Something went wrong.',
         ],
     ])(
         'offers Try again when the close is refused for now: %s',
@@ -306,6 +322,7 @@ describe('a checkout refused for a cancelled subscription', () => {
             const { fetch, wallet } = setup({
                 'POST /subscriptions': () =>
                     ++asked === 1 ? cancelled(CLOSABLE, CLOSE) : json(201, prepared()),
+                'GET /subscriptions/sub_old': read(OVER),
                 'POST /subscriptions/sub_old/close': () => (++builds === 1 ? answer() : built()),
             });
 
@@ -329,29 +346,33 @@ describe('a checkout refused for a cancelled subscription', () => {
     );
 
     it.each([
-        ['another plan', { plan: 'basic' }],
-        ['not cancelled', { status: 'active' }],
-        ['another wallet', { wallet: OTHER_WALLET }],
-    ])('keeps the first refusal when the subscription read is on %s', async (_, over) => {
+        ['another plan', CLOSE, { ...OVER, plan: 'basic' }],
+        ['not cancelled', CLOSE, { status: 'active' }],
+        ['another wallet', CLOSE, { ...OVER, wallet: OTHER_WALLET }],
+        ['ended for another reason', CLOSE, { ...OVER, end_reason: 'plan_ended' }],
+        ['one Mesub says cannot close', CLOSE, { ...OVER, closable: false }],
+        ['one over, to resume', RESUME, OVER],
+    ])('keeps the first refusal when the subscription read is on %s', async (_, way, over) => {
+        const button = way.can_resume ? 'Resume it' : 'Close it and subscribe';
+        const words = way.can_resume ? RESUMABLE : CLOSABLE;
         const { fetch, wallet } = setup({
-            'POST /subscriptions': () => cancelled(CLOSABLE, CLOSE),
-            'GET /subscriptions/sub_old': () =>
-                json(200, { subscription: old(over), upcoming: [], payments: [] }),
+            'POST /subscriptions': () => cancelled(words, way),
+            'GET /subscriptions/sub_old': read(over),
         });
 
         const dialog = await toRefusal();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Close it and subscribe' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: button }));
         await waitFor(() =>
-            expect(
-                within(dialog).queryByRole('button', { name: 'Close it and subscribe' }),
-            ).toBeNull(),
+            expect(within(dialog).queryByRole('button', { name: button })).toBeNull(),
         );
         expect(
             await within(dialog).findByRole('heading', { name: 'Cannot subscribe' }),
         ).toBeTruthy();
-        expect(within(dialog).getByRole('alert').textContent).toBe(CLOSABLE);
+        expect(within(dialog).getByRole('alert').textContent).toBe(words);
         expect(closeOf(dialog)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Close subscription' })).toBeNull();
+        expect(
+            screen.queryByRole('button', { name: /Close subscription|Resume subscription/ }),
+        ).toBeNull();
         expect(made(fetch)).toEqual([
             'GET /plans/pro',
             'POST /subscriptions',

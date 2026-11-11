@@ -11,12 +11,12 @@ those of Mesub-io/react-sdk.
   cancelled is no longer a dead end. While it still runs, "Resume it" resumes
   it with one approval in the wallet. Once it is over, "Close it and
   subscribe" closes it with one approval, then shows the review again, to
-  subscribe as usual. If the resume or the close is refused, the checkout
-  says why in that refusal's own words, with Try again when it is only for
-  now (no answer, busy, too many requests, or a refusal Mesub marks
-  retryable), else Close. Any other case keeps Mesub's message and Close, as
-  does a server that does not yet name that subscription, or names one that
-  is not this customer's cancelled subscription to that plan (#96).
+  subscribe as usual. If the resume or the close is refused, the checkout says
+  why in that refusal's own words, with Try again when it is only for now (no
+  answer, busy, too many requests, or a server error), else Close. Any other
+  case keeps Mesub's message and Close, as does a server that does not yet
+  name that subscription, or names one that is not this customer's cancelled
+  subscription to that plan (#96).
 
 ## 0.1.4 (2026-11-11)
 

@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { INSTALL_ICONS } from './brand';
 import type { DialogScreen } from './dialog';
 import { briefPrice, explorerUrl, fit, planUsd, tokenOf, unverifiedNote } from './format';
+import { onMobile, openInWalletLinks } from './mobile';
 import type { MesubPlan } from './types';
 import { isSolanaWallet, lacking, usable, type Purpose, type SolanaChain } from './wallet';
 
@@ -143,6 +144,7 @@ export function walletScreen({
     purpose,
     lead,
     step = 'wallet',
+    openInWalletUrl,
     setView,
     pick,
     onBack,
@@ -154,6 +156,8 @@ export function walletScreen({
     purpose: Purpose;
     lead: string;
     step?: string;
+    // The page a phone reopens in its wallet app: this one by default.
+    openInWalletUrl?: string | undefined;
     setView(view: WalletView): void;
     pick(wallet: UiWallet): void;
     onBack(): void;
@@ -209,6 +213,36 @@ export function walletScreen({
             Reload
         </button>
     );
+
+    // A phone's browser sees no wallet app: reopen this page inside one.
+    if (solana.length === 0 && onMobile()) {
+        const links = openInWalletLinks(
+            openInWalletUrl ?? window.location.href,
+            window.location.href,
+        );
+        return {
+            step,
+            view: 'wallet-none',
+            onBack,
+            body: (
+                <>
+                    <Hero kind="empty" />
+                    <h2 id={titleId}>No Solana wallet found</h2>
+                    <p>Open this page in your wallet.</p>
+                    <div data-mesub-no-wallet="">
+                        {links.map(({ wallet, href }) => (
+                            <a key={wallet} data-mesub-open-in={wallet} href={href}>
+                                <img src={INSTALL_ICONS[wallet]} alt="" width={28} height={28} />
+                                {wallet}
+                                <span>Open</span>
+                            </a>
+                        ))}
+                    </div>
+                    <p data-mesub-notice="">No wallet yet? The button takes you to the app.</p>
+                </>
+            ),
+        };
+    }
 
     if (solana.length === 0) {
         return {

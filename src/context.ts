@@ -28,6 +28,8 @@ export interface MesubInternal {
     theme: MesubTheme | undefined;
     // Where "Cancel any time" leads: the merchant's own page, null for no button, undefined for Mesub's.
     manageUrl: string | null | undefined;
+    // The page a phone without a wallet reopens in its wallet app; undefined for the current one.
+    openInWalletUrl: string | undefined;
     // One read per slug, shared: a failed one is asked again next time.
     plan(slug: string): Promise<MesubPlan>;
     // Bumped when a subscription was made or changed: the lists read again.

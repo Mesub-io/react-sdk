@@ -34,10 +34,12 @@ const routes: Record<string, Handler> = {
 function setup({
     overrides,
     chain,
+    openInWalletUrl,
     wallet: walletOptions = {},
 }: {
     overrides?: Record<string, Handler>;
     chain?: SolanaChain;
+    openInWalletUrl?: string;
     // False: no wallet installed.
     wallet?: FakeWalletOptions | false;
 } = {}) {
@@ -45,7 +47,12 @@ function setup({
     const onSubscribed = vi.fn();
     const wallet = walletOptions === false ? null : registerWallet(walletOptions);
     render(
-        <MesubProvider endpoint={ENDPOINT} chain={chain} fetch={fetch}>
+        <MesubProvider
+            endpoint={ENDPOINT}
+            chain={chain}
+            fetch={fetch}
+            openInWalletUrl={openInWalletUrl}
+        >
             <SubscribeButton plan="pro" onSubscribed={onSubscribed} />
         </MesubProvider>,
     );
@@ -499,8 +506,74 @@ describe('the wallet', () => {
                 .getByRole('link', { name: /Phantom/ })
                 .getAttribute('href'),
         ).toBe('https://phantom.com');
+        expect(within(dialog).queryByText('Open this page in your wallet.')).toBeNull();
         expect(within(dialog).getByRole('button', { name: 'Reload' })).toBeTruthy();
         expect(made(fetch)).toEqual(['GET /plans/pro']);
+    });
+
+    describe('on a phone', () => {
+        const IPHONE =
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+        beforeEach(() => {
+            vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(IPHONE);
+        });
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        const encoded = (url: string) => encodeURIComponent(url);
+
+        it('offers to open this page in Phantom or Solflare, not to install one', async () => {
+            setup({ wallet: false });
+            const page = window.location.href;
+            const origin = window.location.origin;
+
+            const dialog = await toWallets();
+
+            expect(
+                within(dialog).getByRole('heading', { name: 'No Solana wallet found' }),
+            ).toBeTruthy();
+            expect(within(dialog).getByText('Open this page in your wallet.')).toBeTruthy();
+            expect(
+                within(dialog)
+                    .getByRole('link', { name: /Phantom/ })
+                    .getAttribute('href'),
+            ).toBe(`https://phantom.com/ul/browse/${encoded(page)}?ref=${encoded(origin)}`);
+            expect(
+                within(dialog)
+                    .getByRole('link', { name: /Solflare/ })
+                    .getAttribute('href'),
+            ).toBe(`https://solflare.com/ul/v1/browse/${encoded(page)}?ref=${encoded(origin)}`);
+            expect(
+                within(dialog).getByText('No wallet yet? The button takes you to the app.'),
+            ).toBeTruthy();
+            expect(within(dialog).queryByText('Install')).toBeNull();
+            expect(within(dialog).queryByRole('button', { name: 'Reload' })).toBeNull();
+        });
+
+        it('reopens the page the merchant names', async () => {
+            setup({ wallet: false, openInWalletUrl: '/pricing?plan=pro' });
+            const origin = window.location.origin;
+
+            const dialog = await toWallets();
+
+            expect(
+                within(dialog)
+                    .getByRole('link', { name: /Phantom/ })
+                    .getAttribute('href'),
+            ).toBe(
+                `https://phantom.com/ul/browse/${encoded(`${origin}/pricing?plan=pro`)}?ref=${encoded(origin)}`,
+            );
+        });
+
+        it('lists the wallet when the in-app browser has one', async () => {
+            setup();
+
+            const dialog = await toWallets();
+
+            expect(await within(dialog).findByRole('button', { name: 'Fake Wallet' })).toBeTruthy();
+            expect(within(dialog).queryByRole('link', { name: /Phantom/ })).toBeNull();
+        });
     });
 
     it.each([

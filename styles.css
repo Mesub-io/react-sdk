@@ -723,6 +723,7 @@
  *   [data-mesub-badge] inside a wallet row ("Last used")
  *   figure[data-mesub-message] (what the wallet will show) with a pre
  *   [data-mesub-install] links and [data-mesub-reload] button in the no-wallet state
+ *   [data-mesub-open-in] links instead, on a phone: they reopen the page in a wallet app
  *   [data-mesub-receipt] after the Subscribe button
  */
 
@@ -885,7 +886,7 @@
   background: transparent;
 }
 
-[data-mesub-install] {
+:is([data-mesub-install], [data-mesub-open-in]) {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -898,10 +899,10 @@
   text-decoration: none !important;
   transition: border-color var(--_dur) ease-out;
 }
-[data-mesub-install]:hover {
+:is([data-mesub-install], [data-mesub-open-in]):hover {
   border-color: var(--_accent);
 }
-[data-mesub-install] img {
+:is([data-mesub-install], [data-mesub-open-in]) img {
   box-sizing: content-box;
   inline-size: 24px;
   block-size: 24px;
@@ -909,13 +910,16 @@
   border-radius: var(--_radius);
   background: var(--_sunk);
 }
-[data-mesub-install] span {
+:is([data-mesub-install], [data-mesub-open-in]) span {
   margin-inline-start: auto;
   color: var(--_accent-text);
   font-size: 13px;
 }
-[data-mesub-install] span::after {
+:is([data-mesub-install], [data-mesub-open-in]) span::after {
   content: " \2197";
+}
+[data-mesub-open-in] span::after {
+  content: " \2192";
 }
 [data-mesub-reload] {
   display: inline-flex;
@@ -1434,13 +1438,13 @@
 [data-mesub-no-wallet] {
   margin-block-start: 4px;
 }
-[data-mesub-install] {
+:is([data-mesub-install], [data-mesub-open-in]) {
   min-block-size: 56px;
   padding: 0 14px;
   border-color: transparent;
   background: var(--_sunk);
 }
-[data-mesub-install] img {
+:is([data-mesub-install], [data-mesub-open-in]) img {
   inline-size: 28px;
   block-size: 28px;
   padding: 0;
@@ -1548,12 +1552,12 @@
   background: none;
 }
 [data-mesub-wallets] [data-mesub-wallet],
-[data-mesub-install] {
+:is([data-mesub-install], [data-mesub-open-in]) {
   border: 1px solid var(--_border);
   background: var(--_bg);
 }
 [data-mesub-wallets] [data-mesub-wallet]:hover:not(:disabled),
-[data-mesub-install]:hover {
+:is([data-mesub-install], [data-mesub-open-in]):hover {
   border-color: color-mix(in srgb, var(--_accent) 60%, transparent);
   background: var(--_bg);
   box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--_accent) 50%, transparent);
@@ -1646,22 +1650,22 @@
 
   [data-mesub-wallets] > li > [data-mesub-wallet],
   [data-mesub-summary] > [data-mesub-row],
-  [data-mesub-no-wallet] > [data-mesub-install] {
+  [data-mesub-no-wallet] > :is([data-mesub-install], [data-mesub-open-in]) {
     animation: mesub-rise 420ms var(--_ease-enter) both;
   }
   [data-mesub-wallets] > li:nth-child(1) > [data-mesub-wallet],
   [data-mesub-summary] > [data-mesub-row]:nth-child(1),
-  [data-mesub-no-wallet] > [data-mesub-install]:nth-of-type(1) { animation-delay: 120ms; }
+  [data-mesub-no-wallet] > :is([data-mesub-install], [data-mesub-open-in]):nth-of-type(1) { animation-delay: 120ms; }
   [data-mesub-wallets] > li:nth-child(2) > [data-mesub-wallet],
   [data-mesub-summary] > [data-mesub-row]:nth-child(2),
-  [data-mesub-no-wallet] > [data-mesub-install]:nth-of-type(2) { animation-delay: 170ms; }
+  [data-mesub-no-wallet] > :is([data-mesub-install], [data-mesub-open-in]):nth-of-type(2) { animation-delay: 170ms; }
   [data-mesub-wallets] > li:nth-child(3) > [data-mesub-wallet],
   [data-mesub-summary] > [data-mesub-row]:nth-child(3) { animation-delay: 220ms; }
   [data-mesub-wallets] > li:nth-child(n+4) > [data-mesub-wallet],
   [data-mesub-summary] > [data-mesub-row]:nth-child(n+4) { animation-delay: 270ms; }
 
   /* press and hover */
-  :is([data-mesub-submit], [data-mesub-done], [data-mesub-subscribe], [data-mesub-reload], [data-mesub-wallet], [data-mesub-install]) {
+  :is([data-mesub-submit], [data-mesub-done], [data-mesub-subscribe], [data-mesub-reload], [data-mesub-wallet], [data-mesub-install], [data-mesub-open-in]) {
     transition-property: color, background-color, border-color, box-shadow, transform;
     transition-duration: var(--_dur), var(--_dur), var(--_dur), 200ms, 120ms;
     transition-timing-function: ease-out;
@@ -1670,7 +1674,7 @@
     transform: scale(0.98);
   }
   [data-mesub-wallets] [data-mesub-wallet]:hover:not(:disabled),
-  [data-mesub-install]:hover {
+  :is([data-mesub-install], [data-mesub-open-in]):hover {
     transform: translateY(-1px);
   }
   [data-mesub-wallets] [data-mesub-wallet]:active:not(:disabled) {
@@ -1930,7 +1934,7 @@
   [data-mesub-price] strong[data-mesub-fit="2"] { font-size: 24px; }
   [data-mesub-price] strong[data-mesub-fit="3"] { font-size: 18px; line-height: 22px; }
   [data-mesub-price] strong[data-mesub-fit="4"] { font-size: 15px; line-height: 22px; }
-  [data-mesub-wallets] [data-mesub-wallet], [data-mesub-install] { min-block-size: 60px; }
+  [data-mesub-wallets] [data-mesub-wallet], :is([data-mesub-install], [data-mesub-open-in]) { min-block-size: 60px; }
 }
 
 /* ---------------------------------------------------------------- motion */

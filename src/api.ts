@@ -267,8 +267,27 @@ function refusal(response: Response, answer: unknown): MesubClientError {
         message,
         response.status,
         typeof error?.code === 'string' ? error.code : null,
-        { retryAfter: Number.isFinite(seconds) && seconds > 0 ? seconds : null },
+        {
+            retryAfter: Number.isFinite(seconds) && seconds > 0 ? seconds : null,
+            details: detailsOf(answer, error),
+        },
     );
+}
+
+/** The fields a refusal adds to its code and message, in `error` or beside it: `error`'s win. */
+function detailsOf(
+    answer: unknown,
+    error: Record<string, unknown> | null,
+): Record<string, unknown> {
+    const details: Record<string, unknown> = {};
+    if (isObject(answer)) {
+        for (const [key, value] of Object.entries(answer))
+            if (key !== 'error') details[key] = value;
+    }
+    for (const [key, value] of Object.entries(error ?? {})) {
+        if (key !== 'code' && key !== 'message') details[key] = value;
+    }
+    return details;
 }
 
 /** Nothing answered: the network failed or the wait ran out. */

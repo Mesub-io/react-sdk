@@ -5,7 +5,7 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
-## 0.1.5 (unreleased)
+## 0.1.5 (2026-11-11)
 
 - The dialog keeps its content height in in-app browsers that give a modal
   dialog none, such as Phantom's on iPhone: the sheet no longer fills the

@@ -492,6 +492,13 @@ describe('a plan that ends before a second charge', () => {
     });
 });
 
+/** The colour that marks each wallet's own logo, read from the icon in a link. */
+function logoOf(link: HTMLElement): string {
+    const src = link.querySelector('img')!.getAttribute('src')!;
+    const svg = atob(src.replace('data:image/svg+xml;base64,', ''));
+    return /fill="(#[0-9A-F]{6})"/.exec(svg)![1]!;
+}
+
 describe('the wallet', () => {
     it('offers Phantom and Solflare when none is installed', async () => {
         const { fetch } = setup({ wallet: false });
@@ -507,6 +514,14 @@ describe('the wallet', () => {
                 .getAttribute('href'),
         ).toBe('https://phantom.com');
         expect(within(dialog).queryByText('Open this page in your wallet.')).toBeNull();
+        // The real logos, Phantom's purple and Solflare's yellow, decorative beside the name.
+        expect(logoOf(within(dialog).getByRole('link', { name: /Phantom/ }))).toBe('#AB9FF2');
+        expect(logoOf(within(dialog).getByRole('link', { name: /Solflare/ }))).toBe('#FFEF46');
+        expect(
+            within(dialog)
+                .getByRole('link', { name: /Phantom/ })
+                .querySelector('img')!.alt,
+        ).toBe('');
         expect(within(dialog).getByRole('button', { name: 'Reload' })).toBeTruthy();
         expect(made(fetch)).toEqual(['GET /plans/pro']);
     });
@@ -548,6 +563,8 @@ describe('the wallet', () => {
                 within(dialog).getByText('No wallet yet? The button takes you to the app.'),
             ).toBeTruthy();
             expect(within(dialog).queryByText('Install')).toBeNull();
+            expect(logoOf(within(dialog).getByRole('link', { name: /Phantom/ }))).toBe('#AB9FF2');
+            expect(logoOf(within(dialog).getByRole('link', { name: /Solflare/ }))).toBe('#FFEF46');
             expect(within(dialog).queryByRole('button', { name: 'Reload' })).toBeNull();
         });
 

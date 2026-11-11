@@ -14,6 +14,8 @@ those of Mesub-io/react-sdk.
   installed. Desktop keeps the Install links. `openInWalletUrl` on
   `MesubProvider` names the page to reopen; the current one by default
   (#90).
+- The Phantom and Solflare links, on a phone or to install, show the wallets'
+  own logos instead of letter tiles (#90).
 
 ## 0.1.3 (2026-11-09)
 

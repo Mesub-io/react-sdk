@@ -110,6 +110,8 @@
   box-sizing: border-box;
   inline-size: min(400px, calc(100vw - 32px));
   max-inline-size: none;
+  /* Some in-app browsers (Phantom's) give a modal dialog no fit-content height */
+  block-size: fit-content;
   max-block-size: calc(100dvh - 32px);
   margin: auto;
   padding: 24px;
@@ -130,6 +132,7 @@
 [data-mesub-dialog][open] {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
   row-gap: 16px;
   column-gap: 16px;
   animation: mesub-enter 240ms var(--_ease-enter);

@@ -5,6 +5,15 @@ Every change a merchant using `@mesub/react` can notice. Versions follow
 may break the API and a patch (0.1.1) never does. Pull request numbers are
 those of Mesub-io/react-sdk.
 
+## 0.1.5 (unreleased)
+
+- A checkout refused because the customer's own subscription to that plan is
+  cancelled is no longer a dead end. While it still runs, "Resume it" resumes
+  it with one approval in the wallet. Once it is over, "Close it and
+  subscribe" closes it with one approval, then shows the review again, to
+  subscribe as usual. Any other case keeps Mesub's message and Close, as
+  does a server that does not yet name that subscription (#96).
+
 ## 0.1.4 (2026-11-11)
 
 Works with the routes of `@mesub/node` 0.1.x, as before.
